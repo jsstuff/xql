@@ -1,0 +1,234 @@
+"use strict";
+
+var assert = require("assert");
+var qsql = require("./qsql");
+
+// Some useful shortcuts.
+var SELECT = qsql.SELECT;
+var UPDATE = qsql.UPDATE;
+var INSERT = qsql.INSERT;
+var DELETE = qsql.DELETE;
+
+var AND = qsql.AND;
+var OR = qsql.OR;
+
+var EXCEPT = qsql.EXCEPT;
+var UNION = qsql.UNION;
+var INTERSECT = qsql.INTERSECT;
+
+var COL = qsql.COL;
+var MIN = qsql.MIN;
+var MAX = qsql.MAX;
+
+var escapeIdentifier = qsql.escapeIdentifier;
+var escapeValue = qsql.escapeValue;
+var substitute = qsql.substitute;
+
+function simplify(s) {
+  return s.trim().replace(/\w+/, " ");
+}
+
+function shouldMatch(a, b) {
+  // Compile `a` and/or `b` if needed.
+  if (a instanceof qsql.core.Node) a = a.compile();
+  if (b instanceof qsql.core.Node) b = b.compile();
+
+  // Simplify, basically removes redundant spaces.
+  a = simplify(a);
+  b = simplify(b);
+
+  // Remove trailing semicolon from `a` and/or `b`.
+  if (a.length > 0 && a.charAt(a.length - 1) === ";") a = a.substr(0, a.length - 1);
+  if (b.length > 0 && b.charAt(b.length - 1) === ";") b = b.substr(0, b.length - 1);
+
+  // They should match.
+  if (a !== b) {
+    throw new Error(
+      "Queries do not match:\n" +
+      "\n" + a + "\n" +
+      "\n" + b + "\n")
+  }
+}
+
+function shouldThrow(fn) {
+  try {
+    fn();
+    assert(!"Should have thrown an exception.");
+  } catch(ex) { /* Success. */ }
+}
+
+describe("QSql", function() {
+  // Escape.
+  it("should escape identifier.", function() {
+    // Proper identifiers.
+    shouldMatch(escapeIdentifier("")           , '');
+    shouldMatch(escapeIdentifier("a")          , '"a"');
+    shouldMatch(escapeIdentifier("a.b")        , '"a"."b"');
+    shouldMatch(escapeIdentifier("a", "b")     , '"a"."b"');
+    shouldMatch(escapeIdentifier("a", "b", "c"), '"a"."b"."c"');
+    shouldMatch(escapeIdentifier("a.b", "c")   , '"a"."b"."c"');
+    shouldMatch(escapeIdentifier("a", "b.c")   , '"a"."b"."c"');
+
+    // Buggy input (gaps).
+    shouldMatch(escapeIdentifier("", "", "")   , '');
+
+    shouldMatch(escapeIdentifier("a", "", "")  , '"a"');
+    shouldMatch(escapeIdentifier("", "a", "")  , '"a"');
+    shouldMatch(escapeIdentifier("", "", "a")  , '"a"');
+
+    shouldMatch(escapeIdentifier("", "a", "b") , '"a"."b"');
+    shouldMatch(escapeIdentifier("a", "", "b") , '"a"."b"');
+    shouldMatch(escapeIdentifier("a", "b", "") , '"a"."b"');
+
+    // Keywords in input.
+    shouldMatch(escapeIdentifier("*")          , '*');
+    shouldMatch(escapeIdentifier("a.*")        , '"a".*');
+    shouldMatch(escapeIdentifier("a", "*")     , '"a".*');
+    shouldMatch(escapeIdentifier("*", "a")     , '*."a"');
+
+    // Null characters are not allowed.
+    shouldThrow(function() { shouldMatch(escapeIdentifier("\0")); });
+  });
+
+  it("should escape value.", function() {
+    shouldMatch(escapeValue(undefined)     , "NULL");
+    shouldMatch(escapeValue(null)          , "NULL");
+
+    shouldMatch(escapeValue(true)          , "TRUE");
+    shouldMatch(escapeValue(false)         , "FALSE");
+
+    shouldMatch(escapeValue(0)             , "0");
+    shouldMatch(escapeValue(1)             , "1");
+    shouldMatch(escapeValue(-1)            , "-1");
+    shouldMatch(escapeValue(0.5)           , "0.5");
+    shouldMatch(escapeValue(NaN)           , "'NaN'");
+    shouldMatch(escapeValue(Infinity)      , "'Infinity'");
+    shouldMatch(escapeValue(-Infinity)     , "'-Infinity'");
+
+    shouldMatch(escapeValue("")            , "''");
+    shouldMatch(escapeValue("text")        , "'text'");
+    shouldMatch(escapeValue("'text'")      , "E'\\'text\\''");
+    shouldMatch(escapeValue('"text"')      , "'\"text\"'");
+    shouldMatch(escapeValue('\0')          , "E'\\x00'");
+    shouldMatch(escapeValue('\b')          , "E'\\b'");
+    shouldMatch(escapeValue('\f')          , "E'\\f'");
+    shouldMatch(escapeValue('\n')          , "E'\\n'");
+    shouldMatch(escapeValue('\r')          , "E'\\r'");
+    shouldMatch(escapeValue('\t')          , "E'\\t'");
+    shouldMatch(escapeValue('\\')          , "E'\\\\'");
+    shouldMatch(escapeValue('\'')          , "E'\\''");
+
+    // [] defaults to ARRAY[].
+    shouldMatch(escapeValue([])            , "ARRAY[]");
+    shouldMatch(escapeValue([0, 1])        , "ARRAY[0, 1]");
+    shouldMatch(escapeValue([[0, 1]])      , "ARRAY[[0, 1]]");
+    shouldMatch(escapeValue([[0], [1]])    , "ARRAY[[0], [1]]");
+    shouldMatch(escapeValue(["a", "b"])    , "ARRAY['a', 'b']");
+    shouldMatch(escapeValue([["a", "b"]])  , "ARRAY[['a', 'b']]");
+    shouldMatch(escapeValue([["a"], ["b"]]), "ARRAY[['a'], ['b']]");
+
+    // {} defaults to JSON.
+    shouldMatch(escapeValue({})            , "'{}'");
+    shouldMatch(escapeValue({a:1})         , "'{\"a\":1}'");
+    shouldMatch(escapeValue({a:1,b:2})     , "'{\"a\":1,\"b\":2}'");
+    shouldMatch(escapeValue({a:"a",b:"b"}) , "'{\"a\":\"a\",\"b\":\"b\"}'");
+    shouldMatch(escapeValue({a:["a","b"]}) , "'{\"a\":[\"a\",\"b\"]}'");
+  });
+
+  // Substitute.
+  it("should escape identifier.", function() {
+    shouldMatch(
+      substitute("a = ?, b = '', c = ?", [1, 2]),
+      "a = 1, b = '', c = 2");
+
+    shouldMatch(
+      substitute("a = $1, b = '', c = $2", [1, 2]),
+      "a = 1, b = '', c = 2");
+
+    shouldMatch(
+      substitute("a = ?, b = '?', c = ?", [1, 2]),
+      "a = 1, b = '?', c = 2");
+
+    shouldMatch(
+      substitute("a = $1, b = '$1', c = $2", [1, 2]),
+      "a = 1, b = '$1', c = 2");
+
+    shouldMatch(
+      substitute("a = ?, b = '?''?', c = ?", [1, 2]),
+      "a = 1, b = '?''?', c = 2");
+
+    shouldMatch(
+      substitute("a = $1, b = '$1''$1', c = $2", [1, 2]),
+      "a = 1, b = '$1''$1', c = 2");
+
+    shouldMatch(
+      substitute("\"a?\" = ?, b = E'?\\'?', c = ?", [1, 2]),
+      "\"a?\" = 1, b = E'?\\'?', c = 2");
+
+    shouldMatch(
+      substitute("\"a$1\" = $1, b = E'$1\\'?', c = $2", [1, 2]),
+      "\"a$1\" = 1, b = E'$1\\'?', c = 2");
+  });
+
+  // SELECT.
+  it("should test SELECT(*).", function() {
+    shouldMatch(
+      SELECT().FROM("x"),
+      'SELECT * FROM "x"');
+  });
+
+  it("should test SELECT(...) vs. SELECT().FIELD(...).", function() {
+    // Test all SELECT variations, they all should behave the same way.
+    shouldMatch(
+      SELECT(COL("a"), COL("b"), COL("c")).FROM("x"),
+      SELECT().FIELD("a").FIELD("b").FIELD("c").FROM("x"));
+
+    shouldMatch(
+      SELECT(COL("a"), COL("b"), COL("c")).FROM("x"),
+      SELECT(COL("a")).FIELD("b").FIELD("c").FROM("x"));
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x"),
+      SELECT(COL("a"), COL("b"), COL("c")).FROM("x"));
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x"),
+      SELECT("a", "b", "c").FROM("x"));
+  });
+
+  it("should test SELECT(...) FROM ... .", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("a"), "<=", 42),
+      'SELECT "a", "b", "c" FROM "x" WHERE "a" <= 42');
+  });
+
+  it("should test SELECT DISTINCT(...) FROM ... .", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE(COL("a"), "<=", 42),
+      'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
+  });
+
+  // INSERT.
+  it("should test INSERT INTO ... () VALUES (...)", function() {
+    shouldMatch(
+      INSERT().INTO("x").VALUES({ a: 0, b: false, c: "String" }),
+      'INSERT INTO "x" ("a", "b", "c") VALUES (0, FALSE, \'String\')');
+  });
+
+  // UPDATE.
+  it("should test UPDATE ... SET ...", function() {
+  });
+
+  // DELETE.
+  it("should test DELETE ... ", function() {
+    shouldMatch(
+      DELETE().FROM("x"),
+      'DELETE FROM "x"');
+  });
+
+  it("should test DELETE ... FROM ...", function() {
+    shouldMatch(
+      DELETE().FROM("x").WHERE(COL("a"), "<=", 42),
+      'DELETE FROM "x" WHERE "a" <= 42');
+  });
+});

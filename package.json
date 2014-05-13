@@ -1,0 +1,55 @@
+{
+  "name": "qsql",
+  "version": "0.0.1",
+
+  "description": "SQL builder and utilities library designed to work with PostgreSQL.",
+  "keywords": [
+    "builder",
+    "database",
+    "expression",
+    "generate",
+    "generator",
+    "pg",
+    "pgsql",
+    "postgres",
+    "postgresql",
+    "query",
+    "sql",
+    "tools",
+    "utilities",
+    "utility",
+    "wrapper"
+  ],
+
+  "homepage": "https://github.com/kobalicek/qsql",
+  "bugs": {
+    "url": "https://github.com/kobalicek/qsql/issues"
+  },
+
+  "contributors": [{
+    "name": "Petr Kobalicek",
+    "email": "kobalicek.petr@gmail.com",
+    "url": "http://kobalicek.com"
+  }],
+
+  "license": "Unlicense",
+
+  "main": "qsql.js",
+
+  "engines": {
+    "node": "*"
+  },
+
+  "dependencies": {
+    "qclass": "git://github.com/kobalicek/qclass.git#master"
+  },
+
+  "devDependencies": {
+    "mocha": "*"
+  },
+
+  "repository" : {
+    "type": "git",
+    "url": "https://github.com/kobalicek/qsql.git"
+  }
+}
