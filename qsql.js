@@ -1,10 +1,14 @@
 (function(qclass, qsql) {
 "use strict";
 
+function returnFalse() {
+  return false;
+}
+
 // \internal
 // \{
 var isArray = Array.isArray;
-var isBuffer = Buffer.isBuffer;
+var isBuffer = typeof Buffer === "object" ? Buffer.isBuffer : returnFalse;
 var Array_slice = Array.prototype.slice;
 // \}
 
@@ -26,45 +30,45 @@ var identifierMap = {
   "*"     : true
 };
 
-// Map of strings which can be implicitly cased to `TRUE` or `FALSE`.
+// Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
 var boolMap = {
-  "0"     : "FALSE",
-  "f"     : "FALSE",
-  "false" : "FALSE",
-  "n"     : "FALSE",
-  "no"    : "FALSE",
-  "off"   : "FALSE",
+  "0"       : "FALSE",
+  "f"       : "FALSE",
+  "false"   : "FALSE",
+  "n"       : "FALSE",
+  "no"      : "FALSE",
+  "off"     : "FALSE",
 
-  "1"     : "TRUE",
-  "t"     : "TRUE",
-  "true"  : "TRUE",
-  "y"     : "TRUE",
-  "yes"   : "TRUE",
-  "on"    : "TRUE"
+  "1"       : "TRUE",
+  "t"       : "TRUE",
+  "true"    : "TRUE",
+  "y"       : "TRUE",
+  "yes"     : "TRUE",
+  "on"      : "TRUE"
 };
 Object.keys(boolMap).forEach(function(key) {
   boolMap[key.toUpperCase()] = boolMap[key];
 });
 
 var typeMap = {
-  bool    : "boolean",
-  boolean : "boolean",
-  smallint: "integer",
-  int     : "integer",
-  integer : "integer",
-  real    : "number",
-  float   : "number",
-  number  : "number",
-  numeric : "number",
+  "bool"    : "boolean",
+  "boolean" : "boolean",
+  "smallint": "integer",
+  "int"     : "integer",
+  "integer" : "integer",
+  "real"    : "number",
+  "float"   : "number",
+  "number"  : "number",
+  "numeric" : "number",
 
-  char    : "string",
-  varchar : "string",
-  string  : "string",
-  text    : "string",
+  "char"    : "string",
+  "varchar" : "string",
+  "string"  : "string",
+  "text"    : "string",
 
-  array   : "array",
-  json    : "json",
-  raw     : "raw"
+  "array"   : "array",
+  "json"    : "json",
+  "raw"     : "raw"
 };
 Object.keys(typeMap).forEach(function(key) {
   typeMap[key.toUpperCase()] = typeMap[key];
@@ -98,20 +102,20 @@ var operatorMap = {
   "&"    : " & "    ,// Bit-And  |          |          |          |          |
   "|"    : " | "    ,// Bit-Or   |          |          |          |          |
   "#"    : " # "    ,// Bit-Xor  |          |          |          |          |
-  "~"    : " ~ "    ,// Bit-Not  | MatchRe  |          |          |          |
+  "~"    : " ~ "    ,// Bit-Not  | Match    |          |          |          |
   "<<"   : " << "   ,// Shf-Left |          |          |?LeftOf   |          |
   ">>"   : " >> "   ,// Shf-Right|          |          |?RightOf  |          |
   //-----+----------+------------+----------+----------+----------+----------+
   "||"   : " || "   ,//          | Concat   | Concat   |          |          |
-  "~*"   : " ~* "   ,//          |?MatchRe i|          |          |          |
-  "!~"   : " ~* "   ,//          |?NotMRe   |          |          |          |
-  "!~*"  : " !~* "  ,//          |?NotMRe  i|          |          |          |
+  "~*"   : " ~* "   ,//          |?MatchI   |          |          |          |
+  "!~"   : " ~* "   ,//          |?NotMatch |          |          |          |
+  "!~*"  : " !~* "  ,//          |?NotMatchI|          |          |          |
   //-----+----------+------------+----------+----------+----------+----------+
   "AND"  : " AND "  ,//          |          |          |          |          |
   "OR"   : " OR "   ,//          |          |          |          |          |
   //-----+----------+------------+----------+----------+----------+----------+
   "LIKE" : " LIKE " ,//          |?Like     |          |          |          |
-  "ILIKE": " ILIKE " //          |?Like (i) |          |          |          |
+  "ILIKE": " ILIKE " //          |?LikeI    |          |          |          |
   //-----+----------+------------+----------+----------+----------+----------+
 };
 
@@ -421,11 +425,11 @@ function escapeValue(value, explicitType) {
   if (typeof value !== "object")
     throw new ValueError("Unexpected implicit value type '" + (typeof value) + "'.");
 
-  // QSql.Node.
+  // Node.
   //
   // All QSql objects extend `Node`.
   if (value instanceof Node)
-    return value.compile();
+    return value.compileNode();
 
   // Check - Buffer (BLOB / BINARY).
   if (isBuffer(value))
@@ -561,6 +565,8 @@ var escapeString = (function() {
   };
 
   var fn = function(s) {
+    if (s.charCodeAt(0) === 0)
+      throw new CompileError("String can't contain NULL character.");
     return map[s];
   };
 
@@ -723,9 +729,11 @@ var substitute = (function() {
         //      escaping, which escapes `''` to `'`.
         else if (c === 39) {
           // 'E' === 69.
-          // 
+          // 'e' === 101.
+          //
           // We have to check `i - 2`, because `i` has been incremented already.
-          if (i >= 2 && input.charCodeAt(i - 2) === 69) {
+          // The expression `(x & ~32)` makes ASCII character `x` lowercased.
+          if (i >= 2 && (input.charCodeAt(i - 2) & ~32) === 69) {
             // TODO: Add support for binary in form `E'\x`
 
             // a) String is c-like escaped.
@@ -866,13 +874,13 @@ qsql.substitute = substitute;
 
 // \class core.Node
 //
-// Base class for all QSql classes related to query building.
+// Base class for all `Node`s related to query building.
 //
 // Node doesn't have any functionality and basically only initializes
-// `type` member.
+// `_type` and `_as` members.
 //
-// Classes that inherit Node can omit calling `Node` constructor for
-// performance reasons, see `Value`.
+// Classes that inherit `Node` can omit calling `Node`s constructor for
+// performance reasons.
 function Node(type, as) {
   this._type = type || "";
   this._as = as || "";
@@ -880,31 +888,68 @@ function Node(type, as) {
 core.Node = qclass({
   construct: Node,
 
+  // \function Node.AS(as:String)
   AS: function(as) {
     this._as = as;
     return this;
   },
 
-  shouldWrap: function() {
-    throw new CompileError("Node(" + this._type + ").shouldWrap() - Not implemented.");
+  // \function Node.EQ(b:{Var|Node})
+  EQ: function(b) {
+    return new Binary(this, "=", b);
   },
 
-  // \function Node.compile()
+  // \function Node.NE(b:{Var|Node})
+  NE: function(b) {
+    return new Binary(this, "<>", b);
+  },
+
+  // \function Node.LT(b:{Var|Node})
+  LT: function(b) {
+    return new Binary(this, "<", b);
+  },
+
+  // \function Node.LE(b:{Var|Node})
+  LE: function(b) {
+    return new Binary(this, "<=", b);
+  },
+
+  // \function Node.GT(b:{Var|Node})
+  GT: function(b) {
+    return new Binary(this, ">", b);
+  },
+
+  // \function Node.GE(b:{Var|Node})
+  GE: function(b) {
+    return new Binary(this, ">=", b);
+  },
+
+  // \function Node.IN(b:{Var|Node})
+  //
+  // Returns a new Node which contains `this IN b` expression.
+  IN: function(b) {
+    return new Binary(this, "IN", b);
+  },
+
+  // \function Node.shouldWrap()
+  //
+  // Get whether the not should be wrapped in parentheses.
+  shouldWrap: function(ctx) {
+    throw new CompileError("Node(" + this._type + ").shouldWrap() - Must be reimplemented.");
+  },
+
+  // \function Node.compileNode()
   //
   // Compile the node.
-  compile: function() {
-    throw new CompileError("Node(" + this._type + ").compile() - Not implemented.");
+  compileNode: function(ctx) {
+    throw new CompileError("Node(" + this._type + ").compileNode() - Must be reimplemented.");
   },
 
   // \function Node.compileQuery()
   //
-  // Compile the whole adding semicolon ';' at the end.
-  compileQuery: function() {
-    return this.compile() + ";";
-  },
-
-  toString: function() {
-    return this.compile();
+  // Compile the whole query adding semicolon ';' at the end.
+  compileQuery: function(ctx) {
+    return this.compileNode(ctx) + ";";
   }
 });
 
@@ -922,11 +967,11 @@ core.Raw = qclass({
   extend: Node,
   construct: Raw,
 
-  shouldWrap: function() {
+  shouldWrap: function(ctx) {
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     var s = this._value;
 
     var bindings = this._bindings;
@@ -952,11 +997,11 @@ core.Unary = qclass({
   extend: Node,
   construct: Unary,
 
-  shouldWrap: function() {
+  shouldWrap: function(ctx) {
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     var type = this._type;
     var s = escapeValue(this._value);
 
@@ -970,7 +1015,7 @@ core.Unary = qclass({
         break;
 
       default:
-        throw new CompileError("Unary.compile() - Unknown type '" + type + "'.");
+        throw new CompileError("Unary.compileNode() - Unknown type '" + type + "'.");
     }
 
     var as = this._as;
@@ -982,7 +1027,7 @@ core.Unary = qclass({
 });
 
 // \class core.Binary
-function Binary(type, left, right, as) {
+function Binary(left, type, right, as) {
   // Doesn't call `Node` constructor.
   this._type = type || "";
   this._as = as || "";
@@ -993,11 +1038,11 @@ core.Binary = qclass({
   extend: Node,
   construct: Binary,
 
-  shouldWrap: function() {
+  shouldWrap: function(ctx) {
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     var type = this._type;
     var s = "";
 
@@ -1007,7 +1052,7 @@ core.Binary = qclass({
     if (operatorMap.hasOwnProperty(type))
       s = left + operatorMap[type] + right;
     else
-      throw new CompileError("Binary.compile() - Unknown operator '" + type + "'.");
+      throw new CompileError("Binary.compileNode() - Unknown operator '" + type + "'.");
 
     var as = this._as;
     if (as)
@@ -1050,11 +1095,11 @@ core.Logical = qclass({
   extend: Group,
   construct: Logical,
 
-  shouldWrap: function() {
+  shouldWrap: function(ctx) {
     return this._values.length > 1;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     var type = this._type;
     var s = "";
 
@@ -1068,7 +1113,7 @@ core.Logical = qclass({
       if (s)
         s += separator;
 
-      if (value.shouldWrap())
+      if (value.shouldWrap(ctx))
         s += "(" + escaped + ")";
       else
         s += escaped;
@@ -1087,21 +1132,27 @@ core.Combine = qclass({
   extend: Group,
   construct: Combine,
 
-  ALL: function() {
-    if (this._all === true)
+  ALL: function(value) {
+    if (typeof value !== "boolean")
+      value = true;
+
+    if (this._all === value)
       return this;
 
-    this._type += " ALL";
-    this._all = true;
+    if (value)
+      this._type += " ALL";
+    else
+      this._type = this._type.substr(0, this._type.length - 4);
 
+    this._all = value;
     return this;
   },
 
-  shouldWrap: function() {
+  shouldWrap: function(ctx) {
     return true;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     var type = this._type;
     var s = "";
 
@@ -1144,7 +1195,7 @@ core.ObjectOp = qclass({
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     // TODO:
   }
 });
@@ -1163,7 +1214,7 @@ core.Identifier = qclass({
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     var s = escapeIdentifier(this._value);
     var as = this._as;
 
@@ -1189,7 +1240,7 @@ core.Func = qclass({
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     var s = "";
     var values = this._values;
 
@@ -1249,7 +1300,7 @@ core.Value = qclass({
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     return this.escapeValue(this._value, this._type);
   }
 });
@@ -1271,7 +1322,7 @@ core.ArrayValue = qclass({
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     return this.escapeArray(this._value, false);
   }
 });
@@ -1293,7 +1344,7 @@ core.JsonValue = qclass({
     return false;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     return this.escapeJson(this._value);
   }
 });
@@ -1304,17 +1355,30 @@ function Query(type, lang) {
   this._type = type || "";
   this._as = "";
 
-  this._flags = null;       // Qyery flags.
+  // Query flags, initially `null`.
+  //
+  // Flags become an object that acts as a set, where keys are elements of the
+  // set. See `_getFlag()` and `_setFlag()`.
+  this._flags = null;
 
-  this._tables = [];        // Tables  (ALL).
-  this._fields = null;      // Fields  (SELECT).
-  this._joins = null;       // Joins   (SELECT).
+  // Tables used after `FROM` statement, always an array of identifiers - mixed
+  // content of Strings and Nodes is allowed and strings will be escaped as
+  // identifiers in such case.
+  this._from = [];
 
-  this._values = null;      // VALUES  (INSERT / UPDATE).
-  this._columns = null;     // columns (INSERT / UPDATE).
+  this._fields = null;      // FIELD.
+  this._joins = null;       // JOIN.
 
-  this._where = null;       // Where  (SELECT/UPDATE/DELETE).
-  this._returning = null;   // RETURNING fields.
+  this._values = null;      // VALUES
+  this._columns = null;     // COLUMNS
+
+  this._where = null;       // WHERE.
+
+  this._groupBy = null;     // GROUP BY.
+  this._having = null;      // HAVING.
+
+  // Returning fields, evaluated if the query is `INSERT` / `UPDATE` or `DELETE`.
+  this._returning = null;
 
   this._offset = 0;         // OFFSET.
   this._limit = 0;          // LIMIT.
@@ -1354,13 +1418,13 @@ core.Query = qclass({
   // \function Query.FROM(...)
   //
   // Specified `FROM` clause of the query.
-  FROM: function(from) {
-    var tables = this._tables;
+  FROM: function(argFrom) {
+    var thisFrom = this._from;
 
-    if (isArray(from))
-      tables.push.apply(tables, from);
+    if (isArray(argFrom))
+      thisFrom.push.apply(thisFrom, argFrom);
     else
-      tables.push(from);
+      thisFrom.push(argFrom);
 
     return this;
   },
@@ -1369,19 +1433,30 @@ core.Query = qclass({
   FIELD: function(f) {
     var fields = this._fields;
 
-    if (fields === null)
-      fields = this._fields = [];
-
     if (arguments.length > 1) {
-      for (var i = 0, len = arguments.length; i < len; i++)
-        fields.push(arguments[i]);
+      if (fields === null) {
+        this._fields = Array_slice.call(arguments, 0);
+      }
+      else {
+        for (var i = 0, len = arguments.length; i < len; i++)
+          fields.push(arguments[i]);
+      }
     }
     else if (isArray(f)) {
-      for (var i = 0, len = f.length; i < len; i++)
-        fields.push(f[i]);
+      // Optimization: If `_fields` is `null` the given array `f` is referenced.
+      if (fields === null) {
+        this._fields = f;
+      }
+      else {
+        for (var i = 0, len = f.length; i < len; i++)
+          fields.push(f[i]);
+      }
     }
     else {
-      fields.push(f);
+      if (fields === null)
+        this._fields = [f];
+      else
+        fields.push(f);
     }
 
     return this;
@@ -1389,12 +1464,10 @@ core.Query = qclass({
 
   // \function Query.INTO(...)
   INTO: function(into) {
-    var tables = this._tables;
+    if (this._table)
+      throw new CompileError("INTO() - table already specified ('" + table + "').");
 
-    if (tables.length === 1)
-      throw new CompileError("Query.INTO() - table already specified ('" + tables[0] + "').");
-
-    tables.push(into);
+    this._table = into;
     return this;
   },
 
@@ -1439,7 +1512,7 @@ core.Query = qclass({
 
   // \function Query.WHERE(...)
   //
-  // Add `WHERE` condition to the query.
+  // Add `WHERE` expression to the query.
   //
   // This function has multiple overloads:
   //
@@ -1454,53 +1527,62 @@ core.Query = qclass({
   // 3. `where(a:String, op:String, b:Variant)`
   //   Adds one `WHERE` clause in the form `a op b`.
   WHERE: function(a, op, b) {
-    var node;
-
-    if (arguments.length === 1)
-      node = (a instanceof Node) ? a : new ObjectOp("AND", a);
-    else if (arguments.length === 3)
-      node = new Binary(op, a, b);
-    else
-      throw new CompileError("Query.WHERE() - Invalid argument.");
-
-    return this._addWhere("AND", node);
+    return this._addWhere("AND", a, op, b, arguments.length);
   },
 
   // \function Query.OR_WHERE(...)
   //
   // Add top-level `OR` to the query.
   //
-  // 1. `where(node:Node)`
-  //   Node that contains an expression.
-  //
-  // 2. `where(keys:Object)`
-  //   Object that contain key/value pairs that will be checked for equality,
-  //   implicit `AND` will be added to the query between all keys specified.
-  //   Objects without keys are ignored.
-  //
-  // 3. `where(a:String, op:String, b:Variant)`
-  //   Adds one `WHERE` clause in the form `a op b`.
+  // This function accepts the same arguments and behaves identically as `WHERE`.
   OR_WHERE: function(a, op, b) {
-    var node;
-
-    if (arguments.length === 1)
-      node = (a instanceof Node) ? a : new ObjectOp("AND", a);
-    else if (arguments.length === 3)
-      node = new Binary(op, a, b);
-    else
-      throw new CompileError("Query.OR_WHERE() - Invalid argument.");
-
-    return this._addWhere("OR", node);
+    return this._addWhere("OR", a, op, b, arguments.length);
   },
 
-  GROUP_BY: function() {
-    // TODO:
+  // \function Query.GROUP_BY(...)
+  GROUP_BY: function(f) {
+    var groupBy = this._groupBy;
+
+    if (arguments.length > 1) {
+      if (groupBy === null) {
+        this._groupBy = Array_slice.call(arguments, 0);
+      }
+      else {
+        for (var i = 0, len = arguments.length; i < len; i++)
+          groupBy.push(arguments[i]);
+      }
+    }
+    else if (isArray(f)) {
+      // Optimization: If `_groupBy` is `null` the given array `f` is referenced.
+      if (groupBy === null) {
+        this._groupBy = f;
+      }
+      else {
+        for (var i = 0, len = f.length; i < len; i++)
+          groupBy.push(f[i]);
+      }
+    }
+    else {
+      if (groupBy === null)
+        this._groupBy = [f];
+      else
+        groupBy.push(f);
+    }
+
+    return this;
   },
 
-  HAVING: function() {
-    // TODO:
+  // \function Query.HAVING(...)
+  HAVING: function(a, op, b) {
+    return this._addHaving("AND", a, op, b, arguments.length);
   },
 
+  // \function Query.OR_HAVING(...)
+  OR_HAVING: function(a, op, b) {
+    return this._addHaving("OR", a, op, b, arguments.length);
+  },
+
+  // \function Query.ORDER_BY(...)
   ORDER_BY: function() {
     // TODO:
   },
@@ -1517,39 +1599,35 @@ core.Query = qclass({
     return this;
   },
 
-  // Get the object where `WHERE` conditions can be added right now.
-  _addWhere: function(type, node) {
-    var where = this._where;
+  RETURNING: function(f) {
+    var returning = this._returning;
 
-    if (where === null) {
-      // If no `WHERE` has been added yet, create one.
-      where = new Logical(type);
-      this._where = where;
+    if (arguments.length > 1) {
+      if (returning === null) {
+        this._returning = Array_slice.call(arguments, 0);
+      }
+      else {
+        for (var i = 0, len = arguments.length; i < len; i++)
+          returning.push(arguments[i]);
+      }
     }
-    else if (where.type !== type) {
-      // If the current expression operator is not the same as `type`, wrap the
-      // current expression inside a new node.
-      where = new Logical(type);
-      where.push(this._where);
-      this._where = where;
+    else if (isArray(f)) {
+      // Optimization: If `_fields` is `null` the given array `f` is referenced.
+      if (returning === null) {
+        this._returning = f;
+      }
+      else {
+        for (var i = 0, len = f.length; i < len; i++)
+          returning.push(f[i]);
+      }
+    }
+    else {
+      if (returning === null)
+        this._returning = [f];
+      else
+        returning.push(f);
     }
 
-    where.push(node);
-    return this;
-  },
-
-  _getFlag: function(flag) {
-    var flags = this._flags;
-    if (!flags)
-      return false;
-    return flags.hasOwnProperty(flag);
-  },
-
-  _setFlag: function(flag) {
-    var flags = this._flags;
-    if (!flags)
-      flags = this._flags = {};
-    flags[flag] = true;
     return this;
   },
 
@@ -1557,19 +1635,19 @@ core.Query = qclass({
     return true;
   },
 
-  compile: function() {
+  compileNode: function(ctx) {
     switch (this._type) {
-      case "SELECT": return this.compileSelect();
-      case "INSERT": return this.compileInsert();
-      case "UPDATE": return this.compileUpdate();
-      case "DELETE": return this.compileDelete();
+      case "SELECT": return this.compileSelect(ctx);
+      case "INSERT": return this.compileInsert(ctx);
+      case "UPDATE": return this.compileUpdate(ctx);
+      case "DELETE": return this.compileDelete(ctx);
       default:
-        throw new CompileError("Query.compile() - Unknown query type '" + this._type + "'.");
+        throw new CompileError("Query.compileNode() - Unknown query type '" + this._type + "'.");
     }
   },
 
   // \function Query.compileSelect
-  compileSelect: function() {
+  compileSelect: function(ctx) {
     var s = "";
     var i, len;
 
@@ -1600,23 +1678,33 @@ core.Query = qclass({
         if (typeof def === "string")
           t += escapeIdentifier(def);
         else
-          t += def.compile();
+          t += def.compileNode(ctx);
       }
     }
     s += " " + t;
 
     // Compile `FROM table[, table[, ...]]`.
-    t = this.compileFrom();
+    t = this.compileFrom(ctx);
     if (t)
       s += " " + t;
 
     // Compile `WHERE ...`.
-    t = this.compileWhere();
+    t = this.compileWhere(ctx);
     if (t)
       s += " " + t;
 
-    // Compile `OFFSET` / `LIMIT`.
-    t = this.compileOffsetLimit();
+    // Compile `GROUP BY ...`.
+    t = this.compileGroupBy(ctx);
+    if (t)
+      s += " " + t;
+
+    // Compile `HAVING ...`.
+    t = this.compileHaving(ctx);
+    if (t)
+      s += " " + t;
+
+    // Compile `OFFSET ... LIMIT ...`.
+    t = this.compileOffsetLimit(ctx);
     if (t)
       s += " " + t;
 
@@ -1624,38 +1712,42 @@ core.Query = qclass({
   },
 
   // \function Query.compileInsert
-  compileInsert: function() {
+  compileInsert: function(ctx) {
     var s = "";
+    var t = "";
+
     var k;
     var i, len;
 
     // Compile `INSERT INTO table (...)`
-    var defs = this._tables;
-    if (defs.length !== 1)
-      throw new CompileError(
-        "Query.compileInsert() - Can only insert to one table (" + defs.length + " given).");
-
-    var table = defs[0];
-    var objects = this._values;
+    var table = this._table;
     var columns = this._columns;
+
+    if (!table) {
+      throw new CompileError(
+        "Query.compileInsert() - Table not defined.");
+    }
+
+    if (typeof table === "string")
+      t = escapeIdentifier(table);
+    else
+      t = table.compileNode();
 
     for (k in columns) {
       if (s)
         s += ", ";
       s += escapeIdentifier(k);
     }
-
-    s = "INSERT INTO " + escapeIdentifier(table) + " (" + s + ")";
+    s = "INSERT INTO " + t + " (" + s + ")";
 
     // Compile `VALUES (...)[, (...)]`.
-    var t = "";
-    var defs = this._fields;
-
+    var objects = this._values;
     s += " VALUES";
+
     for (i = 0, len = objects.length; i < len; i++) {
       var object = objects[i];
-      var t = "";
 
+      t = "";
       for (k in columns) {
         if (t)
           t += ", ";
@@ -1671,22 +1763,35 @@ core.Query = qclass({
       s += " (" + t + ")";
     }
 
+    // Compile `RETURNING ...`.
+    t = this.compileReturning(ctx);
+    if (t)
+      s += " " + t;
+
     return s;
   },
 
   // \function Query.compileUpdate
-  compileUpdate: function() {
+  compileUpdate: function(ctx) {
     var s = "";
+    var t = "";
+
     var k;
 
     // Compile `UPDATE table`
-    var defs = this._tables;
-    if (defs.length !== 1)
-      throw new CompileError(
-        "Query.compileUpdate() - Can only update to one table (" + defs.length + " given).");
+    var table = this._table;
 
-    var table = defs[0];
-    s += "UPDATE " + escapeIdentifier(table);
+    if (!table) {
+      throw new CompileError(
+        "Query.compileUpdate() - Table not defined.");
+    }
+
+    if (typeof table === "string")
+      t = escapeIdentifier(table);
+    else
+      t = table.compileNode();
+
+    s += "UPDATE " + t;
 
     // Compile `SET ...`
     var objects = this._values;
@@ -1700,8 +1805,8 @@ core.Query = qclass({
         "Query.compileUpdate() - Can only update one record (" + objects.length + " provided).");
 
     var values = objects[0];
-    var t = "";
 
+    t = "";
     for (var k in values) {
       var value = values[k];
       if (t)
@@ -1711,17 +1816,22 @@ core.Query = qclass({
     s += " SET " + t;
 
     // Compile `FROM table[, table[, ...]]`.
-    t = this.compileFrom();
+    t = this.compileFrom(ctx);
     if (t)
       s += " " + t;
 
     // Compile `WHERE ...`
-    t = this.compileWhere();
+    t = this.compileWhere(ctx);
     if (t)
       s += " " + t;
 
     // Compile `OFFSET` / `LIMIT`.
-    t = this.compileOffsetLimit();
+    t = this.compileOffsetLimit(ctx);
+    if (t)
+      s += " " + t;
+
+    // Compile `RETURNING ...`.
+    t = this.compileReturning(ctx);
     if (t)
       s += " " + t;
 
@@ -1729,7 +1839,7 @@ core.Query = qclass({
   },
 
   // \function Query.compileDelete
-  compileDelete: function() {
+  compileDelete: function(ctx) {
     var s = "";
     var t = "";
 
@@ -1737,33 +1847,38 @@ core.Query = qclass({
     s += "DELETE";
 
     // Compile `FROM table[, table[, ...]]`.
-    t = this.compileFrom();
+    t = this.compileFrom(ctx);
     if (!t)
       throw new CompileError("Query.compileDelete() - Missing table definition.");
     s += " " + t;
 
     // Compile `WHERE ...`
-    t = this.compileWhere();
+    t = this.compileWhere(ctx);
     if (t)
       s += " " + t;
 
     // Compile `OFFSET` / `LIMIT`.
-    t = this.compileOffsetLimit();
+    t = this.compileOffsetLimit(ctx);
+    if (t)
+      s += " " + t;
+
+    // Compile `RETURNING ...`.
+    t = this.compileReturning(ctx);
     if (t)
       s += " " + t;
 
     return s;
   },
 
-  compileFrom: function() {
+  compileFrom: function(ctx) {
     var s = "";
-    var tables = this._tables;
+    var from = this._from;
 
-    if (!tables || tables.length === 0)
+    if (!from || from.length === 0)
       return s;
 
-    for (var i = 0, len = tables.length; i < len; i++) {
-      var table = tables[i];
+    for (var i = 0, len = from.length; i < len; i++) {
+      var table = from[i];
 
       if (s)
         s += ", ";
@@ -1771,7 +1886,7 @@ core.Query = qclass({
       if (typeof table === "string")
         s += escapeIdentifier(table);
       else
-        s += table.compile();
+        s += table.compileNode(ctx);
     }
 
     if (!s)
@@ -1780,32 +1895,96 @@ core.Query = qclass({
     return "FROM " + s;
   },
 
-  compileWhere: function() {
+  compileGroupBy: function(ctx) {
     var s = "";
-    var where = this._where;
+    var defs = this._groupBy;
 
-    if (where && where._values.length !== 0) {
-      var defs = where._values;
-
+    if (defs && defs.length) {
       for (var i = 0, len = defs.length; i < len; i++) {
         var def = defs[i];
-        if (s)
-          s += " " + where._type + " ";
 
-        if (def.shouldWrap())
-          s += "(" + def.compile() + ")";
+        if (s)
+          s += ", ";
+
+        // Group can be in a form of `string` or `Node`.
+        if (typeof def === "string")
+          s += escapeIdentifier(def);
         else
-          s += def.compile();
+          s += def.compileNode(ctx);
       }
     }
 
     if (!s)
       return s;
 
-    return "WHERE " + s;
+    return "GROUP BY " + s;
   },
 
-  compileOffsetLimit: function() {
+  compileWhere: function(ctx) {
+    var condition = this._where;
+    if (!condition || condition._values.length === 0)
+      return "";
+    return this.compileWhereOrHaving(ctx, "WHERE", condition);
+  },
+
+  compileHaving: function(ctx) {
+    var condition = this._having;
+    if (!condition || condition._values.length === 0)
+      return "";
+    return this.compileWhereOrHaving(ctx, "HAVING", condition);
+  },
+
+  compileWhereOrHaving: function(ctx, keyword, condition) {
+    var s = "";
+    var expressionList = condition._values;
+
+    for (var i = 0, len = expressionList.length; i < len; i++) {
+      var expression = expressionList[i];
+      var compiled = expression.compileNode(ctx);
+
+      if (s)
+        s += " " + condition._type + " ";
+
+      if (expression.shouldWrap())
+        s += "(" + compiled + ")";
+      else
+        s += compiled;
+    }
+
+    if (!s)
+      return s;
+
+    return keyword + " " + s;
+  },
+
+  compileReturning: function(ctx) {
+    var s = "";
+    var returning = this._returning;
+
+    if (!returning || returning._values.length === 0)
+      return s;
+
+    var defs = returning._values;
+    for (var i = 0, len = defs.length; i < len; i++) {
+      var def = defs[i];
+
+      if (s)
+        s += ", ";
+
+      // Returning column can be in a form of `string` or `Node`.
+      if (typeof def === "string")
+        s += escapeIdentifier(def);
+      else
+        s += def.compileNode(ctx);
+    }
+
+    if (!s)
+      return s;
+
+    return "RETURNING " + s;
+  },
+
+  compileOffsetLimit: function(ctx) {
     var s = "";
 
     var offset = this._offset;
@@ -1822,6 +2001,111 @@ core.Query = qclass({
     }
 
     return s;
+  },
+
+  _getFlag: function(flag) {
+    var flags = this._flags;
+    if (!flags)
+      return false;
+    return flags.hasOwnProperty(flag);
+  },
+
+  _setFlag: function(flag) {
+    var flags = this._flags;
+    if (!flags)
+      flags = this._flags = {};
+    flags[flag] = true;
+    return this;
+  },
+
+  // Get the object where `WHERE` conditions can be added right now.
+  _getWhere: function(type) {
+    var where = this._where;
+
+    if (where === null) {
+      // If no `WHERE` has been added yet, create one.
+      where = new Logical(type);
+      this._where = where;
+    }
+    else if (where.type !== type) {
+      // If the current expression operator is not the same as `type`, wrap the
+      // current expression inside a new node.
+      where = new Logical(type);
+      where.push(this._where);
+      this._where = where;
+    }
+
+    return where;
+  },
+
+  _addWhere: function(type, a, op, b, nArgs) {
+    var node;
+
+    // WHERE/OR_WHERE accepts 1 or 3 arguments.
+    if (nArgs === 3) {
+      if (typeof a === "string")
+        a = COL(a);
+      node = new Binary(a, op, b);
+    }
+    else if (nArgs !== 1) {
+      var prefix = type === "OR" ? "OR_" : "";
+      throw new CompileError(prefix + "WHERE - Invalid argument.");
+    }
+    else if (isArray(a)) {
+      this._getWhere(type).concat(a);
+      return this;
+    }
+    else {
+      node = (a instanceof Node) ? a : new ObjectOp("AND", a);
+    }
+
+    this._getWhere(type).push(node);
+    return this;
+  },
+
+  // Get the object where `WHERE` conditions can be added right now.
+  _getHaving: function(type) {
+    var having = this._having;
+
+    if (having === null) {
+      // If no `WHERE` has been added yet, create one.
+      having = new Logical(type);
+      this._having = having;
+    }
+    else if (having.type !== type) {
+      // If the current expression operator is not the same as `type`, wrap the
+      // current expression inside a new node.
+      having = new Logical(type);
+      having.push(this._having);
+      this._having = having;
+    }
+
+    return having;
+  },
+
+  _addHaving: function(type, a, op, b, nArgs) {
+    var node;
+
+    // HAVING/OR_HAVING accepts 1 or 3 arguments.
+    if (nArgs === 3) {
+      if (typeof a === "string")
+        a = COL(a);
+      node = new Binary(a, op, b);
+    }
+    else if (nArgs !== 1) {
+      var prefix = type === "OR" ? "OR_" : "";
+      throw new CompileError(prefix + "HAVING() - Invalid argument.");
+    }
+    else if (isArray(a)) {
+      this._getHaving(type).concat(a);
+      return this;
+    }
+    else {
+      node = (a instanceof Node) ? a : new ObjectOp("AND", a);
+    }
+
+    this._getHaving(type).push(node);
+    return this;
   }
 });
 
@@ -1855,12 +2139,8 @@ function INSERT(/* ... */) {
   if (i < len) {
     var arg = arguments[i];
 
-    if (typeof arg === "string") {
-      q._tables = [arg];
-      i++;
-    }
-    else if (arg instanceof Identifier) {
-      q._tables = [arg._value];
+    if (typeof arg === "string" || arg instanceof Identifier) {
+      q._table = arg;
       i++;
     }
   }
@@ -1886,12 +2166,8 @@ function UPDATE(/* ... */) {
   if (i < len) {
     var arg = arguments[i];
 
-    if (typeof arg === "string") {
-      q._tables = [arg];
-      i++;
-    }
-    else if (arg instanceof Identifier) {
-      q._tables = [arg._value];
+    if (typeof arg === "string" || arg instanceof Identifier) {
+      q._table = arg;
       i++;
     }
   }
@@ -1934,12 +2210,26 @@ function EXCEPT(array) {
 }
 qsql.EXCEPT = EXCEPT;
 
+// \function EXCEPT_ALL(...)
+function EXCEPT_ALL(array) {
+  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  return new Combine("EXCEPT", values).ALL();
+}
+qsql.EXCEPT_ALL = EXCEPT_ALL;
+
 // \function INTERSECT(...)
 function INTERSECT(array) {
   var values = isArray(array) ? array : Array_slice.call(arguments, 0);
   return new Combine("INTERSECT", values);
 }
 qsql.INTERSECT = INTERSECT;
+
+// \function INTERSECT_ALL(...)
+function INTERSECT_ALL(array) {
+  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  return new Combine("INTERSECT", values).ALL();
+}
+qsql.INTERSECT_ALL = INTERSECT_ALL;
 
 // \function UNION(...)
 function UNION(array) {
@@ -1948,21 +2238,31 @@ function UNION(array) {
 }
 qsql.UNION = UNION;
 
+// \function UNION_ALL(...)
+function UNION_ALL(array) {
+  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  return new Combine("UNION", values).ALL();
+}
+qsql.UNION_ALL = UNION_ALL;
+
+// \function COL(string, as)
 function COL(string, as) {
   return new Identifier(string, as);
 };
 qsql.COL = COL;
 
-// Unary and Binary.
+// \function OP(...)
+//
+// Construct unary or binary operator.
 function OP(a, op, b) {
   var len = arguments.length;
 
   if (len === 2)
     return new Unary(op, a);
   else if (len === 3)
-    return new Binary(op, a, b);
+    return new Binary(a, op, b);
   else
-    throw new CompileError("OP() - Illegal number or parameters (" + len + ").")
+    throw new CompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed).")
 };
 qsql.OP = OP;
 

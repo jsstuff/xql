@@ -11,6 +11,7 @@ var DELETE = qsql.DELETE;
 
 var AND = qsql.AND;
 var OR = qsql.OR;
+var OP = qsql.OP;
 
 var EXCEPT = qsql.EXCEPT;
 var UNION = qsql.UNION;
@@ -25,13 +26,13 @@ var escapeValue = qsql.escapeValue;
 var substitute = qsql.substitute;
 
 function simplify(s) {
-  return s.trim().replace(/\w+/, " ");
+  return s.trim().replace(/\s+/g, " ");
 }
 
 function shouldMatch(a, b) {
   // Compile `a` and/or `b` if needed.
-  if (a instanceof qsql.core.Node) a = a.compile();
-  if (b instanceof qsql.core.Node) b = b.compile();
+  if (a instanceof qsql.core.Node) a = a.compileNode();
+  if (b instanceof qsql.core.Node) b = b.compileNode();
 
   // Simplify, basically removes redundant spaces.
   a = simplify(a);
@@ -109,7 +110,6 @@ describe("QSql", function() {
     shouldMatch(escapeValue("text")        , "'text'");
     shouldMatch(escapeValue("'text'")      , "E'\\'text\\''");
     shouldMatch(escapeValue('"text"')      , "'\"text\"'");
-    shouldMatch(escapeValue('\0')          , "E'\\x00'");
     shouldMatch(escapeValue('\b')          , "E'\\b'");
     shouldMatch(escapeValue('\f')          , "E'\\f'");
     shouldMatch(escapeValue('\n')          , "E'\\n'");
@@ -133,10 +133,12 @@ describe("QSql", function() {
     shouldMatch(escapeValue({a:1,b:2})     , "'{\"a\":1,\"b\":2}'");
     shouldMatch(escapeValue({a:"a",b:"b"}) , "'{\"a\":\"a\",\"b\":\"b\"}'");
     shouldMatch(escapeValue({a:["a","b"]}) , "'{\"a\":[\"a\",\"b\"]}'");
+
+    shouldThrow(function() { escapeValue('\0'); });
   });
 
   // Substitute.
-  it("should escape identifier.", function() {
+  it("should substitute expression.", function() {
     shouldMatch(
       substitute("a = ?, b = '', c = ?", [1, 2]),
       "a = 1, b = '', c = 2");
@@ -196,20 +198,48 @@ describe("QSql", function() {
       SELECT("a", "b", "c").FROM("x"));
   });
 
-  it("should test SELECT(...) FROM ... .", function() {
+  it("should test SELECT ... FROM ... .", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("a"), "<=", 42),
       'SELECT "a", "b", "c" FROM "x" WHERE "a" <= 42');
   });
 
-  it("should test SELECT DISTINCT(...) FROM ... .", function() {
+  it("should test SELECT DISTINCT ... FROM ... .", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE(COL("a"), "<=", 42),
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
+
+    shouldMatch(
+      SELECT().DISTINCT(["a", "b", "c"]).FROM("x").WHERE(COL("a"), "<=", 42),
+      'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
+  });
+
+  it("should test SELECT... FROM ... GROUP BY ... .", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a")),
+      'SELECT "a", "b", "c" FROM "x" GROUP BY "a"');
+  });
+
+  it("should test SELECT... FROM ... GROUP BY .. HAVING ....", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a"))
+        .HAVING(COL("a"), "<", 3)
+        .HAVING(COL("b"), ">", 1),
+      'SELECT "a", "b", "c" FROM "x" GROUP BY "a" HAVING "a" < 3 AND "b" > 1');
+  });
+
+  it("should test SELECT... FROM ... GROUP BY .. HAVING ....", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("x").IN(1, 2, 3)),
+      'SELECT "a", "b", "c" FROM "x" WHERE "x" in (1, 2, 3)');
   });
 
   // INSERT.
   it("should test INSERT INTO ... () VALUES (...)", function() {
+    shouldMatch(
+      INSERT("x").VALUES({ a: 0, b: false, c: "String" }),
+      'INSERT INTO "x" ("a", "b", "c") VALUES (0, FALSE, \'String\')');
+
     shouldMatch(
       INSERT().INTO("x").VALUES({ a: 0, b: false, c: "String" }),
       'INSERT INTO "x" ("a", "b", "c") VALUES (0, FALSE, \'String\')');
@@ -217,6 +247,19 @@ describe("QSql", function() {
 
   // UPDATE.
   it("should test UPDATE ... SET ...", function() {
+    shouldMatch(
+      UPDATE("x").VALUES({ a: 1, b: "someString" }),
+      'UPDATE "x" SET "a" = 1, "b" = \'someString\'');
+
+    shouldMatch(
+      UPDATE("x").VALUES({ a: 1, b: OP(COL("b"), "+", 1) }),
+      'UPDATE "x" SET "a" = 1, "b" = "b" + 1');
+  });
+
+  it("should test UPDATE ... SET ... WHERE", function() {
+    shouldMatch(
+      UPDATE("x").VALUES({ a: 1, b: "someString" }).WHERE(COL("id"), "=", 1000),
+      'UPDATE "x" SET "a" = 1, "b" = \'someString\' WHERE "id" = 1000');
   });
 
   // DELETE.
