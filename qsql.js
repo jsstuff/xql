@@ -8,7 +8,7 @@ function returnFalse() {
 // \internal
 // \{
 var isArray = Array.isArray;
-var isBuffer = typeof Buffer === "object" ? Buffer.isBuffer : returnFalse;
+var isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
 var Array_slice = Array.prototype.slice;
 // \}
 
@@ -20,10 +20,6 @@ var util = qsql.util = {};
 
 var reInt = /^-?\d+$/;
 var reUpperCase = /^[A-Z_][A-Z_0-9]*$/;
-
-// Shared object that contains no keys. Used to replace missing object that is
-// optional.
-var noObject = {};
 
 // Map of identifiers that are not escaped.
 var identifierMap = {
@@ -68,55 +64,146 @@ var typeMap = {
 
   "array"   : "array",
   "json"    : "json",
-  "raw"     : "raw"
+  "raw"     : "raw",
+
+  "values"  : "values"
 };
 Object.keys(typeMap).forEach(function(key) {
   typeMap[key.toUpperCase()] = typeMap[key];
 });
 
-var operatorMap = {
-  //-----+----------+------------+----------+----------+----------+----------+
-  // Op  | MappedTo | Int/Float  | String   | Array    | Range    | Geometry |
-  //-----+----------+------------+----------+----------+----------+----------+
-  "="    : " = "    ,//?Equal    |?Equal    |          |?Equal    |          |
-  ">"    : " > "    ,//?Greater  |?Greater  |          |?Greater  |          |
-  ">="   : " >= "   ,//?GreaterEq|?GreaterEq|          |?GreaterEq|          |
-  "<"    : " < "    ,//?Less     |?Less     |          |?Less     |          |
-  "<="   : " <= "   ,//?LessEq   |?LessEq   |          |?LessEq   |          |
-  "<>"   : " <> "   ,//?NotEqual |?NotEqual |          |?NotEqual |          |
-  "!="   : " <> "   ,//?NotEqual |?NotEqual |          |          |          |
-  "@>"   : " @> "   ,//          |          |?Contains |?Contains |          |
-  "<@"   : " <@ "   ,//          |          |?Cont-By  |?Cont-By  |          |
-  "&&"   : " && "   ,//          |          |?Overlap  |?Overlap  |          |
-  "&<"   : " &< "   ,//          |          |          |?Right-Of |          |
-  "&>"   : " &> "   ,//          |          |          |?Left-Of  |          |
-  "-|-"  : " -|- "  ,//          |          |          |?Adj-To   |          |
-  //-----+----------+------------+----------+----------+----------+----------+
-  "+"    : " + "    ,// Add      |          | Union    | Union    |          |
-  "-"    : " - "    ,// Subtract |          | Diff     | Diff     |          |
-  "*"    : " * "    ,// Multiply |          | Intersect| Intersect|          |
-  "/"    : " / "    ,// Divide   |          |          |          |          |
-  "%"    : " % "    ,// Modulo   |          |          |          |          |
-  "^"    : " ^ "    ,// Power    |          |          |          |          |
-  //-----+----------+------------+----------+----------+----------+----------+
-  "&"    : " & "    ,// Bit-And  |          |          |          |          |
-  "|"    : " | "    ,// Bit-Or   |          |          |          |          |
-  "#"    : " # "    ,// Bit-Xor  |          |          |          |          |
-  "~"    : " ~ "    ,// Bit-Not  | Match    |          |          |          |
-  "<<"   : " << "   ,// Shf-Left |          |          |?LeftOf   |          |
-  ">>"   : " >> "   ,// Shf-Right|          |          |?RightOf  |          |
-  //-----+----------+------------+----------+----------+----------+----------+
-  "||"   : " || "   ,//          | Concat   | Concat   |          |          |
-  "~*"   : " ~* "   ,//          |?MatchI   |          |          |          |
-  "!~"   : " ~* "   ,//          |?NotMatch |          |          |          |
-  "!~*"  : " !~* "  ,//          |?NotMatchI|          |          |          |
-  //-----+----------+------------+----------+----------+----------+----------+
-  "AND"  : " AND "  ,//          |          |          |          |          |
-  "OR"   : " OR "   ,//          |          |          |          |          |
-  //-----+----------+------------+----------+----------+----------+----------+
-  "LIKE" : " LIKE " ,//          |?Like     |          |          |          |
-  "ILIKE": " ILIKE " //          |?LikeI    |          |          |          |
-  //-----+----------+------------+----------+----------+----------+----------+
+// Operator flags.
+var OperatorFlags = {
+  kCond        : 0x00000001, // Operator is conditional expression.
+  kData        : 0x00000002, // Operator processes data (has a result).
+
+  kBoolean     : 0x00000010, // Operator allows boolean  operands.
+  kNumber      : 0x00000020, // Operator allows number   operands.
+  kString      : 0x00000040, // Operator allows string   operands.
+  kArray       : 0x00000080, // Operator allows array    operands.
+  kJson        : 0x00000100, // Operator allows json     operands.
+  kRange       : 0x00000200, // Operator allows range    operands.
+  kGeometry    : 0x00000400, // Operator allows geometry operands.
+
+  kInPlaceNot  : 0x00010000, // Operator allows in place NOT (a NOT OP b).
+  kLeftValues  : 0x00020000, // Operator expects left  values as (a, b[, ...]).
+  kRightValues : 0x00040000  // Operator expects right values as (a, b[, ...]).
+};
+
+// Operator definitions.
+var OperatorDefs = (function() {
+  var kCond         = OperatorFlags.kCond;
+  var kData         = OperatorFlags.kData;
+
+  var kInPlaceNot   = OperatorFlags.kInPlaceNot;
+  var kLeftValues   = OperatorFlags.kLeftValues;
+  var kRightValues  = OperatorFlags.kRightValues;
+
+  var kBoolean      = OperatorFlags.kBoolean;
+  var kNumber       = OperatorFlags.kNumber;
+  var kString       = OperatorFlags.kString;
+  var kArray        = OperatorFlags.kArray;
+  var kJson         = OperatorFlags.kJson;
+  var kRange        = OperatorFlags.kRange;
+  var kGeometry     = OperatorFlags.kGeometry;
+
+  var defs = {};
+
+  function add(op, flags) {
+    var def = {
+      op    : op,
+      as    : " " + op + " ",
+      not   : null,
+      flags : flags
+    };
+    defs[op] = def;
+  }
+
+  // +---------+-----------------+---------------------------------------------+
+  // | Keyword | Operator Type   | Operator Flags                              |
+  // +---------+-----------------+---------------------------------------------+
+  add("="      , kCond           | kNumber | kString                           );
+  add(">"      , kCond           | kNumber | kString                           );
+  add(">="     , kCond           | kNumber | kString                           );
+  add("<"      , kCond           | kNumber | kString                           );
+  add("<="     , kCond           | kNumber | kString                           );
+  add("<>"     , kCond           | kNumber | kString                           );
+  add("@>"     , kCond           | kArray | kRange                             ); // Contains
+  add("<@"     , kCond           | kArray | kRange                             ); // Contained By.
+  add("&&"     , kCond           | kRange                                      ); // Overlap.
+  add("&<"     , kCond           | kRange                                      ); // Right Of.
+  add("&>"     , kCond           | kRange                                      ); // Left Of.
+  add("-|-"    , kCond           | kRange                                      ); // Adjacent To.
+  add("+"      , kData           | kNumber | kArray | kRange                   ); // Add/Union.
+  add("-"      , kData           | kNumber | kArray | kRange                   ); // Sub/Difference.
+  add("*"      , kData           | kNumber | kArray | kRange                   ); // Multiply/Intersect.
+  add("/"      , kData           | kNumber                                     ); // Divide.
+  add("%"      , kData           | kNumber                                     ); // Modulo.
+  add("^"      , kData           | kNumber                                     ); // Power.
+  add("&"      , kData           | kNumber                                     ); // Bit-And.
+  add("|"      , kData           | kNumber                                     ); // Bit-Or.
+  add("#"      , kData           | kNumber                                     ); // Bit-Xor.
+  add("~"      , kCond | kData   | kNumber | kString                           ); // Bit-Not/Match.
+  add("<<"     , kCond | kData   | kNumber | kRange                            ); // Shift-Left/LeftOf.
+  add(">>"     , kCond | kData   | kNumber | kRange                            ); // Shift-Right/RightOf.
+  add("||"     , kData           | kString                                     ); // Concat.
+  add("~*"     , kCond           | kString                                     ); // Match (I).
+  add("!~"     , kCond           | kString                                     ); // Not Match.
+  add("!~*"    , kCond           | kString                                     ); // Not Match (I).
+  add("AND"    , kCond           | kBoolean     | kInPlaceNot                  ); // Logical And.
+  add("OR"     , kCond           | kBoolean     | kInPlaceNot                  ); // Logical Or.
+  add("LIKE"   , kCond           | kString      | kInPlaceNot                  ); // Like.
+  add("ILIKE"  , kCond           | kString      | kInPlaceNot                  ); // Like (I).
+  add("IN"     , kCond           | kRightValues | kInPlaceNot                  ); // In.
+
+  // Aliases;
+  defs["!="] = defs["<>"];
+
+  // Negations.
+  defs["="  ].not = defs["<>" ];
+  defs[">"  ].not = defs["<=" ];
+  defs[">=" ].not = defs["<"  ];
+  defs["<"  ].not = defs[">=" ];
+  defs["<=" ].not = defs[">"  ];
+  defs["<>" ].not = defs["="  ];
+  defs["~"  ].not = defs["!~" ];
+  defs["!~" ].not = defs["~"  ];
+  defs["~*" ].not = defs["!~*"];
+  defs["!~*"].not = defs["~*" ];
+
+  return defs;
+})();
+
+// Node flags.
+var NodeFlags = {
+  kImmutable    : 0x00000001,
+  kNot          : 0x00000002,
+
+  kAscending    : 0x00000010,
+  kDescending   : 0x00000020,
+  kNullsFirst   : 0x00000040,
+  kNullsLast    : 0x00000080,
+
+  kAll          : 0x00000100,
+  kDistinct     : 0x00000200,
+  kAllOrDistinct: 0x00000300
+};
+qsql.NodeFlags = NodeFlags;
+
+var SortDirection = {
+  ""            : 0,
+  "0"           : 0,
+
+  "1"           : NodeFlags.kAscending,
+  "-1"          : NodeFlags.kDescending,
+
+  "ASC"         : NodeFlags.kAscending,
+  "DESC"        : NodeFlags.kDescending
+};
+
+var SortNulls = {
+  "NULLS FIRST" : NodeFlags.kNullsFirst,
+  "NULLS LAST"  : NodeFlags.kNullsLast
 };
 
 // List of ordinary functions, which will become available in `qsql` namespace.
@@ -530,6 +617,16 @@ function escapeValueExplicit(value, explicitType) {
       // Will throw.
       break;
 
+    case "values":
+      if (value == null)
+        return "NULL";
+
+      if (Array.isArray(value))
+        return escapeValues(value, false);
+
+      // Will throw.
+      break;
+
     case "json":
       // `undefined` maps to native DB `NULL` type while `null` maps to
       // JSON `null` type. This is the only way to distinguish between
@@ -609,6 +706,26 @@ function escapeBuffer(value) {
 };
 qsql.escapeBuffer = escapeBuffer;
 
+// \function escapeValues(value)
+function escapeValues(value) {
+  var s = "";
+
+  for (var i = 0, len = value.length; i < len; i++) {
+    var element = value[i];
+
+    if (s)
+      s += ", ";
+
+    if (isArray(element))
+      s += escapeArray(element, false);
+    else
+      s += escapeValue(element);
+  }
+
+  return "(" + s + ")";
+};
+qsql.escapeValues = escapeValues;
+
 // \function escapeArray(value, isNested)
 function escapeArray(value, isNested) {
   var s = "";
@@ -649,13 +766,22 @@ qsql.escapeJson = escapeJson;
 // query and skips content of these. For example for a given string `'?' ?` only
 // the second `?` is considered and substituted.
 //
-// NOTE: Although the function understands SQL syntax, it doesn't do validation
-// of the query itself. The purpose is to replace query parameters and not to
-// perform expensive validation (that will be done by the server anyway).
+// NOTE: Although the function understands SQL syntax, the function expects
+// well formed SQL query. The purpose is to replace query parameters and not
+// to perform expensive validation (that will be done by the server anyway).
 var substitute = (function() {
+  var reEscapeChars = /[\"\$\'\?]/g;
+
   function substitute(query, bindings) {
-    var input = query.toString();
+    var input = "";
     var output = "";
+
+    if (typeof query === "string")
+      input = query;
+    else if (query instanceof Node)
+      input = query.compileNode();
+    else
+      input = query.toString();
 
     // These are hints for javascript runtime. We really want this rountine
     // as fast as possible. The `|0` hint tells VM to use integer instead of
@@ -664,19 +790,19 @@ var substitute = (function() {
     var len    = input.length|0;
     var iStart = 0|0;
 
-    // Substitute mode:
+    // Substitution mode:
     //   0  - Not set.
     //   36 - `$`.
     //   63 - `?`.
-    var mode = 0;
+    var mode = 0|0;
 
     // Bindings index, incremented if query contains `?` or parsed if `$`.
-    var bIndex = 0;
+    var bIndex = 0|0;
     // Count of bindings available.
-    var bLength = bindings.length;
+    var bLength = bindings.length|0;
 
     while (i < len) {
-      var c = input.charCodeAt(i);
+      var c = input.charCodeAt(i)|0;
       i++;
 
       // Check if the character is one of the following:
@@ -693,7 +819,7 @@ var substitute = (function() {
             if (i === len)
               break;
 
-            c = input.charCodeAt(i);
+            c = input.charCodeAt(i)|0;
             i++;
 
             // Skip anything that is not `"`.
@@ -709,7 +835,7 @@ var substitute = (function() {
             // Only continue if this is an escape sequence `""`.
             //
             // `"` === 34
-            c = input.charCodeAt(i);
+            c = input.charCodeAt(i)|0;
             if (c !== 34)
               break;
 
@@ -717,7 +843,7 @@ var substitute = (function() {
           }
         }
 
-        // Parse `'` - `'...'` section. Skip until the closing `'`.
+        // Parse `'` - `'...'` section; skip until the closing `'`.
         //
         // There are several possibilities of escaping.
         //
@@ -742,7 +868,7 @@ var substitute = (function() {
               if (i >= len)
                 break;
 
-              c = input.charCodeAt(i);
+              c = input.charCodeAt(i)|0;
               i++;
 
               // Break if matching `'` has been found.
@@ -768,7 +894,7 @@ var substitute = (function() {
               if (i === len)
                 break;
 
-              c = input.charCodeAt(i);
+              c = input.charCodeAt(i)|0;
               i++;
 
               // Skip anything that is not `'`.
@@ -784,7 +910,7 @@ var substitute = (function() {
               // Only continue if this is an escape sequence `''`.
               //
               // `'` === 39
-              c = input.charCodeAt(i);
+              c = input.charCodeAt(i)|0;
               if (c !== 39)
                 break;
 
@@ -806,27 +932,30 @@ var substitute = (function() {
 
           // Flush accumulated input.
           output += input.substring(iStart, i - 1);
+
+          bIndex = 0|0;
           iStart = i;
 
-          // Parse the number `[0-9]+`
+          // Parse the number `[0-9]+` directly to `bIndex`.
           while (i < len) {
-            c = input.charCodeAt(i);
+            c = input.charCodeAt(i)|0;
             // `0` === 48
             // `9` === 57
             if (c < 48 || c > 57)
               break;
+
+            bIndex = (bIndex * 10 + (c - 48)) | 0;
+            if (bIndex > bLength)
+              throw new CompileError("Substitute() - Index out of range (max " + bLength + ").");
             i++;
           }
 
-          if (iStart === i) {
-            throw new CompileError("Substitute() - Missing number after '$' mark.");
-          }
+          if (bIndex === 0)
+            throw new CompileError("Substitute() - Index can't be zero.");
+          bIndex--;
 
-          // Convert to index.
-          bIndex = parseInt(input.substring(iStart, i)) - 1;
-          if (bIndex >= bLength) {
-            throw new CompileError("Substitute() - Index " + bIndex + " out of range (" + bLength + ").");
-          }
+          if (iStart === i)
+            throw new CompileError("Substitute() - Missing number after '$' mark.");
 
           // Substitute.
           output += escapeValue(bindings[bIndex]);
@@ -845,9 +974,8 @@ var substitute = (function() {
           mode = c;
         }
 
-        if (bIndex >= bLength) {
+        if (bIndex >= bLength)
           throw new CompileError("Substitute() - Index " + bIndex + " out of range (" + bLength + ").");
-        }
 
         // Flush accumulated input.
         output += input.substring(iStart, i - 1);
@@ -860,6 +988,10 @@ var substitute = (function() {
         bIndex++;
       }
     }
+
+    // Don't call substring() if nothing have changed.
+    if (iStart === 0)
+      return input;
 
     // Flush the remaining input (if any).
     if (iStart !== len)
@@ -876,17 +1008,55 @@ qsql.substitute = substitute;
 //
 // Base class for all `Node`s related to query building.
 //
-// Node doesn't have any functionality and basically only initializes
-// `_type` and `_as` members.
-//
-// Classes that inherit `Node` can omit calling `Node`s constructor for
-// performance reasons.
+// `Node` doesn't have any functionality and basically only initializes `_type`,
+// `_flags` and `_as` members. Classes that inherit `Node` can omit calling
+// `Node`s constructor for performance reasons, but if you do so, please
+// always initialize members in the correct order [_type, _flags, _as].
 function Node(type, as) {
   this._type = type || "";
+  this._flags = 0|0;
+
   this._as = as || "";
 }
 core.Node = qclass({
   construct: Node,
+
+  // \function Node.shouldWrap()
+  //
+  // Get whether the not should be wrapped in parentheses.
+  shouldWrap: function(ctx) {
+    throw new CompileError("Node(" + this._type + ").shouldWrap() - Must be reimplemented.");
+  },
+
+  // \function Node.compileNode()
+  //
+  // Compile the node.
+  compileNode: function(ctx) {
+    throw new CompileError("Node(" + this._type + ").compileNode() - Must be reimplemented.");
+  },
+
+  // \function Node.compileQuery()
+  //
+  // Compile the whole query adding semicolon ';' at the end.
+  compileQuery: function(ctx) {
+    return this.compileNode(ctx) + ";";
+  },
+
+  getFlag: function(flag) {
+    return (this._flags & flag) !== 0;
+  },
+
+  setFlag: function(flag, value) {
+    var flags = this._flags;
+
+    if (value || value === undefined)
+      flags |= flag;
+    else
+      flags &= ~flag;
+
+    this._flags = flags;
+    return this;
+  },
 
   // \function Node.AS(as:String)
   AS: function(as) {
@@ -928,28 +1098,20 @@ core.Node = qclass({
   //
   // Returns a new Node which contains `this IN b` expression.
   IN: function(b) {
+    var len = arguments.length;
+
+    if (len > 1) {
+      b = Array_slice.call(arguments, 0);
+    }
+    else if (len === 1) {
+      if (!isArray(b))
+        b = [b];
+    }
+    else {
+      b = [];
+    }
+
     return new Binary(this, "IN", b);
-  },
-
-  // \function Node.shouldWrap()
-  //
-  // Get whether the not should be wrapped in parentheses.
-  shouldWrap: function(ctx) {
-    throw new CompileError("Node(" + this._type + ").shouldWrap() - Must be reimplemented.");
-  },
-
-  // \function Node.compileNode()
-  //
-  // Compile the node.
-  compileNode: function(ctx) {
-    throw new CompileError("Node(" + this._type + ").compileNode() - Must be reimplemented.");
-  },
-
-  // \function Node.compileQuery()
-  //
-  // Compile the whole query adding semicolon ';' at the end.
-  compileQuery: function(ctx) {
-    return this.compileNode(ctx) + ";";
   }
 });
 
@@ -959,6 +1121,8 @@ core.Node = qclass({
 function Raw(string, bindings) {
   // Doesn't call `Node` constructor.
   this._type = "RAW";
+  this._flags = 0|0;
+
   this._as = "";
   this._value = string || "";
   this._bindings = bindings || null;
@@ -990,6 +1154,8 @@ core.Raw = qclass({
 function Unary(type, value) {
   // Doesn't call `Node` constructor.
   this._type = type || "";
+  this._flags = 0|0;
+
   this._as = "";
   this._value = value;
 }
@@ -1015,7 +1181,9 @@ core.Unary = qclass({
         break;
 
       default:
-        throw new CompileError("Unary.compileNode() - Unknown type '" + type + "'.");
+        if (type)
+          s = type + " " + s;
+        break;
     }
 
     var as = this._as;
@@ -1023,6 +1191,15 @@ core.Unary = qclass({
       s += " AS " + escapeIdentifier(as);
 
     return s;
+  },
+
+  getValue: function() {
+    return this._value;
+  },
+
+  setValue: function(value) {
+    this._value = value;
+    return this;
   }
 });
 
@@ -1030,6 +1207,8 @@ core.Unary = qclass({
 function Binary(left, type, right, as) {
   // Doesn't call `Node` constructor.
   this._type = type || "";
+  this._flags = 0|0;
+
   this._as = as || "";
   this._left = left;
   this._right = right;
@@ -1046,19 +1225,82 @@ core.Binary = qclass({
     var type = this._type;
     var s = "";
 
-    var left = escapeValue(this._left);
-    var right = escapeValue(this._right);
+    var keyword = "";
+    var left = "";
+    var right = "";
 
-    if (operatorMap.hasOwnProperty(type))
-      s = left + operatorMap[type] + right;
-    else
-      throw new CompileError("Binary.compileNode() - Unknown operator '" + type + "'.");
+    if (!type)
+      throw new CompileError("Binary.compileNode() - No operator specified.");
+
+    if (OperatorDefs.hasOwnProperty(type)) {
+      var op = OperatorDefs[type];
+      var flags = op.flags;
+
+      if (flags & OperatorFlags.kLeftValues) {
+        left = escapeValues(this._left);
+      }
+
+      if (flags & OperatorFlags.kRightValues) {
+        right = escapeValues(this._right);
+      }
+
+      keyword = op.as;
+    }
+    else {
+      keyword = " " + type + " ";
+    }
+
+    if (!left)
+      left = escapeValue(this._left);
+
+    if (!right)
+      right = escapeValue(this._right);
+
+    s = left + keyword + right;
 
     var as = this._as;
     if (as)
       s += " AS " + escapeIdentifier(as);
 
     return s;
+  },
+
+  getLeft: function() {
+    return this._left;
+  },
+
+  setLeft: function(value) {
+    this._left = value;
+    return this;
+  },
+
+  addLeft: function(value) {
+    var left = this._left;
+
+    if (!isArray(left))
+      throw new ("Binary.addLeft() - Left operand is not an Array");
+
+    left.push(value);
+    return this;
+  },
+
+  getRight: function() {
+    return this._right;
+  },
+
+  setRight: function(right) {
+    this._right = right;
+    return this;
+  },
+
+  addRight: function(value) {
+    var right = this._right;
+
+    if (!isArray(right))
+      throw new ("Binary.addRight() - Left operand is not an Array");
+
+    right.push(value);
+    return this;
   }
 });
 
@@ -1066,6 +1308,8 @@ core.Binary = qclass({
 function Group(type, values) {
   // Doesn't call `Node` constructor.
   this._type = type;
+  this._flags = 0|0;
+
   this._as = "";
   this._values = values || [];
 }
@@ -1123,60 +1367,6 @@ core.Logical = qclass({
   }
 });
 
-// \class core.Combine
-function Combine() {
-  Group.apply(this, arguments);
-  this._all = false;
-}
-core.Combine = qclass({
-  extend: Group,
-  construct: Combine,
-
-  ALL: function(value) {
-    if (typeof value !== "boolean")
-      value = true;
-
-    if (this._all === value)
-      return this;
-
-    if (value)
-      this._type += " ALL";
-    else
-      this._type = this._type.substr(0, this._type.length - 4);
-
-    this._all = value;
-    return this;
-  },
-
-  shouldWrap: function(ctx) {
-    return true;
-  },
-
-  compileNode: function(ctx) {
-    var type = this._type;
-    var s = "";
-
-    var values = this._values;
-    var separator = " " + type + " ";
-
-    for (var i = 0, len = values.length; i < len; i++) {
-      var value = values[i];
-      var escaped = escapeValue(value);
-
-      if (s)
-        s += separator;
-
-      // Wrap if the value is not a query.
-      if (!(value instanceof Query))
-        s += "(" + escaped + ")";
-      else
-        s += escaped;
-    }
-
-    return s;
-  }
-});
-
 // \class core.ObjectOp
 //
 // Condition defined as an object having multiple properties (key/value pairs).
@@ -1184,6 +1374,8 @@ core.Combine = qclass({
 function ObjectOp(type, value) {
   // Doesn't call `Unary` constructor.
   this._type = type;
+  this._flags = 0|0;
+
   this._as = "";
   this._value = value;
 }
@@ -1203,6 +1395,8 @@ core.ObjectOp = qclass({
 function Identifier(value, as) {
   // Doesn't call `Node` constructor.
   this._type = "IDENTIFIER";
+  this._flags = 0|0;
+
   this._as = as || "";
   this._value = value;
 }
@@ -1225,10 +1419,151 @@ core.Identifier = qclass({
   }
 });
 
+// \class core.Sort
+//
+// Sort expression that comes after `ORDER BY`.
+function Sort(column, direction, nulls) {
+  var flags = 0|0;
+
+  if (direction && SortDirection.hasOwnProperty(direction))
+    flags |= SortDirection[direction];
+
+  if (nulls && SortNulls.hasOwnProperty(nulls))
+    flags |= SortNulls[nulls];
+
+  // Doesn't call `Identifier` constructor.
+  this._type = "SORT";
+  this._flags = flags;
+
+  this._as = ""; // Sort expression never uses `AS`.
+  this._value = column;
+}
+core.Sort = qclass({
+  extend: Identifier,
+  construct: Sort,
+
+  compileNode: function(ctx) {
+    var value = this._value;
+    var flags = this._flags;
+
+    // Value of type:
+    //   - `number` - describes column order,
+    //   - `string` - describes column name.
+    //   - `Node`   - SQL expression/column.
+    var s = typeof value === "number"
+      ? "" + value
+      : escapeIdentifier(this._value);
+
+    if (flags & NodeFlags.kAscending)
+      s += " ASC";
+    else if (flags & NodeFlags.kDescending)
+      s += " DESC";
+
+    if (flags & NodeFlags.kNullsFirst)
+      s += " NULLS FIRST";
+    else if (flags & NodeFlags.kNullsLast)
+      s += " NULLS LAST";
+
+    return s;
+  },
+
+  getDirection: function() {
+    var flags = this._flags;
+    if (flags & NodeFlags.kDescending)
+      return "DESC";
+    else if (flags & NodeFlags.kAscending)
+      return "ASC";
+    else
+      return "";
+  },
+
+  setDirection: function(direction) {
+    var flags = this._flags & ~(NodeFlags.kAscending | NodeFlags.kDescending);
+    if (SortDirection.hasOwnProperty(direction))
+      this._flags = flags | SortDirection[direction];
+    else
+      throw new CompileError("Sort.setDirection() - Invalid argument '" + direction + "'.");
+    return this;
+  },
+
+  hasAscending: function() {
+    return (this._flags & NodeFlags.kAscending) !== 0;
+  },
+
+  hasDescending: function() {
+    return (this._flags & NodeFlags.kDescending) !== 0;
+  },
+
+  getNullsOrder: function() {
+    var flags = this._flags;
+    if (flags & NodeFlags.kNullsFirst)
+      return "NULLS FIRST";
+    else if (flags & NodeFlags.kNullsLast)
+      return "NULLS LAST";
+    else
+      return "";
+  },
+
+  setNullsOrder: function(nulls) {
+    var flags = this._flags & ~(NodeFlags.kNullsFirst | NodeFlags.kNullsLast);
+    if (SortNulls.hasOwnProperty(nulls))
+      this._flags = flags | SortNulls[nulls];
+    else
+      throw new CompileError("Sort.setDirection() - Invalid argument '" + nulls + "'.");
+    return this;
+  },
+
+  hasNullsFirst: function() {
+    return (this._flags & NodeFlags.kNullsFirst) !== 0;
+  },
+
+  hasNullsLast: function() {
+    return (this._flags & NodeFlags.kNullsLast) !== 0;
+  },
+
+  // \function Sort.ASC()
+  //
+  // Set sorting mode to ascending (`ASC`).
+  ASC: function() {
+    this._flags = this._flags & ~NodeFlags.kDescending
+                              |  NodeFlags.kAscending;
+    return this;
+  },
+
+  // \function Sort.DESC()
+  //
+  // Set sorting mode to descending (`DESC`).
+  DESC: function() {
+    this._flags = this._flags & ~NodeFlags.kAscending
+                              |  NodeFlags.kDescending;
+    return this;
+  },
+
+  // \function Sort.NULLS_FIRST()
+  //
+  // Set sorting nulls first (`NULLS FIRST`).
+  NULLS_FIRST: function() {
+    this._flags = this._flags & ~NodeFlags.kNullsLast
+                              |  NodeFlags.kNullsFirst;
+    return this;
+  },
+
+  // \function Sort.NULLS_LAST()
+  //
+  // Set sorting nulls last (`NULLS LAST`).
+  NULLS_LAST: function() {
+    this._flags = this._flags & ~NodeFlags.kNullsFirst
+                              |  NodeFlags.kNullsLast;
+    return this;
+  }
+});
+
 // \class core.Func
 function Func(type, values) {
   // Doesn't call `Group` constructor.
   this._type = type || "";
+  this._flags = 0|0;
+
   this._as = "";
   this._values = values || [];
 }
@@ -1242,6 +1577,8 @@ core.Func = qclass({
 
   compileNode: function(ctx) {
     var s = "";
+
+    var flags = this._flags;
     var values = this._values;
 
     for (var i = 0, len = values.length; i < len; i++) {
@@ -1253,8 +1590,17 @@ core.Func = qclass({
       s += escaped;
     }
 
+    // Add `ALL` or `DISTINCT` (support for aggregate functions).
+    if (flags & NodeFlags.kAllOrDistinct) {
+      var keyword = flags & NodeFlags.kAll ? "ALL" : "DISTINCT";
+      if (!s)
+        s = keyword;
+      else
+        s = keyword + " " + s;
+    }
+
     s = this._type + "(" + s + ")";
-    
+
     var as = this._as;
     if (as)
       s += " AS " + escapeIdentifier(as);
@@ -1269,13 +1615,21 @@ function Aggregate() {
 }
 core.Aggregate = qclass({
   extend: Func,
-  construct: Aggregate
+  construct: Aggregate,
+
+  ALL: function(value) {
+    return this.setFlag(NodeFlags.kAll, value);
+  },
+
+  DISTINCT: function(value) {
+    return this.setFlag(NodeFlags.kDistinct, value);
+  }
 });
 
 // \class core.Value
 //
 // Wrapper class that contains `data` and `type`.
-// 
+//
 // Used in cases where it's difficult to automatically determine how the value
 // should be escaped (which can result in invalid query if determined wrong).
 //
@@ -1289,6 +1643,8 @@ core.Aggregate = qclass({
 function Value(type, value) {
   // Doesn't call `Node` constructor.
   this._type = type || "";
+  this._flags = 0|0;
+
   this._as = "";
   this._value = value;
 }
@@ -1311,6 +1667,8 @@ core.Value = qclass({
 function ArrayValue(value) {
   // Doesn't call `Value` constructor.
   this._type = "ARRAY";
+  this._flags = 0|0;
+
   this._as = "";
   this._value = value;
 }
@@ -1333,6 +1691,8 @@ core.ArrayValue = qclass({
 function JsonValue(value) {
   // Doesn't call `Value` constructor.
   this._type = "JSON";
+  this._flags = 0|0;
+
   this._as = "";
   this._value = value;
 }
@@ -1349,126 +1709,318 @@ core.JsonValue = qclass({
   }
 });
 
+// \class core.Combine
+function Combine() {
+  Group.apply(this, arguments);
+}
+core.Combine = qclass({
+  extend: Group,
+  construct: Combine,
+
+  shouldWrap: function(ctx) {
+    return true;
+  },
+
+  compileNode: function(ctx) {
+    var s = "";
+
+    var type = this._type;
+    var flags = this._flags;
+
+    if (flags & NodeFlags.kAllOrDistinct) {
+      if (flags & NodeFlags.kDistinct)
+        type += " DISTINCT";
+      else
+        type += " ALL";
+    }
+
+    var values = this._values;
+    var separator = " " + type + " ";
+
+    for (var i = 0, len = values.length; i < len; i++) {
+      var value = values[i];
+      var compiled = escapeValue(value);
+
+      if (s)
+        s += separator;
+
+      // Wrap if the value is not a query.
+      if (!(value instanceof Query))
+        s += "(" + compiled + ")";
+      else
+        s += compiled;
+    }
+
+    return s;
+  },
+
+  ALL: function(value) {
+    return this.setFlag(NodeFlags.kAll, value);
+  },
+
+  DISTINCT: function(value) {
+    return this.setFlag(NodeFlags.kDistinct, value);
+  }
+});
+
 // \class core.Query
-function Query(type, lang) {
+//
+// Query implements a generic interface used by:
+//
+//   - `SELECT` - See `SelectQuery`.
+//   - `INSERT` - See `InsertQuery`.
+//   - `UPDATE` - See `UpdateQuery`.
+//   - `DELETE` - See `DeleteQuery`.
+//   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombinedQuery`.
+//
+// The following features are implemented by `Query` itself:
+//
+//   - `TABLE`- Specifies a single table name, used by `INSERT`, `UPDATE`
+//      and `DELETE`.
+//
+//   - `SELECT/RETURNING`- Specifies select expression or returning expression,
+//      used by `SELECT` (as `SELECT` expression) and also by `INSERT`, `UPDATE`
+//      and `DELETE` (as `RETURNING` expression).
+//
+//   - `WHERE` - Specifies `WHERE` clause, used by `SELECT`, `UPDATE` and `DELETE`.
+function Query(type) {
   // Doesn't call `Node` constructor.
-  this._type = type || "";
+  this._type = type;
+  this._flags = 0|0;
+
   this._as = "";
 
-  // Query flags, initially `null`.
+  // Used by:
+  //   - `SELECT` - `SELECT ...`.
+  //   - `INSERT` - `RETURNING ...`.
+  //   - `UPDATE` - `RETURNING ...`.
+  //   - `DELETE` - `RETURNING ...`.
+  this._selectOrReturning = null;
+
+  // Used by:
+  //   - `INSERT` - `INSERT INTO ...`.
+  //   - `UPDATE` - `UPDATE ...`.
+  //   - `DELETE` - `DELETE FROM ...`.
+  this._table = null;
+
+  // Used by:
+  //   - `SELECT` - `FROM ...`
+  //   - `UPDATE` - `FROM ...`.
+  //   - `DELETE` - `USING ...`.
   //
-  // Flags become an object that acts as a set, where keys are elements of the
-  // set. See `_getFlag()` and `_setFlag()`.
-  this._flags = null;
+  // Mixed content of Strings and Nodes is allowed. Strings are interpreted as
+  // identifiers if used.
+  this._fromOrUsing = [];
 
-  // Tables used after `FROM` statement, always an array of identifiers - mixed
-  // content of Strings and Nodes is allowed and strings will be escaped as
-  // identifiers in such case.
-  this._from = [];
+  // Used by:
+  //   - `SELECT`
+  //   - `UPDATE`
+  //   - `DELETE`
+  this._where = null;
 
-  this._fields = null;      // FIELD.
-  this._joins = null;       // JOIN.
+  // Used by:
+  //   - `SELECT`
+  //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombinedQuery`.
+  this._orderBy = null;
 
-  this._values = null;      // VALUES
-  this._columns = null;     // COLUMNS
+  // Used by:
+  //   - `SELECT`
+  //   - `UPDATE`
+  //   - `DELETE`
+  //
+  // Contains `OFFSET ...` and `LIMIT ...` parameters. There are some DB engines
+  // (like SQLite), which allow to specify `OFFSET` / `LIMIT` in `UPDATE` and
+  // `DELETE` This is the main reason that these members are part of Query and
+  // not SelectQuery.
+  this._offset = 0;
+  this._limit = 0;
 
-  this._where = null;       // WHERE.
+  this._joins = null;
 
-  this._groupBy = null;     // GROUP BY.
-  this._having = null;      // HAVING.
-
-  // Returning fields, evaluated if the query is `INSERT` / `UPDATE` or `DELETE`.
-  this._returning = null;
-
-  this._offset = 0;         // OFFSET.
-  this._limit = 0;          // LIMIT.
+  this._values = null;
+  this._columns = null;
 }
 core.Query = qclass({
   extend: Node,
   construct: Query,
 
-  extensions: {
-    aliases: function(aliases) {
-      var p = this.prototype;
-      for (var alias in aliases)
-        p[alias] = p[aliases[alias]];
-    }
+  shouldWrap: function() {
+    return true;
   },
 
-  // \function Query.DISTINCT(...)
-  //
-  // Adds `DISTINCT` clause to the query. It accepts the same arguments as
-  // `SELECT()` so it can be used in a similar way. The following expressions
-  // are equivalent:
-  //
-  //   - `SELECT(["a", "b", "c"]).DISTINCT()`
-  //   - `SELECT().DISTINCT(["a", "b", "c"])`
-  //   - `SELECT().DISTINCT().FIELD(["a", "b", "c"])`
-  DISTINCT: function(array) {
-    this._setFlag("DISTINCT");
-
-    if (arguments.length > 1)
-      return this.FIELD(Array_slice.call(arguments, 0));
-    else if (array)
-      return this.FIELD(array);
-    else
-      return this;
-  },
-
-  // \function Query.FROM(...)
-  //
-  // Specified `FROM` clause of the query.
-  FROM: function(argFrom) {
-    var thisFrom = this._from;
-
-    if (isArray(argFrom))
-      thisFrom.push.apply(thisFrom, argFrom);
-    else
-      thisFrom.push(argFrom);
-
-    return this;
-  },
-
-  // \function Query.FIELD(...)
-  FIELD: function(f) {
-    var fields = this._fields;
+  _addSelectOrReturning: function(f) {
+    var returning = this._selectOrReturning;
 
     if (arguments.length > 1) {
-      if (fields === null) {
-        this._fields = Array_slice.call(arguments, 0);
+      if (returning === null) {
+        this._selectOrReturning = Array_slice.call(arguments, 0);
       }
       else {
         for (var i = 0, len = arguments.length; i < len; i++)
-          fields.push(arguments[i]);
+          returning.push(arguments[i]);
       }
     }
     else if (isArray(f)) {
-      // Optimization: If `_fields` is `null` the given array `f` is referenced.
-      if (fields === null) {
-        this._fields = f;
+      // Optimization: If `_select` is `null` the given array `f` is referenced.
+      if (returning === null) {
+        this._selectOrReturning = f;
       }
       else {
         for (var i = 0, len = f.length; i < len; i++)
-          fields.push(f[i]);
+          returning.push(f[i]);
       }
     }
     else {
-      if (fields === null)
-        this._fields = [f];
+      if (returning === null)
+        this._selectOrReturning = [f];
       else
-        fields.push(f);
+        returning.push(f);
     }
 
     return this;
   },
 
-  // \function Query.INTO(...)
-  INTO: function(into) {
+  _compileSelectOrReturning: function(ctx, prefix, list) {
+    var s = "";
+
+    for (var i = 0, len = list.length; i < len; i++) {
+      var column = list[i];
+
+      if (s)
+        s += ", ";
+
+      // Returning column can be in a form of `string` or `Node`.
+      if (typeof column === "string")
+        s += escapeIdentifier(column);
+      else
+        s += column.compileNode(ctx);
+    }
+
+    return prefix + s;
+  },
+
+  // \function Query._setFromOrIntoTable(...)
+  _setFromOrIntoTable: function(table) {
     if (this._table)
       throw new CompileError("INTO() - table already specified ('" + table + "').");
 
-    this._table = into;
+    this._table = table;
     return this;
+  },
+
+  // \function Query._setFromOrUsing(...)
+  _setFromOrUsing: function(arg) {
+    var list = this._fromOrUsing;
+
+    if (arguments.length > 1)
+      list.push.apply(list, arguments);
+    else if (isArray(arg))
+      list.push.apply(list, arg);
+    else
+      list.push(arg);
+
+    return this;
+  },
+
+  _compileFromOrUsing: function(ctx, prefix, list) {
+    var s = "";
+
+    for (var i = 0, len = list.length; i < len; i++) {
+      var table = list[i];
+
+      if (s)
+        s += ", ";
+
+      if (typeof table === "string")
+        s += escapeIdentifier(table);
+      else
+        s += table.compileNode(ctx);
+    }
+
+    return prefix + s;
+  },
+
+  // Add `WHERE` condition of specified `type`.
+  _addWhere: function(type, a, op, b, nArgs) {
+    var node;
+    var where = this._where;
+    var aIsArray = false;
+
+    // Accept 1 or 3 arguments.
+    if (nArgs === 3) {
+      if (typeof a === "string")
+        a = COL(a);
+      node = new Binary(a, op, b);
+    }
+    else if (nArgs !== 1) {
+      throw new CompileError((type === "OR" ? "OR_" : "") + "WHERE - Invalid argument.");
+    }
+    else {
+      aIsArray = isArray(a);
+      if (!aIsArray)
+        node = (a instanceof Node) ? a : new ObjectOp("AND", a);
+    }
+
+    // If no `WHERE` has been added yet, create one.
+    if (where === null) {
+      where = new Logical(type);
+      this._where = where;
+    }
+    // If the current expression operator is not the same as `type`, wrap the
+    // current expression inside a new node.
+    else if (where.type !== type) {
+      where = new Logical(type);
+      where.push(this._where);
+      this._where = where;
+    }
+
+    if (aIsArray)
+      where.concat(a);
+    else
+      where.push(node);
+
+    return this;
+  },
+
+  _compileWhereOrHaving: function(ctx, prefix, condition) {
+    var s = "";
+
+    var list = condition._values;
+    var i, len = list.length;
+
+    if (len === 0)
+      return s;
+
+    for (i = 0; i < len; i++) {
+      var expression = list[i];
+      var compiled = expression.compileNode(ctx);
+
+      if (s)
+        s += " " + condition._type + " ";
+
+      if (expression.shouldWrap())
+        s += "(" + compiled + ")";
+      else
+        s += compiled;
+    }
+
+    return prefix + s;
+  },
+
+  _compileOffsetLimit: function(ctx, offset, limit) {
+    var s = "";
+
+    if (offset) {
+      s += "OFFSET " + offset;
+    }
+
+    if (limit) {
+      if (s)
+        s += " ";
+      s += "LIMIT " + limit;
+    }
+
+    return s;
   },
 
   // \function Query.VALUES(data)
@@ -1481,11 +2033,8 @@ core.Query = qclass({
       return this;
 
     if (values === null) {
-      values = [];
-      columns = {};
-
-      this._values = values;
-      this._columns = columns;
+      this._values = values = [];
+      this._columns = columns = {};
     }
 
     var object, k;
@@ -1539,8 +2088,212 @@ core.Query = qclass({
     return this._addWhere("OR", a, op, b, arguments.length);
   },
 
+  // \function Query.ORDER_BY(...)
+  ORDER_BY: function(column, direction, nulls) {
+    var orderBy = this._orderBy;
+
+    if (orderBy === null)
+      orderBy = this._orderBy = [];
+
+    if (isArray(column))
+      orderBy.push.apply(orderBy, column);
+    else
+      orderBy.push(new Sort(column, direction, nulls));
+
+    return this;
+  },
+
+  // \function Query.OFFSET(offset)
+  OFFSET: function(offset) {
+    this._offset = offset;
+    return this;
+  },
+
+  // \function Query.LIMIT(limit)
+  LIMIT: function(limit) {
+    this._limit = limit;
+    return this;
+  }
+});
+
+// \class core.SelectQuery
+function SelectQuery() {
+  Query.call(this, "SELECT");
+
+  // `GROUP BY` clause.
+  this._groupBy = null;
+
+  // `HAVING` clause.
+  this._having = null;
+}
+core.SelectQuery = qclass({
+  extend: Query,
+  construct: SelectQuery,
+
+  compileNode: function(ctx) {
+    var s = "SELECT";
+    var flags = this._flags;
+
+    // Compile `SELECT [ALL|DISTINCT]`
+    //
+    // Use `*` if  fields are not used.
+    if (flags & NodeFlags.kAllOrDistinct) {
+      if (flags & NodeFlags.kAll)
+        s += " ALL";
+      else
+        s += " DISTINCT";
+    }
+
+    // Compile `[*|fields]`
+    //
+    // Note, `*` is only used if there are no columns specified.
+    var columns = this._selectOrReturning;
+    if (columns && columns.length)
+      s += this._compileSelectOrReturning(ctx, " ", columns);
+    else
+      s += " *";
+
+    // Compile `FROM table[, table[, ...]]`.
+    var from = this._fromOrUsing;
+    if (from && from.length)
+      s += this._compileFromOrUsing(ctx, " FROM ", from);
+
+    // Compile `WHERE ...`.
+    var where = this._where;
+    if (where && where._values.length)
+      s += this._compileWhereOrHaving(ctx, " WHERE ", where);
+
+    // Compile `GROUP BY ...`.
+    var groupBy = this._groupBy;
+    if (groupBy && groupBy.length)
+      s += this._compileGroupBy(ctx, " GROUP BY ", groupBy);
+
+    // Compile `HAVING ...`.
+    var having = this._having;
+    if (having && having._values.length)
+      s += this._compileWhereOrHaving(ctx, " HAVING ", having);
+
+    // TODO: Compile `WINDOW ...`.
+
+    // Compile `ORDER BY ...`.
+    var orderBy = this._orderBy;
+    if (orderBy && orderBy.length)
+      s += this._compileOrderBy(ctx, " ORDER BY ", orderBy);
+
+    // Compile `OFFSET ...` / `LIMIT ...`.
+    var offset = this._offset;
+    var limit = this._limit;
+    if (offset || limit)
+      s += " " + this._compileOffsetLimit(ctx, offset, limit);
+
+    // TODO: Compile `FETCH ...`.
+    // TODO: Compile `FOR ...`.
+
+    return s;
+  },
+
+  _compileGroupBy: function(ctx, prefix, groupBy) {
+    var s = "";
+
+    for (var i = 0, len = groupBy.length; i < len; i++) {
+      var group = groupBy[i];
+
+      if (s)
+        s += ", ";
+
+      // Group can be in a form of `string` or `Node`.
+      if (typeof group === "string")
+        s += escapeIdentifier(group);
+      else
+        s += group.compileNode(ctx);
+    }
+
+    return prefix + s;
+  },
+
+  _compileOrderBy: function(ctx, prefix, orderBy) {
+    var s = "";
+
+    for (var i = 0, len = orderBy.length; i < len; i++) {
+      var order = orderBy[i];
+      if (s)
+        s += ", ";
+      s += order.compileNode();
+    }
+
+    return prefix + s;
+  },
+
+  // Add `HAVING` condition of specified `type`.
+  _addHaving: function(type, a, op, b, nArgs) {
+    var node;
+    var having = this._having;
+    var aIsArray = false;
+
+    // Accept 1 or 3 arguments.
+    if (nArgs === 3) {
+      if (typeof a === "string")
+        a = COL(a);
+      node = new Binary(a, op, b);
+    }
+    else if (nArgs !== 1) {
+      throw new CompileError((type === "OR" ? "OR_" : "") + "HAVING - Invalid argument.");
+    }
+    else {
+      aIsArray = isArray(a);
+      if (!aIsArray)
+        node = (a instanceof Node) ? a : new ObjectOp("AND", a);
+    }
+
+    // If no `HAVING` has been added yet, create one.
+    if (having === null) {
+      having = new Logical(type);
+      this._having = having;
+    }
+    // If the current expression operator is not the same as `type`, wrap the
+    // current expression inside a new node.
+    else if (having.type !== type) {
+      having = new Logical(type);
+      having.push(this._having);
+      this._having = having;
+    }
+
+    if (aIsArray)
+      having.concat(a);
+    else
+      having.push(node);
+
+    return this;
+  },
+
+  // \function SelectQuery.DISTINCT(...)
+  //
+  // Adds `DISTINCT` clause to the query. It accepts the same arguments as
+  // `SELECT()` so it can be used in a similar way. The following expressions
+  // are equivalent:
+  //
+  //   - `SELECT(["a", "b", "c"]).DISTINCT()`
+  //   - `SELECT().DISTINCT(["a", "b", "c"])`
+  //   - `SELECT().DISTINCT().FIELD(["a", "b", "c"])`
+  DISTINCT: function(array) {
+    this._flags |= NodeFlags.kDistinct;
+
+    if (arguments.length > 1)
+      return this.FIELD(Array_slice.call(arguments, 0));
+    else if (array)
+      return this.FIELD(array);
+    else
+      return this;
+  },
+
+  // \function SelectQuery.FROM(...)
+  FROM: Query.prototype._setFromOrUsing,
+
+  // \function Query.FIELD(...)
+  FIELD: Query.prototype._addSelectOrReturning,
+
   // \function Query.GROUP_BY(...)
-  GROUP_BY: function(f) {
+  GROUP_BY: function(arg) {
     var groupBy = this._groupBy;
 
     if (arguments.length > 1) {
@@ -1552,21 +2305,21 @@ core.Query = qclass({
           groupBy.push(arguments[i]);
       }
     }
-    else if (isArray(f)) {
+    else if (isArray(arg)) {
       // Optimization: If `_groupBy` is `null` the given array `f` is referenced.
       if (groupBy === null) {
-        this._groupBy = f;
+        this._groupBy = arg;
       }
       else {
-        for (var i = 0, len = f.length; i < len; i++)
-          groupBy.push(f[i]);
+        for (var i = 0, len = arg.length; i < len; i++)
+          groupBy.push(arg[i]);
       }
     }
     else {
       if (groupBy === null)
-        this._groupBy = [f];
+        this._groupBy = [arg];
       else
-        groupBy.push(f);
+        groupBy.push(arg);
     }
 
     return this;
@@ -1580,139 +2333,18 @@ core.Query = qclass({
   // \function Query.OR_HAVING(...)
   OR_HAVING: function(a, op, b) {
     return this._addHaving("OR", a, op, b, arguments.length);
-  },
+  }
+});
 
-  // \function Query.ORDER_BY(...)
-  ORDER_BY: function() {
-    // TODO:
-  },
-  
-  // \function Query.OFFSET(offset)
-  OFFSET: function(offset) {
-    this._offset = offset;
-    return this;
-  },
-
-  // \function Query.LIMIT(limit)
-  LIMIT: function(limit) {
-    this._limit = limit;
-    return this;
-  },
-
-  RETURNING: function(f) {
-    var returning = this._returning;
-
-    if (arguments.length > 1) {
-      if (returning === null) {
-        this._returning = Array_slice.call(arguments, 0);
-      }
-      else {
-        for (var i = 0, len = arguments.length; i < len; i++)
-          returning.push(arguments[i]);
-      }
-    }
-    else if (isArray(f)) {
-      // Optimization: If `_fields` is `null` the given array `f` is referenced.
-      if (returning === null) {
-        this._returning = f;
-      }
-      else {
-        for (var i = 0, len = f.length; i < len; i++)
-          returning.push(f[i]);
-      }
-    }
-    else {
-      if (returning === null)
-        this._returning = [f];
-      else
-        returning.push(f);
-    }
-
-    return this;
-  },
-
-  shouldWrap: function() {
-    return true;
-  },
+// \class core.InsertQuery
+function InsertQuery() {
+  Query.call(this, "INSERT");
+}
+core.InsertQuery = qclass({
+  extend: Query,
+  construct: InsertQuery,
 
   compileNode: function(ctx) {
-    switch (this._type) {
-      case "SELECT": return this.compileSelect(ctx);
-      case "INSERT": return this.compileInsert(ctx);
-      case "UPDATE": return this.compileUpdate(ctx);
-      case "DELETE": return this.compileDelete(ctx);
-      default:
-        throw new CompileError("Query.compileNode() - Unknown query type '" + this._type + "'.");
-    }
-  },
-
-  // \function Query.compileSelect
-  compileSelect: function(ctx) {
-    var s = "";
-    var i, len;
-
-    var flags = this._flags || noObject;
-
-    // Compile `SELECT [DISTINCT] [*|fields]`
-    //
-    // Use `*` if  fields are not used.
-    if (!flags.hasOwnProperty("DISTINCT"))
-      s += "SELECT";
-    else
-      s += "SELECT DISTINCT";
-
-    var t = "";
-    var defs = this._fields;
-
-    if (!defs || defs.length === 0) {
-      t = "*";
-    }
-    else {
-      for (i = 0, len = defs.length; i < len; i++) {
-        var def = defs[i];
-
-        if (t)
-          t += ", ";
-
-        // Field can be in a form of `string` or `Node`.
-        if (typeof def === "string")
-          t += escapeIdentifier(def);
-        else
-          t += def.compileNode(ctx);
-      }
-    }
-    s += " " + t;
-
-    // Compile `FROM table[, table[, ...]]`.
-    t = this.compileFrom(ctx);
-    if (t)
-      s += " " + t;
-
-    // Compile `WHERE ...`.
-    t = this.compileWhere(ctx);
-    if (t)
-      s += " " + t;
-
-    // Compile `GROUP BY ...`.
-    t = this.compileGroupBy(ctx);
-    if (t)
-      s += " " + t;
-
-    // Compile `HAVING ...`.
-    t = this.compileHaving(ctx);
-    if (t)
-      s += " " + t;
-
-    // Compile `OFFSET ... LIMIT ...`.
-    t = this.compileOffsetLimit(ctx);
-    if (t)
-      s += " " + t;
-
-    return s;
-  },
-
-  // \function Query.compileInsert
-  compileInsert: function(ctx) {
     var s = "";
     var t = "";
 
@@ -1725,7 +2357,7 @@ core.Query = qclass({
 
     if (!table) {
       throw new CompileError(
-        "Query.compileInsert() - Table not defined.");
+        "InsertQuery.compileNode() - Table not defined.");
     }
 
     if (typeof table === "string")
@@ -1764,27 +2396,40 @@ core.Query = qclass({
     }
 
     // Compile `RETURNING ...`.
-    t = this.compileReturning(ctx);
-    if (t)
-      s += " " + t;
+    var returning = this._selectOrReturning;
+    if (returning && returning.length)
+      s += this._compileSelectOrReturning(ctx, " RETURNING ", returning);
 
     return s;
   },
 
-  // \function Query.compileUpdate
-  compileUpdate: function(ctx) {
+  // \function InsertQuery.TABLE(table)
+  TABLE: Query.prototype._setFromOrIntoTable,
+
+  // \function InsertQuery.INTO(table)
+  INTO: Query.prototype._setFromOrIntoTable,
+
+  // \function InsertQuery.RETURNING(...)
+  RETURNING: Query.prototype._addSelectOrReturning
+});
+
+// \class core.UpdateQuery
+function UpdateQuery() {
+  Query.call(this, "UPDATE");
+}
+core.UpdateQuery = qclass({
+  extend: Query,
+  construct: UpdateQuery,
+
+  compileNode: function(ctx) {
     var s = "";
     var t = "";
 
-    var k;
-
-    // Compile `UPDATE table`
+    // Compile `UPDATE ...`
     var table = this._table;
-
-    if (!table) {
+    if (!table)
       throw new CompileError(
-        "Query.compileUpdate() - Table not defined.");
-    }
+        "UpdateQuery.compileNode() - Table not defined.");
 
     if (typeof table === "string")
       t = escapeIdentifier(table);
@@ -1798,11 +2443,11 @@ core.Query = qclass({
 
     if (!objects)
       throw new CompileError(
-        "Query.compileUpdate() - Not values to SET provided.");
+        "UpdateQuery.compileNode() - No data to update provided.");
 
     if (objects.length !== 1)
       throw new CompileError(
-        "Query.compileUpdate() - Can only update one record (" + objects.length + " provided).");
+        "UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided).");
 
     var values = objects[0];
 
@@ -1815,298 +2460,102 @@ core.Query = qclass({
     }
     s += " SET " + t;
 
-    // Compile `FROM table[, table[, ...]]`.
-    t = this.compileFrom(ctx);
-    if (t)
-      s += " " + t;
+    // Compile `FROM ...`.
+    var from = this._fromOrUsing;
+    if (from && from.length)
+      s += this._compileFromOrUsing(ctx, " FROM ", from);
 
     // Compile `WHERE ...`
-    t = this.compileWhere(ctx);
-    if (t)
-      s += " " + t;
+    var where = this._where;
+    if (where && where._values.length)
+      s += this._compileWhereOrHaving(ctx, " WHERE ", where);
 
-    // Compile `OFFSET` / `LIMIT`.
-    t = this.compileOffsetLimit(ctx);
-    if (t)
-      s += " " + t;
-
-    // Compile `RETURNING ...`.
-    t = this.compileReturning(ctx);
-    if (t)
-      s += " " + t;
-
-    return s;
-  },
-
-  // \function Query.compileDelete
-  compileDelete: function(ctx) {
-    var s = "";
-    var t = "";
-
-    // Compile `DELETE`
-    s += "DELETE";
-
-    // Compile `FROM table[, table[, ...]]`.
-    t = this.compileFrom(ctx);
-    if (!t)
-      throw new CompileError("Query.compileDelete() - Missing table definition.");
-    s += " " + t;
-
-    // Compile `WHERE ...`
-    t = this.compileWhere(ctx);
-    if (t)
-      s += " " + t;
-
-    // Compile `OFFSET` / `LIMIT`.
-    t = this.compileOffsetLimit(ctx);
-    if (t)
-      s += " " + t;
-
-    // Compile `RETURNING ...`.
-    t = this.compileReturning(ctx);
-    if (t)
-      s += " " + t;
-
-    return s;
-  },
-
-  compileFrom: function(ctx) {
-    var s = "";
-    var from = this._from;
-
-    if (!from || from.length === 0)
-      return s;
-
-    for (var i = 0, len = from.length; i < len; i++) {
-      var table = from[i];
-
-      if (s)
-        s += ", ";
-
-      if (typeof table === "string")
-        s += escapeIdentifier(table);
-      else
-        s += table.compileNode(ctx);
-    }
-
-    if (!s)
-      return s;
-
-    return "FROM " + s;
-  },
-
-  compileGroupBy: function(ctx) {
-    var s = "";
-    var defs = this._groupBy;
-
-    if (defs && defs.length) {
-      for (var i = 0, len = defs.length; i < len; i++) {
-        var def = defs[i];
-
-        if (s)
-          s += ", ";
-
-        // Group can be in a form of `string` or `Node`.
-        if (typeof def === "string")
-          s += escapeIdentifier(def);
-        else
-          s += def.compileNode(ctx);
-      }
-    }
-
-    if (!s)
-      return s;
-
-    return "GROUP BY " + s;
-  },
-
-  compileWhere: function(ctx) {
-    var condition = this._where;
-    if (!condition || condition._values.length === 0)
-      return "";
-    return this.compileWhereOrHaving(ctx, "WHERE", condition);
-  },
-
-  compileHaving: function(ctx) {
-    var condition = this._having;
-    if (!condition || condition._values.length === 0)
-      return "";
-    return this.compileWhereOrHaving(ctx, "HAVING", condition);
-  },
-
-  compileWhereOrHaving: function(ctx, keyword, condition) {
-    var s = "";
-    var expressionList = condition._values;
-
-    for (var i = 0, len = expressionList.length; i < len; i++) {
-      var expression = expressionList[i];
-      var compiled = expression.compileNode(ctx);
-
-      if (s)
-        s += " " + condition._type + " ";
-
-      if (expression.shouldWrap())
-        s += "(" + compiled + ")";
-      else
-        s += compiled;
-    }
-
-    if (!s)
-      return s;
-
-    return keyword + " " + s;
-  },
-
-  compileReturning: function(ctx) {
-    var s = "";
-    var returning = this._returning;
-
-    if (!returning || returning._values.length === 0)
-      return s;
-
-    var defs = returning._values;
-    for (var i = 0, len = defs.length; i < len; i++) {
-      var def = defs[i];
-
-      if (s)
-        s += ", ";
-
-      // Returning column can be in a form of `string` or `Node`.
-      if (typeof def === "string")
-        s += escapeIdentifier(def);
-      else
-        s += def.compileNode(ctx);
-    }
-
-    if (!s)
-      return s;
-
-    return "RETURNING " + s;
-  },
-
-  compileOffsetLimit: function(ctx) {
-    var s = "";
-
+    // Compile `OFFSET ...` / `LIMIT ...`.
     var offset = this._offset;
     var limit = this._limit;
 
-    if (offset) {
-      s += "OFFSET " + offset;
-    }
+    if (offset || limit)
+      s += " " + this._compileOffsetLimit(ctx, offset, limit);
 
-    if (limit) {
-      if (s)
-        s += " ";
-      s += "LIMIT " + limit;
-    }
+    // Compile `RETURNING ...`.
+    var returning = this._selectOrReturning;
+    if (returning && returning.length)
+      s += this._compileSelectOrReturning(ctx, " RETURNING ", returning);
 
     return s;
   },
 
-  _getFlag: function(flag) {
-    var flags = this._flags;
-    if (!flags)
-      return false;
-    return flags.hasOwnProperty(flag);
-  },
+  // \function UpdateQuery.TABLE(table)
+  TABLE: Query.prototype._setFromOrIntoTable,
 
-  _setFlag: function(flag) {
-    var flags = this._flags;
-    if (!flags)
-      flags = this._flags = {};
-    flags[flag] = true;
-    return this;
-  },
+  // \function UpdateQuery.FROM(...)
+  FROM: Query.prototype._setFromOrUsing,
 
-  // Get the object where `WHERE` conditions can be added right now.
-  _getWhere: function(type) {
+  // \function UpdateQuery.RETURNING(...)
+  RETURNING: Query.prototype._addSelectOrReturning
+});
+
+// \class core.DeleteQuery
+function DeleteQuery() {
+  Query.call(this, "DELETE");
+}
+core.DeleteQuery = qclass({
+  extend: Query,
+  construct: DeleteQuery,
+
+  compileNode: function(ctx) {
+    var s = "";
+    var t = "";
+
+    // Compile `DELETE FROM ...`
+    var table = this._table;
+    if (!table)
+      throw new CompileError(
+        "DeleteQuery.compileNode() - Table not defined.");
+
+    if (typeof table === "string")
+      t = escapeIdentifier(table);
+    else
+      t = table.compileNode();
+
+    s += "DELETE FROM " + t;
+
+    // Compile `USING ...`.
+    var using = this._fromOrUsing;
+    if (using && using.length)
+      s += this._compileFromOrUsing(ctx, " USING ", using);
+
+    // Compile `WHERE ...`
     var where = this._where;
+    if (where && where._values.length)
+      s += this._compileWhereOrHaving(ctx, " WHERE ", where);
 
-    if (where === null) {
-      // If no `WHERE` has been added yet, create one.
-      where = new Logical(type);
-      this._where = where;
-    }
-    else if (where.type !== type) {
-      // If the current expression operator is not the same as `type`, wrap the
-      // current expression inside a new node.
-      where = new Logical(type);
-      where.push(this._where);
-      this._where = where;
-    }
+    // Compile `OFFSET ...` / `LIMIT ...`.
+    var offset = this._offset;
+    var limit = this._limit;
 
-    return where;
+    if (offset || limit)
+      s += " " + this._compileOffsetLimit(ctx, offset, limit);
+
+    // Compile `RETURNING ...`.
+    var returning = this._selectOrReturning;
+    if (returning && returning.length)
+      s += this._compileSelectOrReturning(ctx, " RETURNING ", returning);
+
+    return s;
   },
 
-  _addWhere: function(type, a, op, b, nArgs) {
-    var node;
+  // \function DeleteQuery.TABLE(table)
+  TABLE: Query.prototype._setFromOrIntoTable,
 
-    // WHERE/OR_WHERE accepts 1 or 3 arguments.
-    if (nArgs === 3) {
-      if (typeof a === "string")
-        a = COL(a);
-      node = new Binary(a, op, b);
-    }
-    else if (nArgs !== 1) {
-      var prefix = type === "OR" ? "OR_" : "";
-      throw new CompileError(prefix + "WHERE - Invalid argument.");
-    }
-    else if (isArray(a)) {
-      this._getWhere(type).concat(a);
-      return this;
-    }
-    else {
-      node = (a instanceof Node) ? a : new ObjectOp("AND", a);
-    }
+  // \function DeleteQuery.FROM(table)
+  FROM: Query.prototype._setFromOrIntoTable,
 
-    this._getWhere(type).push(node);
-    return this;
-  },
+  // \function DeleteQuery.USING(...)
+  USING: Query.prototype._setFromOrUsing,
 
-  // Get the object where `WHERE` conditions can be added right now.
-  _getHaving: function(type) {
-    var having = this._having;
-
-    if (having === null) {
-      // If no `WHERE` has been added yet, create one.
-      having = new Logical(type);
-      this._having = having;
-    }
-    else if (having.type !== type) {
-      // If the current expression operator is not the same as `type`, wrap the
-      // current expression inside a new node.
-      having = new Logical(type);
-      having.push(this._having);
-      this._having = having;
-    }
-
-    return having;
-  },
-
-  _addHaving: function(type, a, op, b, nArgs) {
-    var node;
-
-    // HAVING/OR_HAVING accepts 1 or 3 arguments.
-    if (nArgs === 3) {
-      if (typeof a === "string")
-        a = COL(a);
-      node = new Binary(a, op, b);
-    }
-    else if (nArgs !== 1) {
-      var prefix = type === "OR" ? "OR_" : "";
-      throw new CompileError(prefix + "HAVING() - Invalid argument.");
-    }
-    else if (isArray(a)) {
-      this._getHaving(type).concat(a);
-      return this;
-    }
-    else {
-      node = (a instanceof Node) ? a : new ObjectOp("AND", a);
-    }
-
-    this._getHaving(type).push(node);
-    return this;
-  }
+  // \function DeleteQuery.RETURNING(...)
+  RETURNING: Query.prototype._addSelectOrReturning
 });
 
 // \function RAW(string:String, bindings:Array?)
@@ -2116,13 +2565,13 @@ function RAW(string, bindings) {
 qsql.RAW = RAW;
 
 // \function SELECT(...)
-function SELECT(array) {
-  var q = new Query("SELECT");
+function SELECT(arg) {
+  var q = new SelectQuery();
 
   if (arguments.length > 1)
     return q.FIELD(Array_slice.call(arguments, 0));
-  else if (array)
-    return q.FIELD(array);
+  else if (arg)
+    return q.FIELD(arg);
   else
     return q;
 }
@@ -2130,12 +2579,12 @@ qsql.SELECT = SELECT;
 
 // \function INSERT(...)
 function INSERT(/* ... */) {
-  var q = new Query("INSERT");
+  var q = new InsertQuery();
 
   var i = 0;
   var len = arguments.length;
 
-  // If the first parameter is a string or identifier it is a table identifier.
+  // If the first parameter is a string or an identifier it is a table name.
   if (i < len) {
     var arg = arguments[i];
 
@@ -2157,12 +2606,12 @@ qsql.INSERT = INSERT;
 
 // \function UPDATE(...)
 function UPDATE(/* ... */) {
-  var q = new Query("UPDATE");
+  var q = new UpdateQuery();
 
   var i = 0;
   var len = arguments.length;
 
-  // If the first parameter is a string or identifier it is a table identifier.
+  // If the first parameter is a string or an identifier it is a table name.
   if (i < len) {
     var arg = arguments[i];
 
@@ -2183,8 +2632,10 @@ function UPDATE(/* ... */) {
 qsql.UPDATE = UPDATE;
 
 // \function DELETE(...)
-function DELETE() {
-  var q = new Query("DELETE");
+function DELETE(from) {
+  var q = new DeleteQuery();
+  if (from)
+    this._table = from;
   return q;
 }
 qsql.DELETE = DELETE;
@@ -2251,6 +2702,12 @@ function COL(string, as) {
 };
 qsql.COL = COL;
 
+// \function SORT(column, direction, nulls)
+function SORT(column, direction, nulls) {
+  return new Sort(column, direction, nulls);
+};
+qsql.SORT = SORT;
+
 // \function OP(...)
 //
 // Construct unary or binary operator.
@@ -2279,18 +2736,6 @@ qsql.LT = LT;
 qsql.LE = LE;
 qsql.GT = GT;
 qsql.GE = GE;
-
-// \function INCREMENT(field, value)
-function INCREMENT(field, value) {
-  // TODO:
-};
-qsql.INCREMENT = INCREMENT;
-
-// \function DECREMENT(field, value)
-function DECREMENT(field, value) {
-  // TODO:
-};
-qsql.DECREMENT = DECREMENT;
 
 // Add functions to `qsql`.
 functionsList.forEach(function(name) {

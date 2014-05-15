@@ -200,27 +200,27 @@ describe("QSql", function() {
 
   it("should test SELECT ... FROM ... .", function() {
     shouldMatch(
-      SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("a"), "<=", 42),
+      SELECT(["a", "b", "c"]).FROM("x").WHERE("a", "<=", 42),
       'SELECT "a", "b", "c" FROM "x" WHERE "a" <= 42');
   });
 
   it("should test SELECT DISTINCT ... FROM ... .", function() {
     shouldMatch(
-      SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE(COL("a"), "<=", 42),
+      SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE("a", "<=", 42),
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
 
     shouldMatch(
-      SELECT().DISTINCT(["a", "b", "c"]).FROM("x").WHERE(COL("a"), "<=", 42),
+      SELECT().DISTINCT(["a", "b", "c"]).FROM("x").WHERE("a", "<=", 42),
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
   });
 
-  it("should test SELECT... FROM ... GROUP BY ... .", function() {
+  it("should test SELECT ... FROM ... GROUP BY ... .", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a")),
       'SELECT "a", "b", "c" FROM "x" GROUP BY "a"');
   });
 
-  it("should test SELECT... FROM ... GROUP BY .. HAVING ....", function() {
+  it("should test SELECT ... FROM ... GROUP BY ... HAVING ....", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a"))
         .HAVING(COL("a"), "<", 3)
@@ -228,10 +228,50 @@ describe("QSql", function() {
       'SELECT "a", "b", "c" FROM "x" GROUP BY "a" HAVING "a" < 3 AND "b" > 1');
   });
 
-  it("should test SELECT... FROM ... GROUP BY .. HAVING ....", function() {
+  it("should test SELECT ... FROM ... WHERE ... IN ...", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("x").IN(1, 2, 3)),
-      'SELECT "a", "b", "c" FROM "x" WHERE "x" in (1, 2, 3)');
+      'SELECT "a", "b", "c" FROM "x" WHERE "x" IN (1, 2, 3)');
+  });
+
+  it("should test SELECT ... FROM ... ORDER BY ...", function() {
+    shouldMatch(
+      SELECT().FROM("x").ORDER_BY("a"),
+      'SELECT * FROM "x" ORDER BY "a"');
+
+    shouldMatch(
+      SELECT().FROM("x").ORDER_BY("a", "ASC"),
+      'SELECT * FROM "x" ORDER BY "a" ASC');
+
+    shouldMatch(
+      SELECT().FROM("x").ORDER_BY("a", "DESC"),
+      'SELECT * FROM "x" ORDER BY "a" DESC');
+
+    shouldMatch(
+      SELECT().FROM("x").ORDER_BY("a", "ASC", "NULLS FIRST"),
+      'SELECT * FROM "x" ORDER BY "a" ASC NULLS FIRST');
+
+    shouldMatch(
+      SELECT().FROM("x").ORDER_BY("a", "ASC", "NULLS LAST"),
+      'SELECT * FROM "x" ORDER BY "a" ASC NULLS LAST');
+
+    shouldMatch(
+      SELECT().FROM("x").ORDER_BY("a", "ASC").ORDER_BY("b", "DESC"),
+      'SELECT * FROM "x" ORDER BY "a" ASC, "b" DESC');
+  });
+
+  it("should test SELECT ... FROM ... OFFSET ... LIMIT ...", function() {
+    shouldMatch(
+      SELECT().FROM("x").OFFSET(1),
+      'SELECT * FROM "x" OFFSET 1');
+
+    shouldMatch(
+      SELECT().FROM("x").LIMIT(1),
+      'SELECT * FROM "x" LIMIT 1');
+
+    shouldMatch(
+      SELECT().FROM("x").OFFSET(10).LIMIT(20),
+      'SELECT * FROM "x" OFFSET 10 LIMIT 20');
   });
 
   // INSERT.
@@ -245,6 +285,12 @@ describe("QSql", function() {
       'INSERT INTO "x" ("a", "b", "c") VALUES (0, FALSE, \'String\')');
   });
 
+  it("should test INSERT INTO ... () VALUES (...) RETURNING ...", function() {
+    shouldMatch(
+      INSERT("x").VALUES({ a: 0, b: false, c: "String" }).RETURNING("a", "b", "c"),
+      'INSERT INTO "x" ("a", "b", "c") VALUES (0, FALSE, \'String\') RETURNING "a", "b", "c"');
+  });
+
   // UPDATE.
   it("should test UPDATE ... SET ...", function() {
     shouldMatch(
@@ -256,10 +302,18 @@ describe("QSql", function() {
       'UPDATE "x" SET "a" = 1, "b" = "b" + 1');
   });
 
-  it("should test UPDATE ... SET ... WHERE", function() {
+  it("should test UPDATE ... SET ... WHERE ...", function() {
     shouldMatch(
       UPDATE("x").VALUES({ a: 1, b: "someString" }).WHERE(COL("id"), "=", 1000),
       'UPDATE "x" SET "a" = 1, "b" = \'someString\' WHERE "id" = 1000');
+  });
+
+  it("should test UPDATE ... SET ... WHERE ... RETURNING ...", function() {
+    shouldMatch(
+      UPDATE("x").VALUES({ a: 1, b: "someString" })
+        .WHERE("id", "=", 1000)
+        .RETURNING("a", "b"),
+      'UPDATE "x" SET "a" = 1, "b" = \'someString\' WHERE "id" = 1000 RETURNING "a", "b"');
   });
 
   // DELETE.
