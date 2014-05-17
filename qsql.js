@@ -9,7 +9,9 @@ function returnFalse() {
 // \{
 var isArray = Array.isArray;
 var isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
+
 var Array_slice = Array.prototype.slice;
+var Object_hasOwnProperty = Object.prototype.hasOwnProperty;
 // \}
 
 // \namespace core
@@ -23,7 +25,7 @@ var reUpperCase = /^[A-Z_][A-Z_0-9]*$/;
 
 // Map of identifiers that are not escaped.
 var identifierMap = {
-  "*"     : true
+  "*"       : true
 };
 
 // Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
@@ -64,6 +66,7 @@ var typeMap = {
 
   "array"   : "array",
   "json"    : "json",
+  "object"  : "json",
   "raw"     : "raw",
 
   "values"  : "values"
@@ -74,24 +77,30 @@ Object.keys(typeMap).forEach(function(key) {
 
 // Operator flags.
 var OperatorFlags = {
-  kCond        : 0x00000001, // Operator is conditional expression.
-  kData        : 0x00000002, // Operator processes data (has a result).
+  kUnary       : 0x00000001, // Operator is unary (has one child node - `value`).
+  kBinary      : 0x00000002, // Operator is binary (has two child nodes - `left` / `right`).
 
-  kBoolean     : 0x00000010, // Operator allows boolean  operands.
-  kNumber      : 0x00000020, // Operator allows number   operands.
-  kString      : 0x00000040, // Operator allows string   operands.
-  kArray       : 0x00000080, // Operator allows array    operands.
-  kJson        : 0x00000100, // Operator allows json     operands.
-  kRange       : 0x00000200, // Operator allows range    operands.
-  kGeometry    : 0x00000400, // Operator allows geometry operands.
+  kCond        : 0x00000010, // Operator is a conditional expression.
+  kData        : 0x00000020, // Operator processes data (has a result).
 
-  kInPlaceNot  : 0x00010000, // Operator allows in place NOT (a NOT OP b).
-  kLeftValues  : 0x00020000, // Operator expects left  values as (a, b[, ...]).
-  kRightValues : 0x00040000  // Operator expects right values as (a, b[, ...]).
+  kInPlaceNot  : 0x00001000, // Operator allows in place NOT (a NOT OP b).
+  kLeftValues  : 0x00002000, // Operator expects left  values as (a, b[, ...]).
+  kRightValues : 0x00004000, // Operator expects right values as (a, b[, ...]).
+
+  kBoolean     : 0x00010000, // Operator allows boolean  operands.
+  kNumber      : 0x00020000, // Operator allows number   operands.
+  kString      : 0x00040000, // Operator allows string   operands.
+  kArray       : 0x00080000, // Operator allows array    operands.
+  kJson        : 0x00100000, // Operator allows json     operands.
+  kRange       : 0x00200000, // Operator allows range    operands.
+  kGeometry    : 0x00400000  // Operator allows geometry operands.
 };
 
 // Operator definitions.
 var OperatorDefs = (function() {
+  var kUnary        = OperatorFlags.kUnary;
+  var kBinary       = OperatorFlags.kBinary;
+
   var kCond         = OperatorFlags.kCond;
   var kData         = OperatorFlags.kData;
 
@@ -107,6 +116,14 @@ var OperatorDefs = (function() {
   var kRange        = OperatorFlags.kRange;
   var kGeometry     = OperatorFlags.kGeometry;
 
+  var kAnyType      = kBoolean  |
+                      kNumber   |
+                      kString   |
+                      kArray    |
+                      kJson     |
+                      kRange    |
+                      kGeometry ;
+
   var defs = {};
 
   function add(op, flags) {
@@ -119,42 +136,43 @@ var OperatorDefs = (function() {
     defs[op] = def;
   }
 
-  // +---------+-----------------+---------------------------------------------+
-  // | Keyword | Operator Type   | Operator Flags                              |
-  // +---------+-----------------+---------------------------------------------+
-  add("="      , kCond           | kNumber | kString                           );
-  add(">"      , kCond           | kNumber | kString                           );
-  add(">="     , kCond           | kNumber | kString                           );
-  add("<"      , kCond           | kNumber | kString                           );
-  add("<="     , kCond           | kNumber | kString                           );
-  add("<>"     , kCond           | kNumber | kString                           );
-  add("@>"     , kCond           | kArray | kRange                             ); // Contains
-  add("<@"     , kCond           | kArray | kRange                             ); // Contained By.
-  add("&&"     , kCond           | kRange                                      ); // Overlap.
-  add("&<"     , kCond           | kRange                                      ); // Right Of.
-  add("&>"     , kCond           | kRange                                      ); // Left Of.
-  add("-|-"    , kCond           | kRange                                      ); // Adjacent To.
-  add("+"      , kData           | kNumber | kArray | kRange                   ); // Add/Union.
-  add("-"      , kData           | kNumber | kArray | kRange                   ); // Sub/Difference.
-  add("*"      , kData           | kNumber | kArray | kRange                   ); // Multiply/Intersect.
-  add("/"      , kData           | kNumber                                     ); // Divide.
-  add("%"      , kData           | kNumber                                     ); // Modulo.
-  add("^"      , kData           | kNumber                                     ); // Power.
-  add("&"      , kData           | kNumber                                     ); // Bit-And.
-  add("|"      , kData           | kNumber                                     ); // Bit-Or.
-  add("#"      , kData           | kNumber                                     ); // Bit-Xor.
-  add("~"      , kCond | kData   | kNumber | kString                           ); // Bit-Not/Match.
-  add("<<"     , kCond | kData   | kNumber | kRange                            ); // Shift-Left/LeftOf.
-  add(">>"     , kCond | kData   | kNumber | kRange                            ); // Shift-Right/RightOf.
-  add("||"     , kData           | kString                                     ); // Concat.
-  add("~*"     , kCond           | kString                                     ); // Match (I).
-  add("!~"     , kCond           | kString                                     ); // Not Match.
-  add("!~*"    , kCond           | kString                                     ); // Not Match (I).
-  add("AND"    , kCond           | kBoolean     | kInPlaceNot                  ); // Logical And.
-  add("OR"     , kCond           | kBoolean     | kInPlaceNot                  ); // Logical Or.
-  add("LIKE"   , kCond           | kString      | kInPlaceNot                  ); // Like.
-  add("ILIKE"  , kCond           | kString      | kInPlaceNot                  ); // Like (I).
-  add("IN"     , kCond           | kRightValues | kInPlaceNot                  ); // In.
+  // +---------+---------------------------+-----------------------------------+
+  // | Keyword | Operator Type             | Operator Flags                    |
+  // +---------+---------------------------+-----------------------------------+
+  add("="      , kBinary | kCond           | kNumber | kString                 );
+  add(">"      , kBinary | kCond           | kNumber | kString                 );
+  add(">="     , kBinary | kCond           | kNumber | kString                 );
+  add("<"      , kBinary | kCond           | kNumber | kString                 );
+  add("<="     , kBinary | kCond           | kNumber | kString                 );
+  add("<>"     , kBinary | kCond           | kNumber | kString                 );
+  add("@>"     , kBinary | kCond           | kArray | kRange                   ); // Contains
+  add("<@"     , kBinary | kCond           | kArray | kRange                   ); // Contained By.
+  add("&&"     , kBinary | kCond           | kRange                            ); // Overlap.
+  add("&<"     , kBinary | kCond           | kRange                            ); // Right Of.
+  add("&>"     , kBinary | kCond           | kRange                            ); // Left Of.
+  add("-|-"    , kBinary | kCond           | kRange                            ); // Adjacent To.
+  add("+"      , kBinary | kData           | kNumber | kArray | kRange         ); // Add/Union.
+  add("-"      , kBinary | kData           | kNumber | kArray | kRange         ); // Sub/Difference.
+  add("*"      , kBinary | kData           | kNumber | kArray | kRange         ); // Multiply/Intersect.
+  add("/"      , kBinary | kData           | kNumber                           ); // Divide.
+  add("%"      , kBinary | kData           | kNumber                           ); // Modulo.
+  add("^"      , kBinary | kData           | kNumber                           ); // Power.
+  add("&"      , kBinary | kData           | kNumber                           ); // Bit-And.
+  add("|"      , kBinary | kData           | kNumber                           ); // Bit-Or.
+  add("#"      , kBinary | kData           | kNumber                           ); // Bit-Xor.
+  add("~"      , kBinary | kCond | kData   | kNumber | kString                 ); // Bit-Not/Match.
+  add("<<"     , kBinary | kCond | kData   | kNumber | kRange                  ); // Shift-Left/LeftOf.
+  add(">>"     , kBinary | kCond | kData   | kNumber | kRange                  ); // Shift-Right/RightOf.
+  add("||"     , kBinary | kData           | kString                           ); // Concat.
+  add("~*"     , kBinary | kCond           | kString                           ); // Match (I).
+  add("!~"     , kBinary | kCond           | kString                           ); // Not Match.
+  add("!~*"    , kBinary | kCond           | kString                           ); // Not Match (I).
+  add("IS"     , kBinary | kCond           | kAnyType     | kInPlaceNot        ); // IS.
+  add("AND"    , kBinary | kCond           | kBoolean     | kInPlaceNot        ); // Logical And.
+  add("OR"     , kBinary | kCond           | kBoolean     | kInPlaceNot        ); // Logical Or.
+  add("LIKE"   , kBinary | kCond           | kString      | kInPlaceNot        ); // Like.
+  add("ILIKE"  , kBinary | kCond           | kString      | kInPlaceNot        ); // Like (I).
+  add("IN"     , kBinary | kCond           | kRightValues | kInPlaceNot        ); // In.
 
   // Aliases;
   defs["!="] = defs["<>"];
@@ -190,6 +208,7 @@ var NodeFlags = {
 };
 qsql.NodeFlags = NodeFlags;
 
+// Sort directions.
 var SortDirection = {
   ""            : 0,
   "0"           : 0,
@@ -201,6 +220,7 @@ var SortDirection = {
   "DESC"        : NodeFlags.kDescending
 };
 
+// Sort nulls.
 var SortNulls = {
   "NULLS FIRST" : NodeFlags.kNullsFirst,
   "NULLS LAST"  : NodeFlags.kNullsLast
@@ -454,7 +474,7 @@ var escapeIdentifier = (function() {
           }
         }
 
-        if (identifierMap.hasOwnProperty(p))
+        if (Object_hasOwnProperty.call(identifierMap, p))
           s += p;
         else
           s += '"' + p + '"';
@@ -482,8 +502,8 @@ qsql.escapeIdentifier = escapeIdentifier;
 // the type explicitly in case of ambiguity.
 function escapeValue(value, explicitType) {
   // Explicitly defined type.
-  if (explicitType)
-    return escapeValueExplicit(value, explicitType);
+  // if (explicitType)
+  //   return escapeValueExplicit(value, explicitType);
 
   // Type is deduced from `value`.
 
@@ -545,7 +565,7 @@ function escapeValueExplicit(value, explicitType) {
       if (typeof value === "boolean")
         return value ? "TRUE" : "FALSE";
 
-      if (typeof value === "string" && boolMap.hasOwnProperty(value))
+      if (typeof value === "string" && Object_hasOwnProperty.call(boolMap, value))
         return boolMap[value];
 
       if (typeof value === "number") {
@@ -688,12 +708,12 @@ qsql.escapeString = escapeString;
 // \function escapeNumber(value)
 function escapeNumber(value) {
   if (!isFinite(value)) {
-    if (isNaN(value))
-      return "'NaN'";
     if (value === Infinity)
       return "'Infinity'";
     if (value === -Infinity)
       return "'-Infinity'";
+
+    return "'NaN'";
   }
 
   return value.toString();
@@ -729,8 +749,12 @@ qsql.escapeValues = escapeValues;
 // \function escapeArray(value, isNested)
 function escapeArray(value, isNested) {
   var s = "";
+  var i = 0, len = value.length;
 
-  for (var i = 0, len = value.length; i < len; i++) {
+  if (len === 0)
+    return "'{}'";
+
+  do {
     var element = value[i];
 
     if (s)
@@ -740,7 +764,7 @@ function escapeArray(value, isNested) {
       s += escapeArray(element, true);
     else
       s += escapeValue(element);
-  }
+  } while (++i < len);
 
   if (isNested)
     return "[" + s + "]";
@@ -786,8 +810,11 @@ var substitute = (function() {
     // These are hints for javascript runtime. We really want this rountine
     // as fast as possible. The `|0` hint tells VM to use integer instead of
     // double precision floating point.
-    var i      = 0|0;
-    var len    = input.length|0;
+    var i = input.search(reEscapeChars)|0;
+    if (i === -1)
+      return input;
+
+    var len = input.length|0;
     var iStart = 0|0;
 
     // Substitution mode:
@@ -1139,7 +1166,7 @@ core.Raw = qclass({
     var s = this._value;
 
     var bindings = this._bindings;
-    if (bindings || bindings.length)
+    if (bindings && bindings.length)
       s = substitute(s, bindings);
 
     var as = this._as;
@@ -1232,7 +1259,7 @@ core.Binary = qclass({
     if (!type)
       throw new CompileError("Binary.compileNode() - No operator specified.");
 
-    if (OperatorDefs.hasOwnProperty(type)) {
+    if (Object_hasOwnProperty.call(OperatorDefs, type)) {
       var op = OperatorDefs[type];
       var flags = op.flags;
 
@@ -1242,6 +1269,13 @@ core.Binary = qclass({
 
       if (flags & OperatorFlags.kRightValues) {
         right = escapeValues(this._right);
+      }
+
+      // Check if the right operand is `NULL` and convert the operator to `IS`
+      // or `IS NOT` if necessary to be more comformant with SQL standard.
+      if (right === "NULL") {
+        if (op.op === "=")
+          op = OperatorDefs["IS"];
       }
 
       keyword = op.as;
@@ -1376,6 +1410,7 @@ function ObjectOp(type, value) {
   this._type = type;
   this._flags = 0|0;
 
+  // `_as` is never used.
   this._as = "";
   this._value = value;
 }
@@ -1383,12 +1418,36 @@ core.ObjectOp = qclass({
   extend: Unary,
   construct: ObjectOp,
 
-  shouldWrap: function() {
+  shouldWrap: function(ctx) {
     return false;
   },
 
   compileNode: function(ctx) {
-    // TODO:
+    var s = "";
+
+    var separator = " " + this._type + " ";
+    var columns = this._value;
+
+    for (var k in columns) {
+      var value = columns[k];
+      var compiled = escapeValue(value);
+
+      if (s)
+        s += separator;
+      s += escapeIdentifier(k);
+
+      if (compiled === "NULL")
+        s += " IS ";
+      else
+        s += " = ";
+
+      if (value instanceof Node && value.shouldWrap())
+        s += "(" + compiled + ")";
+      else
+        s += compiled;
+    }
+
+    return s;
   }
 });
 
@@ -1425,10 +1484,10 @@ core.Identifier = qclass({
 function Sort(column, direction, nulls) {
   var flags = 0|0;
 
-  if (direction && SortDirection.hasOwnProperty(direction))
+  if (direction && Object_hasOwnProperty.call(SortDirection, direction))
     flags |= SortDirection[direction];
 
-  if (nulls && SortNulls.hasOwnProperty(nulls))
+  if (nulls && Object_hasOwnProperty.call(SortNulls, nulls))
     flags |= SortNulls[nulls];
 
   // Doesn't call `Identifier` constructor.
@@ -1479,7 +1538,7 @@ core.Sort = qclass({
 
   setDirection: function(direction) {
     var flags = this._flags & ~(NodeFlags.kAscending | NodeFlags.kDescending);
-    if (SortDirection.hasOwnProperty(direction))
+    if (Object_hasOwnProperty.call(SortDirection, direction))
       this._flags = flags | SortDirection[direction];
     else
       throw new CompileError("Sort.setDirection() - Invalid argument '" + direction + "'.");
@@ -1506,7 +1565,7 @@ core.Sort = qclass({
 
   setNullsOrder: function(nulls) {
     var flags = this._flags & ~(NodeFlags.kNullsFirst | NodeFlags.kNullsLast);
-    if (SortNulls.hasOwnProperty(nulls))
+    if (Object_hasOwnProperty.call(SortNulls, nulls))
       this._flags = flags | SortNulls[nulls];
     else
       throw new CompileError("Sort.setDirection() - Invalid argument '" + nulls + "'.");
@@ -1795,7 +1854,7 @@ function Query(type) {
   //   - `INSERT` - `RETURNING ...`.
   //   - `UPDATE` - `RETURNING ...`.
   //   - `DELETE` - `RETURNING ...`.
-  this._selectOrReturning = null;
+  this._fieldsOrReturning = null;
 
   // Used by:
   //   - `INSERT` - `INSERT INTO ...`.
@@ -1848,39 +1907,75 @@ core.Query = qclass({
     return true;
   },
 
-  _addSelectOrReturning: function(f) {
-    var returning = this._selectOrReturning;
+  _addFieldsOrReturning: function(defs) {
+    var fields = this._fieldsOrReturning;
 
+    // Handle multiple parameters.
     if (arguments.length > 1) {
-      if (returning === null) {
-        this._selectOrReturning = Array_slice.call(arguments, 0);
+      if (fields === null) {
+        this._fieldsOrReturning = Array_slice.call(arguments, 0);
+        return this;
       }
-      else {
-        for (var i = 0, len = arguments.length; i < len; i++)
-          returning.push(arguments[i]);
-      }
+
+      for (var i = 0, len = arguments.length; i < len; i++)
+        fields.push(arguments[i]);
+      return this;
     }
-    else if (isArray(f)) {
-      // Optimization: If `_select` is `null` the given array `f` is referenced.
-      if (returning === null) {
-        this._selectOrReturning = f;
+
+    // Handle single parameter of type `Object` or `Array`.
+    if (typeof defs === "object") {
+      // If the `defs` is array it should contain one or multiple columns. In
+      // case that `_fieldsOrReturning` is `null` the given array `col` is used
+      // instead of creating a copy of it.
+      if (isArray(defs)) {
+        if (fields === null) {
+          this._fieldsOrReturning = defs;
+          return this;
+        }
+
+        for (var i = 0, len = defs.length; i < len; i++)
+          fields.push(defs[i]);
+        return this;
       }
-      else {
-        for (var i = 0, len = f.length; i < len; i++)
-          returning.push(f[i]);
+
+      // If the `col` is not `Node` it is a dictionary where keys are columns
+      // and values are either:
+      //   1. `true` - describing the column of same name.
+      //   2. `string` - describing unaliased name.
+      //   3. `Node` - expression of that column.
+      if (!(defs instanceof Node)) {
+        if (fields === null)
+          this._fieldsOrReturning = fields = [];
+
+        for (var k in defs) {
+          var def = defs[k];
+
+          if (def === true) {
+            fields.push(k);
+            continue;
+          }
+
+          if (typeof def === "string")
+            def = COL(def);
+
+          fields.push(def.AS(k));
+        }
+
+        return this;
       }
+
+      // ... Fall through ...
     }
-    else {
-      if (returning === null)
-        this._selectOrReturning = [f];
-      else
-        returning.push(f);
-    }
+
+    if (fields === null)
+      this._fieldsOrReturning = [defs];
+    else
+      fields.push(defs);
 
     return this;
   },
 
-  _compileSelectOrReturning: function(ctx, prefix, list) {
+  _compileFieldsOrReturning: function(ctx, prefix, list) {
     var s = "";
 
     for (var i = 0, len = list.length; i < len; i++) {
@@ -1890,10 +1985,16 @@ core.Query = qclass({
         s += ", ";
 
       // Returning column can be in a form of `string` or `Node`.
-      if (typeof column === "string")
+      if (typeof column === "string") {
         s += escapeIdentifier(column);
-      else
-        s += column.compileNode(ctx);
+      }
+      else {
+        var compiled = column.compileNode(ctx);
+        if (column.shouldWrap())
+          s += "(" + compiled + ")";
+        else
+          s += compiled;
+      }
     }
 
     return prefix + s;
@@ -1946,11 +2047,14 @@ core.Query = qclass({
     var where = this._where;
     var aIsArray = false;
 
-    // Accept 1 or 3 arguments.
-    if (nArgs === 3) {
+    // Accept 1, 2 or 3 arguments.
+    if (nArgs >= 2) {
       if (typeof a === "string")
         a = COL(a);
-      node = new Binary(a, op, b);
+      if (nArgs === 2)
+        node = new Binary(a, "=", op);
+      else
+        node = new Binary(a, op, b);
     }
     else if (nArgs !== 1) {
       throw new CompileError((type === "OR" ? "OR_" : "") + "WHERE - Invalid argument.");
@@ -1990,6 +2094,9 @@ core.Query = qclass({
 
     if (len === 0)
       return s;
+
+    if (len === 1)
+      return prefix + list[0].compileNode(ctx);
 
     for (i = 0; i < len; i++) {
       var expression = list[i];
@@ -2147,44 +2254,51 @@ core.SelectQuery = qclass({
     // Compile `[*|fields]`
     //
     // Note, `*` is only used if there are no columns specified.
-    var columns = this._selectOrReturning;
+    var columns = this._fieldsOrReturning;
     if (columns && columns.length)
-      s += this._compileSelectOrReturning(ctx, " ", columns);
+      s += this._compileFieldsOrReturning(ctx, " ", columns);
     else
       s += " *";
 
     // Compile `FROM table[, table[, ...]]`.
     var from = this._fromOrUsing;
-    if (from && from.length)
+    if (from && from.length) {
       s += this._compileFromOrUsing(ctx, " FROM ", from);
+    }
 
     // Compile `WHERE ...`.
     var where = this._where;
-    if (where && where._values.length)
+    if (where && where._values.length) {
       s += this._compileWhereOrHaving(ctx, " WHERE ", where);
+    }
 
     // Compile `GROUP BY ...`.
     var groupBy = this._groupBy;
-    if (groupBy && groupBy.length)
+    if (groupBy && groupBy.length) {
       s += this._compileGroupBy(ctx, " GROUP BY ", groupBy);
+    }
 
     // Compile `HAVING ...`.
     var having = this._having;
-    if (having && having._values.length)
+    if (having && having._values.length) {
       s += this._compileWhereOrHaving(ctx, " HAVING ", having);
+    }
 
     // TODO: Compile `WINDOW ...`.
 
     // Compile `ORDER BY ...`.
     var orderBy = this._orderBy;
-    if (orderBy && orderBy.length)
+    if (orderBy && orderBy.length) {
       s += this._compileOrderBy(ctx, " ORDER BY ", orderBy);
+    }
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     var offset = this._offset;
     var limit = this._limit;
-    if (offset || limit)
+
+    if (offset || limit) {
       s += " " + this._compileOffsetLimit(ctx, offset, limit);
+    }
 
     // TODO: Compile `FETCH ...`.
     // TODO: Compile `FOR ...`.
@@ -2230,11 +2344,14 @@ core.SelectQuery = qclass({
     var having = this._having;
     var aIsArray = false;
 
-    // Accept 1 or 3 arguments.
-    if (nArgs === 3) {
+    // Accept 1, 2 or 3 arguments.
+    if (nArgs >= 2) {
       if (typeof a === "string")
         a = COL(a);
-      node = new Binary(a, op, b);
+      if (nArgs === 2)
+        node = new Binary(a, "=", op);
+      else
+        node = new Binary(a, op, b);
     }
     else if (nArgs !== 1) {
       throw new CompileError((type === "OR" ? "OR_" : "") + "HAVING - Invalid argument.");
@@ -2275,22 +2392,18 @@ core.SelectQuery = qclass({
   //   - `SELECT(["a", "b", "c"]).DISTINCT()`
   //   - `SELECT().DISTINCT(["a", "b", "c"])`
   //   - `SELECT().DISTINCT().FIELD(["a", "b", "c"])`
-  DISTINCT: function(array) {
+  DISTINCT: function(/* ... */) {
     this._flags |= NodeFlags.kDistinct;
-
-    if (arguments.length > 1)
-      return this.FIELD(Array_slice.call(arguments, 0));
-    else if (array)
-      return this.FIELD(array);
-    else
-      return this;
+    if (arguments.length)
+      this.FIELD.apply(this, arguments);
+    return this;
   },
 
   // \function SelectQuery.FROM(...)
   FROM: Query.prototype._setFromOrUsing,
 
   // \function Query.FIELD(...)
-  FIELD: Query.prototype._addSelectOrReturning,
+  FIELD: Query.prototype._addFieldsOrReturning,
 
   // \function Query.GROUP_BY(...)
   GROUP_BY: function(arg) {
@@ -2384,7 +2497,7 @@ core.InsertQuery = qclass({
         if (t)
           t += ", ";
 
-        if (object.hasOwnProperty(k))
+        if (Object_hasOwnProperty.call(object, k))
           t += escapeValue(object[k]);
         else
           t += "DEFAULT";
@@ -2396,21 +2509,23 @@ core.InsertQuery = qclass({
     }
 
     // Compile `RETURNING ...`.
-    var returning = this._selectOrReturning;
+    var returning = this._fieldsOrReturning;
     if (returning && returning.length)
-      s += this._compileSelectOrReturning(ctx, " RETURNING ", returning);
+      s += this._compileFieldsOrReturning(ctx, " RETURNING ", returning);
 
     return s;
   },
 
   // \function InsertQuery.TABLE(table)
   TABLE: Query.prototype._setFromOrIntoTable,
+  //
+  // Alias to `InsertQuery.INTO(table)`.
 
   // \function InsertQuery.INTO(table)
   INTO: Query.prototype._setFromOrIntoTable,
 
   // \function InsertQuery.RETURNING(...)
-  RETURNING: Query.prototype._addSelectOrReturning
+  RETURNING: Query.prototype._addFieldsOrReturning
 });
 
 // \class core.UpdateQuery
@@ -2478,9 +2593,9 @@ core.UpdateQuery = qclass({
       s += " " + this._compileOffsetLimit(ctx, offset, limit);
 
     // Compile `RETURNING ...`.
-    var returning = this._selectOrReturning;
+    var returning = this._fieldsOrReturning;
     if (returning && returning.length)
-      s += this._compileSelectOrReturning(ctx, " RETURNING ", returning);
+      s += this._compileFieldsOrReturning(ctx, " RETURNING ", returning);
 
     return s;
   },
@@ -2492,7 +2607,7 @@ core.UpdateQuery = qclass({
   FROM: Query.prototype._setFromOrUsing,
 
   // \function UpdateQuery.RETURNING(...)
-  RETURNING: Query.prototype._addSelectOrReturning
+  RETURNING: Query.prototype._addFieldsOrReturning
 });
 
 // \class core.DeleteQuery
@@ -2538,14 +2653,16 @@ core.DeleteQuery = qclass({
       s += " " + this._compileOffsetLimit(ctx, offset, limit);
 
     // Compile `RETURNING ...`.
-    var returning = this._selectOrReturning;
+    var returning = this._fieldsOrReturning;
     if (returning && returning.length)
-      s += this._compileSelectOrReturning(ctx, " RETURNING ", returning);
+      s += this._compileFieldsOrReturning(ctx, " RETURNING ", returning);
 
     return s;
   },
 
   // \function DeleteQuery.TABLE(table)
+  //
+  // Alias to `DeleteQuery.FROM(table)`.
   TABLE: Query.prototype._setFromOrIntoTable,
 
   // \function DeleteQuery.FROM(table)
@@ -2555,7 +2672,7 @@ core.DeleteQuery = qclass({
   USING: Query.prototype._setFromOrUsing,
 
   // \function DeleteQuery.RETURNING(...)
-  RETURNING: Query.prototype._addSelectOrReturning
+  RETURNING: Query.prototype._addFieldsOrReturning
 });
 
 // \function RAW(string:String, bindings:Array?)
@@ -2565,15 +2682,11 @@ function RAW(string, bindings) {
 qsql.RAW = RAW;
 
 // \function SELECT(...)
-function SELECT(arg) {
+function SELECT(/* ... */) {
   var q = new SelectQuery();
-
-  if (arguments.length > 1)
-    return q.FIELD(Array_slice.call(arguments, 0));
-  else if (arg)
-    return q.FIELD(arg);
-  else
-    return q;
+  if (arguments.length)
+    q.FIELD.apply(q, arguments);
+  return q;
 }
 qsql.SELECT = SELECT;
 
@@ -2597,7 +2710,7 @@ function INSERT(/* ... */) {
   // Next arguments can contain data (array/object) to insert.
   while (i < len) {
     var arg = arguments[i++];
-    this.VALUES(arg);
+    q.VALUES(arg);
   }
 
   return q;
@@ -2624,7 +2737,7 @@ function UPDATE(/* ... */) {
   // Next argument can contain data to update.
   if (i < len) {
     var arg = arguments[i];
-    this.VALUES(arg);
+    q.VALUES(arg);
   }
 
   return q;
@@ -2635,7 +2748,7 @@ qsql.UPDATE = UPDATE;
 function DELETE(from) {
   var q = new DeleteQuery();
   if (from)
-    this._table = from;
+    q._table = from;
   return q;
 }
 qsql.DELETE = DELETE;

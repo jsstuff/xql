@@ -119,7 +119,7 @@ describe("QSql", function() {
     shouldMatch(escapeValue('\'')          , "E'\\''");
 
     // [] defaults to ARRAY[].
-    shouldMatch(escapeValue([])            , "ARRAY[]");
+    shouldMatch(escapeValue([])            , "'{}'");
     shouldMatch(escapeValue([0, 1])        , "ARRAY[0, 1]");
     shouldMatch(escapeValue([[0, 1]])      , "ARRAY[[0, 1]]");
     shouldMatch(escapeValue([[0], [1]])    , "ARRAY[[0], [1]]");
@@ -182,35 +182,71 @@ describe("QSql", function() {
   it("should test SELECT(...) vs. SELECT().FIELD(...).", function() {
     // Test all SELECT variations, they all should behave the same way.
     shouldMatch(
-      SELECT(COL("a"), COL("b"), COL("c")).FROM("x"),
-      SELECT().FIELD("a").FIELD("b").FIELD("c").FROM("x"));
-
-    shouldMatch(
-      SELECT(COL("a"), COL("b"), COL("c")).FROM("x"),
-      SELECT(COL("a")).FIELD("b").FIELD("c").FROM("x"));
+      SELECT("a", "b", "c").FROM("x"),
+      'SELECT "a", "b", "c" FROM "x"');
 
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x"),
-      SELECT(COL("a"), COL("b"), COL("c")).FROM("x"));
+      'SELECT "a", "b", "c" FROM "x"');
 
     shouldMatch(
-      SELECT(["a", "b", "c"]).FROM("x"),
-      SELECT("a", "b", "c").FROM("x"));
+      SELECT(COL("a"), COL("b"), COL("c")).FROM("x"),
+      'SELECT "a", "b", "c" FROM "x"');
+
+    shouldMatch(
+      SELECT([COL("a"), COL("b"), COL("c")]).FROM("x"),
+      'SELECT "a", "b", "c" FROM "x"');
+
+    shouldMatch(
+      SELECT({a: true, b: true, c: true }).FROM("x"),
+      'SELECT "a", "b", "c" FROM "x"');
+
+    shouldMatch(
+      SELECT({a: "a", b: "b", c: "c" }).FROM("x"),
+      'SELECT "a" AS "a", "b" AS "b", "c" AS "c" FROM "x"');
+
+    shouldMatch(
+      SELECT().FIELD("a").FIELD("b").FIELD("c").FROM("x"),
+      'SELECT "a", "b", "c" FROM "x"');
   });
 
-  it("should test SELECT ... FROM ... .", function() {
+  it("should test SELECT ... FROM ... WHERE ... .", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").WHERE("a", 42),
+      'SELECT "a", "b", "c" FROM "x" WHERE "a" = 42');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").WHERE("a", "=", 42),
+      'SELECT "a", "b", "c" FROM "x" WHERE "a" = 42');
+
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").WHERE("a", "<=", 42),
       'SELECT "a", "b", "c" FROM "x" WHERE "a" <= 42');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").WHERE("a", "IN", [42, 23]),
+      'SELECT "a", "b", "c" FROM "x" WHERE "a" IN (42, 23)');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").WHERE({ a: 1, b: 2, c: 3 }),
+      'SELECT "a", "b", "c" FROM "x" WHERE "a" = 1, "b" = 2, "c" = 3');
   });
 
-  it("should test SELECT DISTINCT ... FROM ... .", function() {
+  it("should test SELECT DISTINCT ... FROM ... WHERE ... .", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE("a", "<=", 42),
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
 
     shouldMatch(
-      SELECT().DISTINCT(["a", "b", "c"]).FROM("x").WHERE("a", "<=", 42),
+      SELECT().DISTINCT("a", "b", "c").FROM("x").WHERE("a", ">=", 42),
+      'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" >= 42');
+
+    shouldMatch(
+      SELECT().DISTINCT(["a", "b", "c"]).FROM("x").WHERE("a", "<>", 42),
+      'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <> 42');
+
+    shouldMatch(
+      SELECT().DISTINCT({ a: true, b: true, c: true }).FROM("x").WHERE("a", "<=", 42),
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
   });
 
@@ -221,6 +257,12 @@ describe("QSql", function() {
   });
 
   it("should test SELECT ... FROM ... GROUP BY ... HAVING ....", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a"))
+        .HAVING("a", "<", 3)
+        .HAVING("b", ">", 1),
+      'SELECT "a", "b", "c" FROM "x" GROUP BY "a" HAVING "a" < 3 AND "b" > 1');
+
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a"))
         .HAVING(COL("a"), "<", 3)
