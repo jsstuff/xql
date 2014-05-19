@@ -803,7 +803,7 @@ qsql.escapeArray = escapeArray;
 
 // \function escapeJson(value)
 function escapeJson(value) {
-  escapeString(JSON.stringify(value));
+  return escapeString(JSON.stringify(value));
 };
 qsql.escapeJson = escapeJson;
 
