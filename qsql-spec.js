@@ -229,7 +229,7 @@ describe("QSql", function() {
 
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").WHERE({ a: 1, b: 2, c: 3 }),
-      'SELECT "a", "b", "c" FROM "x" WHERE "a" = 1, "b" = 2, "c" = 3');
+      'SELECT "a", "b", "c" FROM "x" WHERE "a" = 1 AND "b" = 2 AND "c" = 3');
   });
 
   it("should test SELECT DISTINCT ... FROM ... WHERE ... .", function() {
@@ -274,6 +274,44 @@ describe("QSql", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("x").IN(1, 2, 3)),
       'SELECT "a", "b", "c" FROM "x" WHERE "x" IN (1, 2, 3)');
+  });
+
+  it("should test SELECT ... JOIN ...", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").CROSS_JOIN("y"),
+      'SELECT "a", "b", "c" FROM "x" CROSS JOIN "y"');
+  });
+
+  it("should test SELECT ... JOIN ... USING (...)", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").INNER_JOIN("y", ["a"]),
+      'SELECT "a", "b", "c" FROM "x" INNER JOIN "y" USING ("a")');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").INNER_JOIN("y", ["a", "b"]),
+      'SELECT "a", "b", "c" FROM "x" INNER JOIN "y" USING ("a", "b")');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").LEFT_JOIN("y", ["a"]),
+      'SELECT "a", "b", "c" FROM "x" LEFT OUTER JOIN "y" USING ("a")');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").LEFT_JOIN("y", ["a", "b"]),
+      'SELECT "a", "b", "c" FROM "x" LEFT OUTER JOIN "y" USING ("a", "b")');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").RIGHT_JOIN("y", ["a"]),
+      'SELECT "a", "b", "c" FROM "x" RIGHT OUTER JOIN "y" USING ("a")');
+
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").RIGHT_JOIN("y", ["a", "b"]),
+      'SELECT "a", "b", "c" FROM "x" RIGHT OUTER JOIN "y" USING ("a", "b")');
+  });
+
+  it("should test SELECT ... JOIN ... ON ...", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x").INNER_JOIN("y", OP(COL("x.a"), "=", COL("y.b"))),
+      'SELECT "a", "b", "c" FROM "x" INNER JOIN "y" ON "x"."a" = "y"."b"');
   });
 
   it("should test SELECT ... FROM ... ORDER BY ...", function() {

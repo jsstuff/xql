@@ -12,6 +12,8 @@ var isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
 
 var Array_slice = Array.prototype.slice;
 var Object_hasOwnProperty = Object.prototype.hasOwnProperty;
+
+var EmptyObject = {};
 // \}
 
 // \namespace core
@@ -20,7 +22,14 @@ var core = qsql.core = {};
 // \namespace util
 var util = qsql.util = {};
 
+// Checks if a string is a well formatted integer with optional '-' sign.
 var reInt = /^-?\d+$/;
+
+// Checks if a string is a well formatted integer or floating point number, also
+// accepts scientific notation "E[+-]?xxx".
+var reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
+
+// Checks if a string is UPPERCASE_ONLY, underscores are accepted.
 var reUpperCase = /^[A-Z_][A-Z_0-9]*$/;
 
 // Map of identifiers that are not escaped.
@@ -502,8 +511,8 @@ qsql.escapeIdentifier = escapeIdentifier;
 // the type explicitly in case of ambiguity.
 function escapeValue(value, explicitType) {
   // Explicitly defined type.
-  // if (explicitType)
-  //   return escapeValueExplicit(value, explicitType);
+  if (explicitType)
+    return escapeValueExplicit(value, explicitType);
 
   // Type is deduced from `value`.
 
@@ -552,6 +561,9 @@ qsql.escapeValue = escapeValue;
 
 // \function escapeValueExplicit(value, explicitType:String)
 function escapeValueExplicit(value, explicitType) {
+  if (value instanceof Node)
+    return value.compileNode();
+
   var type = typeMap[explicitType];
 
   if (!type)
@@ -608,7 +620,23 @@ function escapeValueExplicit(value, explicitType) {
       break;
 
     case "number":
-      // TODO:
+      if (value == null)
+        return "NULL";
+
+      if (typeof value === "number") {
+        return escapeNumber(value);
+      }
+
+      if (typeof value === "string") {
+        if (!reNumber.test(value)) {
+          throw new ValueError(
+            "Couldn't convert ill formatted 'string' to 'number'.");
+        }
+
+        return value;
+      }
+
+      // Will throw
       break;
 
     case "string":
@@ -1062,11 +1090,13 @@ core.Node = qclass({
     throw new CompileError("Node(" + this._type + ").compileNode() - Must be reimplemented.");
   },
 
-  // \function Node.compileQuery()
-  //
-  // Compile the whole query adding semicolon ';' at the end.
-  compileQuery: function(ctx) {
-    return this.compileNode(ctx) + ";";
+  getType: function() {
+    return this._type;
+  },
+
+  setType: function(type) {
+    this._type = type;
+    return this;
   },
 
   getFlag: function(flag) {
@@ -1085,6 +1115,15 @@ core.Node = qclass({
     return this;
   },
 
+  getLabel: function() {
+    return this._as;
+  },
+
+  setLabel: function(as) {
+    this._as = as;
+    return this;
+  },
+
   // \function Node.AS(as:String)
   AS: function(as) {
     this._as = as;
@@ -1093,32 +1132,32 @@ core.Node = qclass({
 
   // \function Node.EQ(b:{Var|Node})
   EQ: function(b) {
-    return new Binary(this, "=", b);
+    return new Operator(this, "=", b);
   },
 
   // \function Node.NE(b:{Var|Node})
   NE: function(b) {
-    return new Binary(this, "<>", b);
+    return new Operator(this, "<>", b);
   },
 
   // \function Node.LT(b:{Var|Node})
   LT: function(b) {
-    return new Binary(this, "<", b);
+    return new Operator(this, "<", b);
   },
 
   // \function Node.LE(b:{Var|Node})
   LE: function(b) {
-    return new Binary(this, "<=", b);
+    return new Operator(this, "<=", b);
   },
 
   // \function Node.GT(b:{Var|Node})
   GT: function(b) {
-    return new Binary(this, ">", b);
+    return new Operator(this, ">", b);
   },
 
   // \function Node.GE(b:{Var|Node})
   GE: function(b) {
-    return new Binary(this, ">=", b);
+    return new Operator(this, ">=", b);
   },
 
   // \function Node.IN(b:{Var|Node})
@@ -1138,20 +1177,20 @@ core.Node = qclass({
       b = [];
     }
 
-    return new Binary(this, "IN", b);
+    return new Operator(this, "IN", b);
   }
 });
 
 // \class core.Raw
 //
 // Wraps RAW query.
-function Raw(string, bindings) {
+function Raw(expression, bindings) {
   // Doesn't call `Node` constructor.
   this._type = "RAW";
   this._flags = 0|0;
 
   this._as = "";
-  this._value = string || "";
+  this._value = expression || "";
   this._bindings = bindings || null;
 }
 core.Raw = qclass({
@@ -1174,6 +1213,24 @@ core.Raw = qclass({
       s += " AS " + escapeIdentifier(as);
 
     return s;
+  },
+
+  getExpression: function() {
+    return this._value;
+  },
+
+  setExpression: function(expression) {
+    this._value = expression;
+    return this;
+  },
+
+  getBindings: function() {
+    return this._bindings;
+  },
+
+  setBindings: function(bindings) {
+    this._bindings = bindings || null;
+    return this;
   }
 });
 
@@ -1244,6 +1301,59 @@ core.Binary = qclass({
   extend: Node,
   construct: Binary,
 
+  getLeft: function() {
+    return this._left;
+  },
+
+  setLeft: function(value) {
+    this._left = value;
+    return this;
+  },
+
+  addLeft: function(value) {
+    var left = this._left;
+
+    if (!isArray(left))
+      throw new ("Binary.addLeft() - Left operand is not an Array.");
+
+    left.push(value);
+    return this;
+  },
+
+  getRight: function() {
+    return this._right;
+  },
+
+  setRight: function(right) {
+    this._right = right;
+    return this;
+  },
+
+  addRight: function(value) {
+    var right = this._right;
+
+    if (!isArray(right))
+      throw new ("Binary.addRight() - Left operand is not an Array.");
+
+    right.push(value);
+    return this;
+  }
+});
+
+// \class core.Operator
+function Operator(left, type, right, as) {
+  // Doesn't call `Binary` constructor.
+  this._type = type || "";
+  this._flags = 0|0;
+
+  this._as = as || "";
+  this._left = left;
+  this._right = right;
+}
+core.Operator = qclass({
+  extend: Binary,
+  construct: Operator,
+
   shouldWrap: function(ctx) {
     return false;
   },
@@ -1257,7 +1367,7 @@ core.Binary = qclass({
     var right = "";
 
     if (!type)
-      throw new CompileError("Binary.compileNode() - No operator specified.");
+      throw new CompileError("Operator.compileNode() - No operator specified.");
 
     if (Object_hasOwnProperty.call(OperatorDefs, type)) {
       var op = OperatorDefs[type];
@@ -1297,44 +1407,6 @@ core.Binary = qclass({
       s += " AS " + escapeIdentifier(as);
 
     return s;
-  },
-
-  getLeft: function() {
-    return this._left;
-  },
-
-  setLeft: function(value) {
-    this._left = value;
-    return this;
-  },
-
-  addLeft: function(value) {
-    var left = this._left;
-
-    if (!isArray(left))
-      throw new ("Binary.addLeft() - Left operand is not an Array");
-
-    left.push(value);
-    return this;
-  },
-
-  getRight: function() {
-    return this._right;
-  },
-
-  setRight: function(right) {
-    this._right = right;
-    return this;
-  },
-
-  addRight: function(value) {
-    var right = this._right;
-
-    if (!isArray(right))
-      throw new ("Binary.addRight() - Left operand is not an Array");
-
-    right.push(value);
-    return this;
   }
 });
 
@@ -1475,6 +1547,112 @@ core.Identifier = qclass({
       s += " AS " + escapeIdentifier(as);
 
     return s;
+  },
+
+  getValue: function() {
+    return this._value;
+  },
+
+  setValue: function(value) {
+    this._value = value;
+    return this;
+  }
+});
+
+// \class core.Join
+function Join(left, type, right, condition) {
+  // Doesn't call `Binary` constructor.
+  this._type = type || "";
+  this._flags = 0|0;
+
+  this._as = "";
+  this._left = left;
+  this._right = right;
+  this._condition = condition;
+}
+core.Join = qclass({
+  extend: Binary,
+  construct: Join,
+
+  shouldWrap: function(ctx) {
+    return false;
+  },
+
+  compileNode: function(ctx) {
+    var type = this._type;
+    var s = "";
+
+    var keyword = "";
+
+    switch (type) {
+      case ""     : // ... Fall through ...
+      case "CROSS": keyword = " CROSS JOIN "      ; break;
+      case "INNER": keyword = " INNER JOIN "      ; break;
+      case "LEFT" : keyword = " LEFT OUTER JOIN " ; break;
+      case "RIGHT": keyword = " RIGHT OUTER JOIN "; break;
+      case "FULL" : keyword = " FULL OUTER JOIN " ; break;
+
+      // In case that the `JOIN` is backend specific.
+      default:
+        keyword = " " + type + " JOIN ";
+        break;
+    }
+
+    var left = "";
+    var right = "";
+
+    if (typeof this._left === "string")
+      left = escapeIdentifier(this._left);
+    else
+      left = this._left.compileNode();
+
+    if (typeof this._right === "string")
+      right = escapeIdentifier(this._right);
+    else
+      right = this._right.compileNode();
+
+    s = left + keyword + right;
+
+    var condition = this._condition;
+
+    // Compile `USING (...)` clause.
+    if (isArray(condition)) {
+      var t = "";
+
+      for (var i = 0, len = condition.length; i < len; i++) {
+        var identifier = condition[i];
+
+        if (t)
+          t += ", ";
+
+        if (typeof identifier === "string")
+          t += escapeIdentifier(identifier);
+        else
+          t += identifier.compileNode();
+      }
+
+      if (t)
+        s += " USING (" + t + ")";
+    }
+    // Compile `ON ...` clause.
+    else if (condition instanceof Node) {
+      s += " ON " + condition.compileNode();
+    }
+
+    var as = this._as;
+    if (as)
+      s += " AS " + escapeIdentifier(as);
+
+    return s;
+  },
+
+  getCondition: function() {
+    return this._condition;
+  },
+
+  setCondition: function(condition) {
+    this._condition = condition;
+    return this;
   }
 });
 
@@ -1665,6 +1843,15 @@ core.Func = qclass({
       s += " AS " + escapeIdentifier(as);
 
     return s;
+  },
+
+  getArguments: function() {
+    return this._values;
+  },
+
+  setArguments: function(args) {
+    this._values = args || [];
+    return this;
   }
 });
 
@@ -1716,7 +1903,16 @@ core.Value = qclass({
   },
 
   compileNode: function(ctx) {
-    return this.escapeValue(this._value, this._type);
+    return escapeValue(this._value, this._type);
+  },
+
+  getValue: function() {
+    return this._value;
+  },
+
+  setValue: function(value) {
+    this._value = value;
+    return this;
   }
 });
 
@@ -1740,7 +1936,7 @@ core.ArrayValue = qclass({
   },
 
   compileNode: function(ctx) {
-    return this.escapeArray(this._value, false);
+    return escapeArray(this._value, false);
   }
 });
 
@@ -1764,7 +1960,7 @@ core.JsonValue = qclass({
   },
 
   compileNode: function(ctx) {
-    return this.escapeJson(this._value);
+    return escapeJson(this._value);
   }
 });
 
@@ -1803,7 +1999,7 @@ core.Combine = qclass({
       if (s)
         s += separator;
 
-      // Wrap if the value is not a query.
+      // Wrap if the value if it's not a query.
       if (!(value instanceof Query))
         s += "(" + compiled + ")";
       else
@@ -1867,9 +2063,11 @@ function Query(type) {
   //   - `UPDATE` - `FROM ...`.
   //   - `DELETE` - `USING ...`.
   //
-  // Mixed content of Strings and Nodes is allowed. Strings are interpreted as
-  // identifiers if used.
-  this._fromOrUsing = [];
+  // Contains the `FROM` or `USING` expression. The `_fromOrUsing` can be a
+  // string describing a table name or `Node` that is describing a table name
+  // with optional alias, `JOIN` expression, `VALUES` expression or `SELECT`
+  // expression.
+  this._fromOrUsing = null;
 
   // Used by:
   //   - `SELECT`
@@ -1894,10 +2092,15 @@ function Query(type) {
   this._offset = 0;
   this._limit = 0;
 
-  this._joins = null;
-
   this._values = null;
   this._columns = null;
+
+  // Optional type mapping having keys (columns) and their value types.
+  //
+  // Type mapping is sometimes important when it comes to type ambiguity. For
+  // example when using PostgreSQL there is ambiguity when escaping `Array`.
+  // It can be escaped by using Postgres `ARRAY[] or {}` or as JSON `[]`.
+  this._typeMapping = null;
 }
 core.Query = qclass({
   extend: Node,
@@ -1905,6 +2108,23 @@ core.Query = qclass({
 
   shouldWrap: function() {
     return true;
+  },
+
+  // \function Query.compileQuery()
+  //
+  // Compile the whole by using `compileNode()` and add a semicolon ';' at the
+  // end.
+  compileQuery: function(ctx) {
+    return this.compileNode(ctx) + ";";
+  },
+
+  getTypeMapping: function() {
+    return this._typeMapping;
+  },
+
+  setTypeMapping: function(typeMapping) {
+    this._typeMapping = typeMapping;
+    return this;
   },
 
   _addFieldsOrReturning: function(defs) {
@@ -2009,34 +2229,61 @@ core.Query = qclass({
     return this;
   },
 
-  // \function Query._setFromOrUsing(...)
-  _setFromOrUsing: function(arg) {
-    var list = this._fromOrUsing;
+  // \function Query._addFromOrUsing(...)
+  _addFromOrUsing: function(arg) {
+    var args = null;
+    var len = 0;
 
-    if (arguments.length > 1)
-      list.push.apply(list, arguments);
-    else if (isArray(arg))
-      list.push.apply(list, arg);
+    if (isArray(arg)) {
+      args = arg;
+      len = args.length;
+    }
+    else {
+      args = arguments;
+      len = args.length;
+    }
+
+    if (len < 1)
+      return this;
+
+    var left = this._fromOrUsing;
+    if (left !== null)
+      this._fromOrUsing = new Join(left, "", arg);
     else
-      list.push(arg);
+      this._fromOrUsing = arg;
+
+    if (len <= 1)
+      return this;
+
+    // Implicit `CROSS JOIN` syntax.
+    var i = 1;
+    do {
+      arg = args[i];
+      this._fromOrUsing = new Join(left, "", arg);
+    } while (++i < len)
 
     return this;
   },
 
-  _compileFromOrUsing: function(ctx, prefix, list) {
+  // \function Query._join(type, with_, condition)
+  _join: function(type, with_, condition) {
+    var left = this._fromOrUsing;
+
+    // Well this shouldn't be `null`.
+    if (left === null)
+      throw new CompileError("Query._join() - There is no table in query to join with.");
+
+    this._fromOrUsing = new Join(left, type, with_, condition);
+    return this;
+  },
+
+  _compileFromOrUsing: function(ctx, prefix, node) {
     var s = "";
 
-    for (var i = 0, len = list.length; i < len; i++) {
-      var table = list[i];
-
-      if (s)
-        s += ", ";
-
-      if (typeof table === "string")
-        s += escapeIdentifier(table);
-      else
-        s += table.compileNode(ctx);
-    }
+    if (typeof node === "string")
+      s += escapeIdentifier(node);
+    else
+      s += node.compileNode(ctx);
 
     return prefix + s;
   },
@@ -2052,9 +2299,9 @@ core.Query = qclass({
       if (typeof a === "string")
         a = COL(a);
       if (nArgs === 2)
-        node = new Binary(a, "=", op);
+        node = new Operator(a, "=", op);
       else
-        node = new Binary(a, op, b);
+        node = new Operator(a, op, b);
     }
     else if (nArgs !== 1) {
       throw new CompileError((type === "OR" ? "OR_" : "") + "WHERE - Invalid argument.");
@@ -2260,9 +2507,9 @@ core.SelectQuery = qclass({
     else
       s += " *";
 
-    // Compile `FROM table[, table[, ...]]`.
+    // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
     var from = this._fromOrUsing;
-    if (from && from.length) {
+    if (from) {
       s += this._compileFromOrUsing(ctx, " FROM ", from);
     }
 
@@ -2349,9 +2596,9 @@ core.SelectQuery = qclass({
       if (typeof a === "string")
         a = COL(a);
       if (nArgs === 2)
-        node = new Binary(a, "=", op);
+        node = new Operator(a, "=", op);
       else
-        node = new Binary(a, op, b);
+        node = new Operator(a, op, b);
     }
     else if (nArgs !== 1) {
       throw new CompileError((type === "OR" ? "OR_" : "") + "HAVING - Invalid argument.");
@@ -2368,7 +2615,7 @@ core.SelectQuery = qclass({
       this._having = having;
     }
     // If the current expression operator is not the same as `type`, wrap the
-    // current expression inside a new node.
+    // current expression inside a new `Node`.
     else if (having.type !== type) {
       having = new Logical(type);
       having.push(this._having);
@@ -2400,7 +2647,32 @@ core.SelectQuery = qclass({
   },
 
   // \function SelectQuery.FROM(...)
-  FROM: Query.prototype._setFromOrUsing,
+  FROM: Query.prototype._addFromOrUsing,
+
+  // \function SelectQuery.CROSS_JOIN(...)
+  CROSS_JOIN: function(with_, condition) {
+    return this._join("CROSS", with_, condition);
+  },
+
+  // \function SelectQuery.INNER_JOIN(...)
+  INNER_JOIN: function(with_, condition) {
+    return this._join("INNER", with_, condition);
+  },
+
+  // \function SelectQuery.LEFT_JOIN(...)
+  LEFT_JOIN: function(with_, condition) {
+    return this._join("LEFT", with_, condition);
+  },
+
+  // \function SelectQuery.RIGHT_JOIN(...)
+  RIGHT_JOIN: function(with_, condition) {
+    return this._join("RIGHT", with_, condition);
+  },
+
+  // \function SelectQuery.FULL_JOIN(...)
+  FULL_JOIN: function(with_, condition) {
+    return this._join("FULL", with_, condition);
+  },
 
   // \function Query.FIELD(...)
   FIELD: Query.prototype._addFieldsOrReturning,
@@ -2467,6 +2739,7 @@ core.InsertQuery = qclass({
     // Compile `INSERT INTO table (...)`
     var table = this._table;
     var columns = this._columns;
+    var typeMapping = this._typeMapping || EmptyObject;
 
     if (!table) {
       throw new CompileError(
@@ -2498,7 +2771,7 @@ core.InsertQuery = qclass({
           t += ", ";
 
         if (Object_hasOwnProperty.call(object, k))
-          t += escapeValue(object[k]);
+          t += escapeValue(object[k], typeMapping[k]);
         else
           t += "DEFAULT";
       }
@@ -2565,19 +2838,28 @@ core.UpdateQuery = qclass({
         "UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided).");
 
     var values = objects[0];
+    var typeMapping = this._typeMapping || EmptyObject;
 
     t = "";
     for (var k in values) {
       var value = values[k];
+      var compiled;
+
+      if (!(value instanceof Node))
+        compiled = escapeValue(value, typeMapping[k]);
+      else
+        compiled = value.compileNode();
+
       if (t)
         t += ", ";
-      t += escapeIdentifier(k) + " = " + escapeValue(value);
+
+      t += escapeIdentifier(k) + " = " + compiled;
     }
     s += " SET " + t;
 
-    // Compile `FROM ...`.
+    // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
     var from = this._fromOrUsing;
-    if (from && from.length)
+    if (from)
       s += this._compileFromOrUsing(ctx, " FROM ", from);
 
     // Compile `WHERE ...`
@@ -2604,7 +2886,7 @@ core.UpdateQuery = qclass({
   TABLE: Query.prototype._setFromOrIntoTable,
 
   // \function UpdateQuery.FROM(...)
-  FROM: Query.prototype._setFromOrUsing,
+  FROM: Query.prototype._addFromOrUsing,
 
   // \function UpdateQuery.RETURNING(...)
   RETURNING: Query.prototype._addFieldsOrReturning
@@ -2635,9 +2917,9 @@ core.DeleteQuery = qclass({
 
     s += "DELETE FROM " + t;
 
-    // Compile `USING ...`.
+    // Compile `USING table[, table[, ...]]` or `USING table JOIN table [, JOIN ...]`.
     var using = this._fromOrUsing;
-    if (using && using.length)
+    if (using)
       s += this._compileFromOrUsing(ctx, " USING ", using);
 
     // Compile `WHERE ...`
@@ -2669,7 +2951,7 @@ core.DeleteQuery = qclass({
   FROM: Query.prototype._setFromOrIntoTable,
 
   // \function DeleteQuery.USING(...)
-  USING: Query.prototype._setFromOrUsing,
+  USING: Query.prototype._addFromOrUsing,
 
   // \function DeleteQuery.RETURNING(...)
   RETURNING: Query.prototype._addFieldsOrReturning
@@ -2830,7 +3112,7 @@ function OP(a, op, b) {
   if (len === 2)
     return new Unary(op, a);
   else if (len === 3)
-    return new Binary(a, op, b);
+    return new Operator(a, op, b);
   else
     throw new CompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed).")
 };
