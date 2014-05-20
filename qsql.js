@@ -1,26 +1,28 @@
 (function(qclass, qsql) {
 "use strict";
 
-function returnFalse() {
-  return false;
-}
-
-// \internal
-// \{
-var isArray = Array.isArray;
-var isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
-
-var Array_slice = Array.prototype.slice;
-var Object_hasOwnProperty = Object.prototype.hasOwnProperty;
-
-var EmptyObject = {};
-// \}
-
 // \namespace core
 var core = qsql.core = {};
 
 // \namespace util
 var util = qsql.util = {};
+
+// \internal
+// \{
+
+// Always returns false, used internally for browser support.
+function returnFalse() {
+  return false;
+}
+
+var isArray = Array.isArray;
+var Array_slice = Array.prototype.slice;
+var Object_hasOwnProperty = Object.prototype.hasOwnProperty;
+
+// Get whether an object is `Buffer`.
+//
+// Returns false if a running environment doesn't support `Buffer` type.
+var isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
 
 // Checks if a string is a well formatted integer with optional '-' sign.
 var reInt = /^-?\d+$/;
@@ -32,13 +34,18 @@ var reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
 // Checks if a string is UPPERCASE_ONLY, underscores are accepted.
 var reUpperCase = /^[A-Z_][A-Z_0-9]*$/;
 
+// Empty object used as an replacement for value of object with no properties.
+var EmptyObject = {};
+
+// \}
+
 // Map of identifiers that are not escaped.
-var identifierMap = {
+var IdentifierMap = {
   "*"       : true
 };
 
 // Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
-var boolMap = {
+var BoolMap = {
   "0"       : "FALSE",
   "f"       : "FALSE",
   "false"   : "FALSE",
@@ -53,11 +60,11 @@ var boolMap = {
   "yes"     : "TRUE",
   "on"      : "TRUE"
 };
-Object.keys(boolMap).forEach(function(key) {
-  boolMap[key.toUpperCase()] = boolMap[key];
+Object.keys(BoolMap).forEach(function(key) {
+  BoolMap[key.toUpperCase()] = BoolMap[key];
 });
 
-var typeMap = {
+var TypeMap = {
   "bool"    : "boolean",
   "boolean" : "boolean",
   "smallint": "integer",
@@ -80,14 +87,14 @@ var typeMap = {
 
   "values"  : "values"
 };
-Object.keys(typeMap).forEach(function(key) {
-  typeMap[key.toUpperCase()] = typeMap[key];
+Object.keys(TypeMap).forEach(function(key) {
+  TypeMap[key.toUpperCase()] = TypeMap[key];
 });
 
 // Operator flags.
 var OperatorFlags = {
   kUnary       : 0x00000001, // Operator is unary (has one child node - `value`).
-  kBinary      : 0x00000002, // Operator is binary (has two child nodes - `left` / `right`).
+  kBinary      : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
 
   kCond        : 0x00000010, // Operator is a conditional expression.
   kData        : 0x00000020, // Operator processes data (has a result).
@@ -483,7 +490,7 @@ var escapeIdentifier = (function() {
           }
         }
 
-        if (Object_hasOwnProperty.call(identifierMap, p))
+        if (Object_hasOwnProperty.call(IdentifierMap, p))
           s += p;
         else
           s += '"' + p + '"';
@@ -564,7 +571,7 @@ function escapeValueExplicit(value, explicitType) {
   if (value instanceof Node)
     return value.compileNode();
 
-  var type = typeMap[explicitType];
+  var type = TypeMap[explicitType];
 
   if (!type)
     throw new ValueError("Unknown explicit type '" + explicitType + "'.");
@@ -577,8 +584,8 @@ function escapeValueExplicit(value, explicitType) {
       if (typeof value === "boolean")
         return value ? "TRUE" : "FALSE";
 
-      if (typeof value === "string" && Object_hasOwnProperty.call(boolMap, value))
-        return boolMap[value];
+      if (typeof value === "string" && Object_hasOwnProperty.call(BoolMap, value))
+        return BoolMap[value];
 
       if (typeof value === "number") {
         if (value === 0)
@@ -809,7 +816,7 @@ qsql.escapeJson = escapeJson;
 
 // \function substitute(query, bindings)
 //
-// Substitutes `?` sequences or postgres specific `$N` sequences in the `query`
+// Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
 // string with `bindings` and returns a new string. The function automatically
 // detects the format of `query` string and checks if it's consistent (i.e. it
 // throws if `?` is used together with `$1`).
@@ -1001,7 +1008,7 @@ var substitute = (function() {
 
             bIndex = (bIndex * 10 + (c - 48)) | 0;
             if (bIndex > bLength)
-              throw new CompileError("Substitute() - Index out of range (max " + bLength + ").");
+              throw new CompileError("Substitute() - Index '" + bIndex + "' of range (" + bLength + ").");
             i++;
           }
 
@@ -1030,7 +1037,7 @@ var substitute = (function() {
         }
 
         if (bIndex >= bLength)
-          throw new CompileError("Substitute() - Index " + bIndex + " out of range (" + bLength + ").");
+          throw new CompileError("Substitute() - Index '" + bIndex + "' out of range (" + bLength + ").");
 
         // Flush accumulated input.
         output += input.substring(iStart, i - 1);
@@ -1314,7 +1321,7 @@ core.Binary = qclass({
     var left = this._left;
 
     if (!isArray(left))
-      throw new ("Binary.addLeft() - Left operand is not an Array.");
+      throw new CompileError("Binary.addLeft() - Left operand is not an Array.");
 
     left.push(value);
     return this;
@@ -1333,7 +1340,7 @@ core.Binary = qclass({
     var right = this._right;
 
     if (!isArray(right))
-      throw new ("Binary.addRight() - Left operand is not an Array.");
+      throw new CompileError("Binary.addRight() - Left operand is not an Array.");
 
     right.push(value);
     return this;
@@ -2304,7 +2311,7 @@ core.Query = qclass({
         node = new Operator(a, op, b);
     }
     else if (nArgs !== 1) {
-      throw new CompileError((type === "OR" ? "OR_" : "") + "WHERE - Invalid argument.");
+      throw new CompileError("Query." + (type === "OR" ? "OR_" : "") + "WHERE() - Invalid argument.");
     }
     else {
       aIsArray = isArray(a);
