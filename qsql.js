@@ -15,14 +15,21 @@ function returnFalse() {
   return false;
 }
 
+// Get whether an object is `Array`.
+//
+// Link to `Array.isArray`.
 var isArray = Array.isArray;
-var Array_slice = Array.prototype.slice;
-var Object_hasOwnProperty = Object.prototype.hasOwnProperty;
 
 // Get whether an object is `Buffer`.
 //
 // Returns false if a running environment doesn't support `Buffer` type.
 var isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
+
+// Link to `Array.prototype.slice`.
+var slice = Array.prototype.slice;
+
+// Link to `Object.prototype.hasOwnProperty`.
+var hasOwnProperty = Object.prototype.hasOwnProperty;
 
 // Checks if a string is a well formatted integer with optional '-' sign.
 var reInt = /^-?\d+$/;
@@ -490,7 +497,7 @@ var escapeIdentifier = (function() {
           }
         }
 
-        if (Object_hasOwnProperty.call(IdentifierMap, p))
+        if (hasOwnProperty.call(IdentifierMap, p))
           s += p;
         else
           s += '"' + p + '"';
@@ -584,7 +591,7 @@ function escapeValueExplicit(value, explicitType) {
       if (typeof value === "boolean")
         return value ? "TRUE" : "FALSE";
 
-      if (typeof value === "string" && Object_hasOwnProperty.call(BoolMap, value))
+      if (typeof value === "string" && hasOwnProperty.call(BoolMap, value))
         return BoolMap[value];
 
       if (typeof value === "number") {
@@ -1174,7 +1181,7 @@ core.Node = qclass({
     var len = arguments.length;
 
     if (len > 1) {
-      b = Array_slice.call(arguments, 0);
+      b = slice.call(arguments, 0);
     }
     else if (len === 1) {
       if (!isArray(b))
@@ -1376,7 +1383,7 @@ core.Operator = qclass({
     if (!type)
       throw new CompileError("Operator.compileNode() - No operator specified.");
 
-    if (Object_hasOwnProperty.call(OperatorDefs, type)) {
+    if (hasOwnProperty.call(OperatorDefs, type)) {
       var op = OperatorDefs[type];
       var flags = op.flags;
 
@@ -1669,10 +1676,10 @@ core.Join = qclass({
 function Sort(column, direction, nulls) {
   var flags = 0|0;
 
-  if (direction && Object_hasOwnProperty.call(SortDirection, direction))
+  if (direction && hasOwnProperty.call(SortDirection, direction))
     flags |= SortDirection[direction];
 
-  if (nulls && Object_hasOwnProperty.call(SortNulls, nulls))
+  if (nulls && hasOwnProperty.call(SortNulls, nulls))
     flags |= SortNulls[nulls];
 
   // Doesn't call `Identifier` constructor.
@@ -1723,7 +1730,7 @@ core.Sort = qclass({
 
   setDirection: function(direction) {
     var flags = this._flags & ~(NodeFlags.kAscending | NodeFlags.kDescending);
-    if (Object_hasOwnProperty.call(SortDirection, direction))
+    if (hasOwnProperty.call(SortDirection, direction))
       this._flags = flags | SortDirection[direction];
     else
       throw new CompileError("Sort.setDirection() - Invalid argument '" + direction + "'.");
@@ -1750,7 +1757,7 @@ core.Sort = qclass({
 
   setNullsOrder: function(nulls) {
     var flags = this._flags & ~(NodeFlags.kNullsFirst | NodeFlags.kNullsLast);
-    if (Object_hasOwnProperty.call(SortNulls, nulls))
+    if (hasOwnProperty.call(SortNulls, nulls))
       this._flags = flags | SortNulls[nulls];
     else
       throw new CompileError("Sort.setDirection() - Invalid argument '" + nulls + "'.");
@@ -2140,7 +2147,7 @@ core.Query = qclass({
     // Handle multiple parameters.
     if (arguments.length > 1) {
       if (fields === null) {
-        this._fieldsOrReturning = Array_slice.call(arguments, 0);
+        this._fieldsOrReturning = slice.call(arguments, 0);
         return this;
       }
 
@@ -2690,7 +2697,7 @@ core.SelectQuery = qclass({
 
     if (arguments.length > 1) {
       if (groupBy === null) {
-        this._groupBy = Array_slice.call(arguments, 0);
+        this._groupBy = slice.call(arguments, 0);
       }
       else {
         for (var i = 0, len = arguments.length; i < len; i++)
@@ -2777,7 +2784,7 @@ core.InsertQuery = qclass({
         if (t)
           t += ", ";
 
-        if (Object_hasOwnProperty.call(object, k))
+        if (hasOwnProperty.call(object, k))
           t += escapeValue(object[k], typeMapping[k]);
         else
           t += "DEFAULT";
@@ -3044,56 +3051,56 @@ qsql.DELETE = DELETE;
 
 // \function AND(...)
 function AND(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("AND", values);
 };
 qsql.AND = AND;
 
 // \function OR(...)
 function OR(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("OR", values);
 };
 qsql.OR = OR;
 
 // \function EXCEPT(...)
 function EXCEPT(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Combine("EXCEPT", values);
 }
 qsql.EXCEPT = EXCEPT;
 
 // \function EXCEPT_ALL(...)
 function EXCEPT_ALL(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Combine("EXCEPT", values).ALL();
 }
 qsql.EXCEPT_ALL = EXCEPT_ALL;
 
 // \function INTERSECT(...)
 function INTERSECT(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Combine("INTERSECT", values);
 }
 qsql.INTERSECT = INTERSECT;
 
 // \function INTERSECT_ALL(...)
 function INTERSECT_ALL(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Combine("INTERSECT", values).ALL();
 }
 qsql.INTERSECT_ALL = INTERSECT_ALL;
 
 // \function UNION(...)
 function UNION(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Combine("UNION", values);
 }
 qsql.UNION = UNION;
 
 // \function UNION_ALL(...)
 function UNION_ALL(array) {
-  var values = isArray(array) ? array : Array_slice.call(arguments, 0);
+  var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Combine("UNION", values).ALL();
 }
 qsql.UNION_ALL = UNION_ALL;
@@ -3142,7 +3149,7 @@ qsql.GE = GE;
 // Add functions to `qsql`.
 functionsList.forEach(function(name) {
   var func = function(/* ... */) {
-    return new Func(name, Array_slice.call(arguments, 0));
+    return new Func(name, slice.call(arguments, 0));
   };
   qsql[name] = func;
 });
@@ -3150,7 +3157,7 @@ functionsList.forEach(function(name) {
 // Add aggregates to `qsql`.
 aggregatesList.forEach(function(name) {
   var func = function(/* ... */) {
-    return new Aggregate(name, Array_slice.call(arguments, 0));
+    return new Aggregate(name, slice.call(arguments, 0));
   };
   qsql[name] = func;
 });
