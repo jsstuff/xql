@@ -41,7 +41,7 @@
   },
 
   "dependencies": {
-    "qclass": "git://github.com/kobalicek/qclass.git#master"
+    "qclass": ">=0.1.0"
   },
 
   "devDependencies": {

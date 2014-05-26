@@ -190,6 +190,7 @@ var OperatorDefs = (function() {
   add("~*"     , kBinary | kCond           | kString                           ); // Match (I).
   add("!~"     , kBinary | kCond           | kString                           ); // Not Match.
   add("!~*"    , kBinary | kCond           | kString                           ); // Not Match (I).
+
   add("IS"     , kBinary | kCond           | kAnyType     | kInPlaceNot        ); // IS.
   add("AND"    , kBinary | kCond           | kBoolean     | kInPlaceNot        ); // Logical And.
   add("OR"     , kBinary | kCond           | kBoolean     | kInPlaceNot        ); // Logical Or.
@@ -402,8 +403,8 @@ function ValueError(message) {
   this.stack = e.stack || "";
 }
 qsql.ValueError = qclass({
-  extend: Error,
-  construct: ValueError
+  $extend: Error,
+  $construct: ValueError
 });
 
 // \class CompileError
@@ -416,8 +417,8 @@ function CompileError(message) {
   this.stack = e.stack || "";
 }
 qsql.CompileError = qclass({
-  extend: Error,
-  construct: CompileError
+  $extend: Error,
+  $construct: CompileError
 });
 
 // \function util.typeOf(value)
@@ -713,14 +714,14 @@ qsql.escapeValueExplicit = escapeValueExplicit;
 var escapeString = (function() {
   var re =  /[\0\b\f\n\r\t\\\']/g;
   var map = {
-    "\0"  : "\\x00",// Null character.
-    "\b"  : "\\b",  // Backspace.
-    "\f"  : "\\f",  // Form Feed.
-    "\n"  : "\\n",  // New Line.
-    "\r"  : "\\r",  // Carriage Return.
-    "\t"  : "\\t",  // Tag.
-    "\\"  : "\\\\", // Backslash.
-    "\'"  : "\\\'"  // Single Quote.
+    "\0": "\\x00",// Null character.
+    "\b": "\\b",  // Backspace.
+    "\f": "\\f",  // Form Feed.
+    "\n": "\\n",  // New Line.
+    "\r": "\\r",  // Carriage Return.
+    "\t": "\\t",  // Tag.
+    "\\": "\\\\", // Backslash.
+    "\'": "\\\'"  // Single Quote.
   };
 
   var fn = function(s) {
@@ -1088,7 +1089,7 @@ function Node(type, as) {
   this._as = as || "";
 }
 core.Node = qclass({
-  construct: Node,
+  $construct: Node,
 
   // \function Node.shouldWrap()
   //
@@ -1208,8 +1209,8 @@ function Raw(expression, bindings) {
   this._bindings = bindings || null;
 }
 core.Raw = qclass({
-  extend: Node,
-  construct: Raw,
+  $extend: Node,
+  $construct: Raw,
 
   shouldWrap: function(ctx) {
     return false;
@@ -1258,8 +1259,8 @@ function Unary(type, value) {
   this._value = value;
 }
 core.Unary = qclass({
-  extend: Node,
-  construct: Unary,
+  $extend: Node,
+  $construct: Unary,
 
   shouldWrap: function(ctx) {
     return false;
@@ -1312,8 +1313,8 @@ function Binary(left, type, right, as) {
   this._right = right;
 }
 core.Binary = qclass({
-  extend: Node,
-  construct: Binary,
+  $extend: Node,
+  $construct: Binary,
 
   getLeft: function() {
     return this._left;
@@ -1365,8 +1366,8 @@ function Operator(left, type, right, as) {
   this._right = right;
 }
 core.Operator = qclass({
-  extend: Binary,
-  construct: Operator,
+  $extend: Binary,
+  $construct: Operator,
 
   shouldWrap: function(ctx) {
     return false;
@@ -1434,8 +1435,8 @@ function Group(type, values) {
   this._values = values || [];
 }
 core.Group = qclass({
-  extend: Node,
-  construct: Group,
+  $extend: Node,
+  $construct: Group,
 
   push: function() {
     var values = this._values;
@@ -1456,8 +1457,8 @@ function Logical() {
   Group.apply(this, arguments);
 }
 core.Logical = qclass({
-  extend: Group,
-  construct: Logical,
+  $extend: Group,
+  $construct: Logical,
 
   shouldWrap: function(ctx) {
     return this._values.length > 1;
@@ -1501,8 +1502,8 @@ function ObjectOp(type, value) {
   this._value = value;
 }
 core.ObjectOp = qclass({
-  extend: Unary,
-  construct: ObjectOp,
+  $extend: Unary,
+  $construct: ObjectOp,
 
   shouldWrap: function(ctx) {
     return false;
@@ -1546,8 +1547,8 @@ function Identifier(value, as) {
   this._value = value;
 }
 core.Identifier = qclass({
-  extend: Node,
-  construct: Identifier,
+  $extend: Node,
+  $construct: Identifier,
 
   shouldWrap: function() {
     return false;
@@ -1585,8 +1586,8 @@ function Join(left, type, right, condition) {
   this._condition = condition;
 }
 core.Join = qclass({
-  extend: Binary,
-  construct: Join,
+  $extend: Binary,
+  $construct: Join,
 
   shouldWrap: function(ctx) {
     return false;
@@ -1690,8 +1691,8 @@ function Sort(column, direction, nulls) {
   this._value = column;
 }
 core.Sort = qclass({
-  extend: Identifier,
-  construct: Sort,
+  $extend: Identifier,
+  $construct: Sort,
 
   compileNode: function(ctx) {
     var value = this._value;
@@ -1819,8 +1820,8 @@ function Func(type, values) {
   this._values = values || [];
 }
 core.Func = qclass({
-  extend: Group,
-  construct: Func,
+  $extend: Group,
+  $construct: Func,
 
   shouldWrap: function() {
     return false;
@@ -1874,8 +1875,8 @@ function Aggregate() {
   Func.apply(this, arguments);
 }
 core.Aggregate = qclass({
-  extend: Func,
-  construct: Aggregate,
+  $extend: Func,
+  $construct: Aggregate,
 
   ALL: function(value) {
     return this.setFlag(NodeFlags.kAll, value);
@@ -1909,8 +1910,8 @@ function Value(type, value) {
   this._value = value;
 }
 core.Value = qclass({
-  extend: Node,
-  construct: Value,
+  $extend: Node,
+  $construct: Value,
 
   shouldWrap: function() {
     return false;
@@ -1942,8 +1943,8 @@ function ArrayValue(value) {
   this._value = value;
 }
 core.ArrayValue = qclass({
-  extend: Value,
-  construct: ArrayValue,
+  $extend: Value,
+  $construct: ArrayValue,
 
   shouldWrap: function() {
     return false;
@@ -1966,8 +1967,8 @@ function JsonValue(value) {
   this._value = value;
 }
 core.JsonValue = qclass({
-  extend: Value,
-  construct: JsonValue,
+  $extend: Value,
+  $construct: JsonValue,
 
   shouldWrap: function() {
     return false;
@@ -1983,8 +1984,8 @@ function Combine() {
   Group.apply(this, arguments);
 }
 core.Combine = qclass({
-  extend: Group,
-  construct: Combine,
+  $extend: Group,
+  $construct: Combine,
 
   shouldWrap: function(ctx) {
     return true;
@@ -2117,8 +2118,8 @@ function Query(type) {
   this._typeMapping = null;
 }
 core.Query = qclass({
-  extend: Node,
-  construct: Query,
+  $extend: Node,
+  $construct: Query,
 
   shouldWrap: function() {
     return true;
@@ -2495,8 +2496,8 @@ function SelectQuery() {
   this._having = null;
 }
 core.SelectQuery = qclass({
-  extend: Query,
-  construct: SelectQuery,
+  $extend: Query,
+  $construct: SelectQuery,
 
   compileNode: function(ctx) {
     var s = "SELECT";
@@ -2740,8 +2741,8 @@ function InsertQuery() {
   Query.call(this, "INSERT");
 }
 core.InsertQuery = qclass({
-  extend: Query,
-  construct: InsertQuery,
+  $extend: Query,
+  $construct: InsertQuery,
 
   compileNode: function(ctx) {
     var s = "";
@@ -2820,8 +2821,8 @@ function UpdateQuery() {
   Query.call(this, "UPDATE");
 }
 core.UpdateQuery = qclass({
-  extend: Query,
-  construct: UpdateQuery,
+  $extend: Query,
+  $construct: UpdateQuery,
 
   compileNode: function(ctx) {
     var s = "";
@@ -2911,8 +2912,8 @@ function DeleteQuery() {
   Query.call(this, "DELETE");
 }
 core.DeleteQuery = qclass({
-  extend: Query,
-  construct: DeleteQuery,
+  $extend: Query,
+  $construct: DeleteQuery,
 
   compileNode: function(ctx) {
     var s = "";

@@ -61,4 +61,4 @@ TO BE DOCUMENTED
 License
 -------
 
-QSql follows `Unlicense`.
+QSql follows [Unlicense](http://unlicense.org/).
