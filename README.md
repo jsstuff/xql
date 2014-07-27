@@ -3,10 +3,8 @@ QSql
 
 SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/qsql-interactive.html).
 
-Official Repository
--------------------
-
-https://github.com/kobalicek/qsql
+  * [Official Repository (kobalicek/qsql)](https://github.com/kobalicek/qsql)
+  * [Unlicense] (http://unlicense.org)
 
 Disclaimer
 ----------

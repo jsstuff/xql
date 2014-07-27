@@ -36,10 +36,6 @@
 
   "main": "qsql.js",
 
-  "engines": {
-    "node": "*"
-  },
-
   "dependencies": {
     "qclass": ">=0.1.0"
   },

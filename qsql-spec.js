@@ -1,3 +1,4 @@
+// QSql <https://github.com/kobalicek/qsql>
 "use strict";
 
 var assert = require("assert");

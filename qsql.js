@@ -1,3 +1,4 @@
+// QSql <https://github.com/kobalicek/qsql>
 (function(qclass, qsql) {
 "use strict";
 
