@@ -397,6 +397,12 @@ describe("QSql", function() {
       'UPDATE "x" SET "a" = 1, "b" = \'someString\' WHERE "id" = 1000 RETURNING "a", "b"');
   });
 
+  it("should test UPDATE ... with nested operators", function() {
+    shouldMatch(
+      UPDATE("x").VALUES({ a: OP(COL("a"), "/", OP(COL("b"), "+", 1)) }),
+      'UPDATE "x" SET "a" = "a" / ("b" + 1)');
+  });
+
   // DELETE.
   it("should test DELETE ... ", function() {
     shouldMatch(

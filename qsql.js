@@ -1379,6 +1379,10 @@ core.Operator = qclass({
     var s = "";
 
     var keyword = "";
+
+    var leftNode = this._left;
+    var rightNode = this._right;
+
     var left = "";
     var right = "";
 
@@ -1390,15 +1394,15 @@ core.Operator = qclass({
       var flags = op.flags;
 
       if (flags & OperatorFlags.kLeftValues) {
-        left = escapeValues(this._left);
+        left = escapeValues(leftNode);
       }
 
       if (flags & OperatorFlags.kRightValues) {
-        right = escapeValues(this._right);
+        right = escapeValues(rightNode);
       }
 
       // Check if the right operand is `NULL` and convert the operator to `IS`
-      // or `IS NOT` if necessary to be more comformant with SQL standard.
+      // or `IS NOT` if necessary to be more conforming with SQL standard.
       if (right === "NULL") {
         if (op.op === "=")
           op = OperatorDefs["IS"];
@@ -1410,11 +1414,16 @@ core.Operator = qclass({
       keyword = " " + type + " ";
     }
 
+
     if (!left)
-      left = escapeValue(this._left);
+      left = escapeValue(leftNode);
+    if (leftNode instanceof Binary)
+      left = "(" + left + ")";
 
     if (!right)
-      right = escapeValue(this._right);
+      right = escapeValue(rightNode);
+    if (rightNode instanceof Binary)
+      right = "(" + right + ")";
 
     s = left + keyword + right;
 
