@@ -1,6 +1,6 @@
 {
   "name": "qsql",
-  "version": "0.0.1",
+  "version": "0.1.0",
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
@@ -21,9 +21,9 @@
     "wrapper"
   ],
 
-  "homepage": "https://github.com/kobalicek/qsql",
+  "homepage": "https://github.com/jshq/qsql",
   "bugs": {
-    "url": "https://github.com/kobalicek/qsql/issues"
+    "url": "https://github.com/jshq/qsql/issues"
   },
 
   "contributors": [{
@@ -46,7 +46,7 @@
 
   "repository" : {
     "type": "git",
-    "url": "https://github.com/kobalicek/qsql.git"
+    "url": "https://github.com/jshq/qsql.git"
   },
 
   "scripts": {
