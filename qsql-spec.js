@@ -4,30 +4,35 @@
 var assert = require("assert");
 var qsql = require("./qsql");
 
-// Some useful shortcuts.
-var SELECT        = qsql.SELECT;
-var UPDATE        = qsql.UPDATE;
-var INSERT        = qsql.INSERT;
-var DELETE        = qsql.DELETE;
+// Queryable.
+var SELECT           = qsql.SELECT;
+var UPDATE           = qsql.UPDATE;
+var INSERT           = qsql.INSERT;
+var DELETE           = qsql.DELETE;
+var EXCEPT           = qsql.EXCEPT;
+var EXCEPT_ALL       = qsql.EXCEPT_ALL;
+var UNION            = qsql.UNION;
+var UNION_ALL        = qsql.UNION_ALL;
+var INTERSECT        = qsql.INTERSECT;
+var INTERSECT_ALL    = qsql.INTERSECT_ALL;
 
-var AND           = qsql.AND;
-var OR            = qsql.OR;
-var OP            = qsql.OP;
+// Query building.
+var COL              = qsql.COL;
+var VAL              = qsql.VAL;
+var ARRAY_VAL        = qsql.ARRAY_VAL;
+var JSON_VAL         = qsql.JSON_VAL;
 
-var EXCEPT        = qsql.EXCEPT;
-var EXCEPT_ALL    = qsql.EXCEPT_ALL;
-var UNION         = qsql.UNION;
-var UNION_ALL     = qsql.UNION_ALL;
-var INTERSECT     = qsql.INTERSECT;
-var INTERSECT_ALL = qsql.INTERSECT_ALL;
+// Operators/Functions
+var AND              = qsql.AND;
+var OR               = qsql.OR;
+var OP               = qsql.OP;
+var MIN              = qsql.MIN;
+var MAX              = qsql.MAX;
 
-var COL = qsql.COL;
-var MIN = qsql.MIN;
-var MAX = qsql.MAX;
-
+// Helpers.
 var escapeIdentifier = qsql.escapeIdentifier;
-var escapeValue = qsql.escapeValue;
-var substitute = qsql.substitute;
+var escapeValue      = qsql.escapeValue;
+var substitute       = qsql.substitute;
 
 function simplify(s) {
   return s.trim().replace(/\s+/g, " ");
@@ -356,6 +361,12 @@ describe("QSql", function() {
     shouldMatch(
       SELECT().FROM("x").OFFSET(10).LIMIT(20),
       'SELECT * FROM "x" OFFSET 10 LIMIT 20');
+  });
+
+  it("should test SELECT ... without using a table", function() {
+    shouldMatch(
+      SELECT([VAL(0).AS("a"), VAL("test").AS("b")]),
+      'SELECT 0 AS "a", \'test\' AS "b"');
   });
 
   // INSERT.

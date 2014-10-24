@@ -1943,12 +1943,12 @@ core.Aggregate = qclass({
 //
 // Value is an alternative to schema. If schema is provided it's unnecessary
 // to wrap values to `Value`.
-function Value(type, value) {
+function Value(type, value, as) {
   // Doesn't call `Node` constructor.
   this._type = type || "";
   this._flags = 0|0;
 
-  this._as = "";
+  this._as = as || "";
   this._value = value;
 }
 core.Value = qclass({
@@ -1960,7 +1960,13 @@ core.Value = qclass({
   },
 
   compileNode: function(ctx) {
-    return escapeValue(this._value, this._type);
+    var s = escapeValue(this._value, this._type);
+    var as = this._as;
+
+    if (as)
+      s += " AS " + escapeIdentifier(as);
+
+    return s;
   },
 
   getValue: function() {
@@ -1973,51 +1979,71 @@ core.Value = qclass({
   }
 });
 
+// \class core.PrimitiveValue
+//
+// Wraps a primitive data.
+function PrimitiveValue(value, as) {
+  // Doesn't call `Value` constructor.
+  this._type = "";
+  this._flags = 0|0;
+
+  this._as = as || "";
+  this._value = value;
+}
+core.PrimitiveValue = qclass({
+  $extend: Value,
+  $construct: PrimitiveValue
+});
+
 // \class core.ArrayValue
 //
 // Wraps ARRAY data.
-function ArrayValue(value) {
+function ArrayValue(value, as) {
   // Doesn't call `Value` constructor.
   this._type = "ARRAY";
   this._flags = 0|0;
 
-  this._as = "";
+  this._as = as || "";
   this._value = value;
 }
 core.ArrayValue = qclass({
   $extend: Value,
   $construct: ArrayValue,
 
-  shouldWrap: function() {
-    return false;
-  },
-
   compileNode: function(ctx) {
-    return escapeArray(this._value, false);
+    var s = escapeArray(this._value, false);
+    var as = this._as;
+
+    if (as)
+      s += " AS " + escapeIdentifier(as);
+
+    return s;
   }
 });
 
 // \class core.JsonValue
 //
 // Wraps JSON data.
-function JsonValue(value) {
+function JsonValue(value, as) {
   // Doesn't call `Value` constructor.
   this._type = "JSON";
   this._flags = 0|0;
 
-  this._as = "";
+  this._as = as || "";
   this._value = value;
 }
 core.JsonValue = qclass({
   $extend: Value,
   $construct: JsonValue,
 
-  shouldWrap: function() {
-    return false;
-  },
-
   compileNode: function(ctx) {
-    return escapeJson(this._value);
+    var s = escapeJson(this._value);
+    var as = this._as;
+
+    if (as)
+      s += " AS " + escapeIdentifier(as);
+
+    return s;
   }
 });
 
@@ -3193,6 +3219,24 @@ function COL(string, as) {
   return new Identifier(string, as);
 }
 qsql.COL = COL;
+
+// \function VAL(value, as)
+function VAL(value, as) {
+  return new PrimitiveValue(value, as);
+}
+qsql.VAL = VAL;
+
+// \function ARRAY_VAL(value, as)
+function ARRAY_VAL(value, as) {
+  return new ArrayValue(value, as);
+}
+qsql.ARRAY_VAL = ARRAY_VAL;
+
+// \function JSON_VAL(value, as)
+function JSON_VAL(value, as) {
+  return new ArrayValue(value, as);
+}
+qsql.JSON_VAL = JSON_VAL;
 
 // \function SORT(column, direction, nulls)
 function SORT(column, direction, nulls) {
