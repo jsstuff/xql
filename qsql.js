@@ -1,4 +1,4 @@
-// QSql <https://github.com/kobalicek/qsql>
+// QSql <https://github.com/jshq/qsql>
 (function(qclass, qsql) {
 "use strict";
 
@@ -451,13 +451,14 @@ util.typeOf = typeOf;
 // \internal
 var toCamelCase = (function() {
   var re = /_[a-z]/g;
-  var fn = function(s) {
+
+  function fn(s) {
     return s.charAt(1);
-  };
+  }
 
   function toCamelCase(s) {
     return s.toLowerCase().replace(re, fn);
-  };
+  }
 
   return toCamelCase;
 })();
@@ -725,11 +726,11 @@ var escapeString = (function() {
     "\'": "\\\'"  // Single Quote.
   };
 
-  var fn = function(s) {
+  function fn(s) {
     if (s.charCodeAt(0) === 0)
       throw new CompileError("String can't contain NULL character.");
     return map[s];
-  };
+  }
 
   function escapeString(value) {
     var oldLength = value.length;
@@ -743,7 +744,7 @@ var escapeString = (function() {
     // String doesn't contain any character that has to be escaped. We can
     // use simply '...'.
     return "'" + value + "'";
-  };
+  }
 
   return escapeString;
 })();
@@ -761,13 +762,13 @@ function escapeNumber(value) {
   }
 
   return value.toString();
-};
+}
 qsql.escapeNumber = escapeNumber;
 
 // \function escapeBuffer(value)
 function escapeBuffer(value) {
   return "E'\\x" + value.toString("hex") + "'";
-};
+}
 qsql.escapeBuffer = escapeBuffer;
 
 // \function escapeValues(value)
@@ -787,7 +788,7 @@ function escapeValues(value) {
   }
 
   return "(" + s + ")";
-};
+}
 qsql.escapeValues = escapeValues;
 
 // \function escapeArray(value, isNested)
@@ -814,13 +815,13 @@ function escapeArray(value, isNested) {
     return "[" + s + "]";
   else
     return "ARRAY[" + s + "]";
-};
+}
 qsql.escapeArray = escapeArray;
 
 // \function escapeJson(value)
 function escapeJson(value) {
   return escapeString(JSON.stringify(value));
-};
+}
 qsql.escapeJson = escapeJson;
 
 // \function substitute(query, bindings)
@@ -1099,11 +1100,33 @@ core.Node = qclass({
     throw new CompileError("Node(" + this._type + ").shouldWrap() - Must be reimplemented.");
   },
 
+  // \function Query.compileQuery()
+  //
+  // Compile the whole by using `compileNode()` and add a semicolon ';' at the
+  // end.
+  //
+  // \note This function is `null` by default and only added by nodes which can
+  // be executed. Use `Node.canExecute()` method to check whether the node can
+  // actually be executed, i.e. compiles into an executable SQL.
+  compileQuery: null,
+
   // \function Node.compileNode()
   //
   // Compile the node.
   compileNode: function(ctx) {
     throw new CompileError("Node(" + this._type + ").compileNode() - Must be reimplemented.");
+  },
+
+  // \function Node.canExecute()
+  //
+  // Get whether the compiled node can be executed, i.e. the node implements
+  // `compileQuery()`, which returns the query combined with a semicolon ";".
+  //
+  // \note There is not a base class for nodes which can execute, this getter
+  // uses reflection; it dynamically checks for presence of `compileQuery` and
+  // returns `true` if found.
+  canExecute: function() {
+    return typeof this.compileQuery === "function";
   },
 
   getType: function() {
@@ -1196,6 +1219,13 @@ core.Node = qclass({
     return new Operator(this, "IN", b);
   }
 });
+
+// \internal
+//
+// Implementation of `Node.compileQuery()`.
+function Node$compileQuery(ctx) {
+  return this.compileNode(ctx) + ";";
+}
 
 // \class core.Raw
 //
@@ -2001,6 +2031,8 @@ core.Combine = qclass({
     return true;
   },
 
+  compileQuery: Node$compileQuery,
+
   compileNode: function(ctx) {
     var s = "";
 
@@ -2135,14 +2167,6 @@ core.Query = qclass({
     return true;
   },
 
-  // \function Query.compileQuery()
-  //
-  // Compile the whole by using `compileNode()` and add a semicolon ';' at the
-  // end.
-  compileQuery: function(ctx) {
-    return this.compileNode(ctx) + ";";
-  },
-
   getTypeMapping: function() {
     return this._typeMapping;
   },
@@ -2154,6 +2178,7 @@ core.Query = qclass({
 
   _addFieldsOrReturning: function(defs) {
     var fields = this._fieldsOrReturning;
+    var i, len;
 
     // Handle multiple parameters.
     if (arguments.length > 1) {
@@ -2162,7 +2187,7 @@ core.Query = qclass({
         return this;
       }
 
-      for (var i = 0, len = arguments.length; i < len; i++)
+      for (i = 0, len = arguments.length; i < len; i++)
         fields.push(arguments[i]);
       return this;
     }
@@ -2178,7 +2203,7 @@ core.Query = qclass({
           return this;
         }
 
-        for (var i = 0, len = defs.length; i < len; i++)
+        for (i = 0, len = defs.length; i < len; i++)
           fields.push(defs[i]);
         return this;
       }
@@ -2285,7 +2310,7 @@ core.Query = qclass({
     do {
       arg = args[i];
       this._fromOrUsing = new Join(left, "", arg);
-    } while (++i < len)
+    } while (++i < len);
 
     return this;
   },
@@ -2428,7 +2453,7 @@ core.Query = qclass({
       }
     }
     else {
-      var object = data;
+      object = data;
       values.push(object);
 
       for (k in object)
@@ -2508,6 +2533,8 @@ function SelectQuery() {
 core.SelectQuery = qclass({
   $extend: Query,
   $construct: SelectQuery,
+
+  compileQuery: Node$compileQuery,
 
   compileNode: function(ctx) {
     var s = "SELECT";
@@ -2705,13 +2732,14 @@ core.SelectQuery = qclass({
   // \function Query.GROUP_BY(...)
   GROUP_BY: function(arg) {
     var groupBy = this._groupBy;
+    var i, len;
 
     if (arguments.length > 1) {
       if (groupBy === null) {
         this._groupBy = slice.call(arguments, 0);
       }
       else {
-        for (var i = 0, len = arguments.length; i < len; i++)
+        for (i = 0, len = arguments.length; i < len; i++)
           groupBy.push(arguments[i]);
       }
     }
@@ -2721,7 +2749,7 @@ core.SelectQuery = qclass({
         this._groupBy = arg;
       }
       else {
-        for (var i = 0, len = arg.length; i < len; i++)
+        for (i = 0, len = arg.length; i < len; i++)
           groupBy.push(arg[i]);
       }
     }
@@ -2753,6 +2781,8 @@ function InsertQuery() {
 core.InsertQuery = qclass({
   $extend: Query,
   $construct: InsertQuery,
+
+  compileQuery: Node$compileQuery,
 
   compileNode: function(ctx) {
     var s = "";
@@ -2833,6 +2863,8 @@ function UpdateQuery() {
 core.UpdateQuery = qclass({
   $extend: Query,
   $construct: UpdateQuery,
+
+  compileQuery: Node$compileQuery,
 
   compileNode: function(ctx) {
     var s = "";
@@ -2925,6 +2957,8 @@ core.DeleteQuery = qclass({
   $extend: Query,
   $construct: DeleteQuery,
 
+  compileQuery: Node$compileQuery,
+
   compileNode: function(ctx) {
     var s = "";
     var t = "";
@@ -3001,13 +3035,12 @@ qsql.SELECT = SELECT;
 function INSERT(/* ... */) {
   var q = new InsertQuery();
 
-  var i = 0;
-  var len = arguments.length;
+  var i = 0, len = arguments.length;
+  var arg;
 
   // If the first parameter is a string or an identifier it is a table name.
   if (i < len) {
-    var arg = arguments[i];
-
+    arg = arguments[i];
     if (typeof arg === "string" || arg instanceof Identifier) {
       q._table = arg;
       i++;
@@ -3016,7 +3049,7 @@ function INSERT(/* ... */) {
 
   // Next arguments can contain data (array/object) to insert.
   while (i < len) {
-    var arg = arguments[i++];
+    arg = arguments[i++];
     q.VALUES(arg);
   }
 
@@ -3028,13 +3061,12 @@ qsql.INSERT = INSERT;
 function UPDATE(/* ... */) {
   var q = new UpdateQuery();
 
-  var i = 0;
-  var len = arguments.length;
+  var i = 0, len = arguments.length;
+  var arg;
 
   // If the first parameter is a string or an identifier it is a table name.
   if (i < len) {
-    var arg = arguments[i];
-
+    arg = arguments[i];
     if (typeof arg === "string" || arg instanceof Identifier) {
       q._table = arg;
       i++;
@@ -3043,7 +3075,7 @@ function UPDATE(/* ... */) {
 
   // Next argument can contain data to update.
   if (i < len) {
-    var arg = arguments[i];
+    arg = arguments[i];
     q.VALUES(arg);
   }
 
@@ -3064,14 +3096,14 @@ qsql.DELETE = DELETE;
 function AND(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("AND", values);
-};
+}
 qsql.AND = AND;
 
 // \function OR(...)
 function OR(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("OR", values);
-};
+}
 qsql.OR = OR;
 
 // \function EXCEPT(...)
@@ -3119,13 +3151,13 @@ qsql.UNION_ALL = UNION_ALL;
 // \function COL(string, as)
 function COL(string, as) {
   return new Identifier(string, as);
-};
+}
 qsql.COL = COL;
 
 // \function SORT(column, direction, nulls)
 function SORT(column, direction, nulls) {
   return new Sort(column, direction, nulls);
-};
+}
 qsql.SORT = SORT;
 
 // \function OP(...)
@@ -3139,16 +3171,16 @@ function OP(a, op, b) {
   else if (len === 3)
     return new Operator(a, op, b);
   else
-    throw new CompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed).")
-};
+    throw new CompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed).");
+}
 qsql.OP = OP;
 
-function EQ(a, b) { return OP(a, "=" , b); };
-function NE(a, b) { return OP(a, "!=", b); };
-function LT(a, b) { return OP(a, "<" , b); };
-function LE(a, b) { return OP(a, "<=", b); };
-function GT(a, b) { return OP(a, ">" , b); };
-function GE(a, b) { return OP(a, ">=", b); };
+function EQ(a, b) { return OP(a, "=" , b); }
+function NE(a, b) { return OP(a, "!=", b); }
+function LT(a, b) { return OP(a, "<" , b); }
+function LE(a, b) { return OP(a, "<=", b); }
+function GT(a, b) { return OP(a, ">" , b); }
+function GE(a, b) { return OP(a, ">=", b); }
 
 qsql.EQ = EQ;
 qsql.NE = NE;

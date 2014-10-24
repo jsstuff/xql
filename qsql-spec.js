@@ -1,22 +1,25 @@
-// QSql <https://github.com/kobalicek/qsql>
+// QSql <https://github.com/jshq/qsql>
 "use strict";
 
 var assert = require("assert");
 var qsql = require("./qsql");
 
 // Some useful shortcuts.
-var SELECT = qsql.SELECT;
-var UPDATE = qsql.UPDATE;
-var INSERT = qsql.INSERT;
-var DELETE = qsql.DELETE;
+var SELECT        = qsql.SELECT;
+var UPDATE        = qsql.UPDATE;
+var INSERT        = qsql.INSERT;
+var DELETE        = qsql.DELETE;
 
-var AND = qsql.AND;
-var OR = qsql.OR;
-var OP = qsql.OP;
+var AND           = qsql.AND;
+var OR            = qsql.OR;
+var OP            = qsql.OP;
 
-var EXCEPT = qsql.EXCEPT;
-var UNION = qsql.UNION;
-var INTERSECT = qsql.INTERSECT;
+var EXCEPT        = qsql.EXCEPT;
+var EXCEPT_ALL    = qsql.EXCEPT_ALL;
+var UNION         = qsql.UNION;
+var UNION_ALL     = qsql.UNION_ALL;
+var INTERSECT     = qsql.INTERSECT;
+var INTERSECT_ALL = qsql.INTERSECT_ALL;
 
 var COL = qsql.COL;
 var MIN = qsql.MIN;
@@ -414,5 +417,42 @@ describe("QSql", function() {
     shouldMatch(
       DELETE().FROM("x").WHERE(COL("a"), "<=", 42),
       'DELETE FROM "x" WHERE "a" <= 42');
+  });
+
+  // Combined query (UNION, INTERSECT, EXCEPT).
+  it("should test UNION ... ", function() {
+    shouldMatch(
+      UNION(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
+      'SELECT "a" FROM "x" UNION SELECT "a" FROM "y"');
+  });
+
+  it("should test UNION ALL ... ", function() {
+    shouldMatch(
+      UNION_ALL(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
+      'SELECT "a" FROM "x" UNION ALL SELECT "a" FROM "y"');
+  });
+
+  it("should test INTERSECT ... ", function() {
+    shouldMatch(
+      INTERSECT(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
+      'SELECT "a" FROM "x" INTERSECT SELECT "a" FROM "y"');
+  });
+
+  it("should test INTERSECT ALL ... ", function() {
+    shouldMatch(
+      INTERSECT_ALL(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
+      'SELECT "a" FROM "x" INTERSECT ALL SELECT "a" FROM "y"');
+  });
+
+  it("should test EXCEPT ... ", function() {
+    shouldMatch(
+      EXCEPT(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
+      'SELECT "a" FROM "x" EXCEPT SELECT "a" FROM "y"');
+  });
+
+  it("should test EXCEPT ALL ... ", function() {
+    shouldMatch(
+      EXCEPT_ALL(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
+      'SELECT "a" FROM "x" EXCEPT ALL SELECT "a" FROM "y"');
   });
 });
