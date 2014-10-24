@@ -420,39 +420,79 @@ describe("QSql", function() {
   });
 
   // Combined query (UNION, INTERSECT, EXCEPT).
-  it("should test UNION ... ", function() {
+  it("should test ... UNION ...", function() {
     shouldMatch(
       UNION(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
       'SELECT "a" FROM "x" UNION SELECT "a" FROM "y"');
   });
 
-  it("should test UNION ALL ... ", function() {
+  it("should test ... UNION ALL ... ", function() {
     shouldMatch(
       UNION_ALL(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
       'SELECT "a" FROM "x" UNION ALL SELECT "a" FROM "y"');
   });
 
-  it("should test INTERSECT ... ", function() {
+  it("should test ... INTERSECT ... ", function() {
     shouldMatch(
       INTERSECT(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
       'SELECT "a" FROM "x" INTERSECT SELECT "a" FROM "y"');
   });
 
-  it("should test INTERSECT ALL ... ", function() {
+  it("should test ... INTERSECT ALL ... ", function() {
     shouldMatch(
       INTERSECT_ALL(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
       'SELECT "a" FROM "x" INTERSECT ALL SELECT "a" FROM "y"');
   });
 
-  it("should test EXCEPT ... ", function() {
+  it("should test ... EXCEPT ... ", function() {
     shouldMatch(
       EXCEPT(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
       'SELECT "a" FROM "x" EXCEPT SELECT "a" FROM "y"');
   });
 
-  it("should test EXCEPT ALL ... ", function() {
+  it("should test ... EXCEPT ALL ... ", function() {
     shouldMatch(
       EXCEPT_ALL(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
       'SELECT "a" FROM "x" EXCEPT ALL SELECT "a" FROM "y"');
+  });
+
+  // Combined query with ORDER BY and/or OFFSET/LIMIT.
+  it("should test ... UNION ... ORDER BY ... OFFSET ... LIMIT ...", function() {
+    shouldMatch(
+      UNION(SELECT("a").FROM("x"), SELECT("a").FROM("y")).ORDER_BY("a").OFFSET(10).LIMIT(10),
+      'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" ORDER BY "a" OFFSET 10 LIMIT 10');
+  });
+
+  // Multiple combined queries in the same group.
+  it("should test ... UNION ... UNION ...", function() {
+    shouldMatch(
+      UNION(
+        SELECT("a").FROM("x"),
+        SELECT("a").FROM("y"),
+        SELECT("a").FROM("z")),
+      'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" UNION SELECT "a" FROM "z"');
+  });
+
+  // Multiple combined queries in nested groups.
+  it("should test ... UNION (... UNION ...)", function() {
+    shouldMatch(
+      UNION(
+        SELECT("a").FROM("x"),
+        UNION(
+          SELECT("a").FROM("y"),
+          SELECT("a").FROM("z"))
+      ),
+      'SELECT "a" FROM "x" UNION (SELECT "a" FROM "y" UNION SELECT "a" FROM "z")');
+  });
+
+  it("should test ... UNION (... UNION ...)", function() {
+    shouldMatch(
+      UNION(
+        UNION(
+          SELECT("a").FROM("x"),
+          SELECT("a").FROM("y")),
+        SELECT("a").FROM("z")
+      ),
+      '(SELECT "a" FROM "x" UNION SELECT "a" FROM "y") UNION SELECT "a" FROM "z"');
   });
 });

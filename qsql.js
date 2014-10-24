@@ -1247,6 +1247,8 @@ core.Raw = qclass({
     return false;
   },
 
+  compileQuery: Node$compileQuery,
+
   compileNode: function(ctx) {
     var s = this._value;
 
@@ -2019,62 +2021,6 @@ core.JsonValue = qclass({
   }
 });
 
-// \class core.Combine
-function Combine() {
-  Group.apply(this, arguments);
-}
-core.Combine = qclass({
-  $extend: Group,
-  $construct: Combine,
-
-  shouldWrap: function(ctx) {
-    return true;
-  },
-
-  compileQuery: Node$compileQuery,
-
-  compileNode: function(ctx) {
-    var s = "";
-
-    var type = this._type;
-    var flags = this._flags;
-
-    if (flags & NodeFlags.kAllOrDistinct) {
-      if (flags & NodeFlags.kDistinct)
-        type += " DISTINCT";
-      else
-        type += " ALL";
-    }
-
-    var values = this._values;
-    var separator = " " + type + " ";
-
-    for (var i = 0, len = values.length; i < len; i++) {
-      var value = values[i];
-      var compiled = escapeValue(value);
-
-      if (s)
-        s += separator;
-
-      // Wrap if the value if it's not a query.
-      if (!(value instanceof Query))
-        s += "(" + compiled + ")";
-      else
-        s += compiled;
-    }
-
-    return s;
-  },
-
-  ALL: function(value) {
-    return this.setFlag(NodeFlags.kAll, value);
-  },
-
-  DISTINCT: function(value) {
-    return this.setFlag(NodeFlags.kDistinct, value);
-  }
-});
-
 // \class core.Query
 //
 // Query implements a generic interface used by:
@@ -2101,6 +2047,9 @@ function Query(type) {
   this._flags = 0|0;
 
   this._as = "";
+
+  this._values = null;
+  this._columns = null;
 
   // Used by:
   //   - `SELECT` - `SELECT ...`.
@@ -2148,9 +2097,6 @@ function Query(type) {
   // not SelectQuery.
   this._offset = 0;
   this._limit = 0;
-
-  this._values = null;
-  this._columns = null;
 
   // Optional type mapping having keys (columns) and their value types.
   //
@@ -3016,6 +2962,100 @@ core.DeleteQuery = qclass({
   RETURNING: Query.prototype._addFieldsOrReturning
 });
 
+// \class core.CombinedQuery
+function CombinedQuery() {
+  Group.apply(this, arguments);
+
+  // Make these members use the same layout as `Query` so JS engine can use the
+  // same hidden class for `CombinedQuery`.
+  this._columns = null;
+  this._fieldsOrReturning = null;
+  this._table = null;
+  this._fromOrUsing = null;
+  this._where = null;
+
+  // These are actually used.
+  this._orderBy = null;
+  this._offset = 0;
+  this._limit = 0;
+
+  // TODO: Not used, I think when a type-mapping is set it should set it in all
+  // Nodes supporting type mapping.
+  this._typeMapping = null;
+}
+core.CombinedQuery = qclass({
+  $extend: Group,
+  $construct: CombinedQuery,
+
+  shouldWrap: function(ctx) {
+    return true;
+  },
+
+  compileQuery: Node$compileQuery,
+
+  compileNode: function(ctx) {
+    var s = "";
+
+    var type = this._type;
+    var flags = this._flags;
+
+    if (flags & NodeFlags.kAllOrDistinct) {
+      if (flags & NodeFlags.kDistinct)
+        type += " DISTINCT";
+      else
+        type += " ALL";
+    }
+
+    var values = this._values;
+    var separator = " " + type + " ";
+
+    for (var i = 0, len = values.length; i < len; i++) {
+      var value = values[i];
+      var compiled = escapeValue(value);
+
+      if (s)
+        s += separator;
+
+      // Wrap if the value if it's not a query.
+      if (!(value instanceof Query))
+        s += "(" + compiled + ")";
+      else
+        s += compiled;
+    }
+
+    // Compile `ORDER BY ...`.
+    var orderBy = this._orderBy;
+    if (orderBy && orderBy.length) {
+      s += this._compileOrderBy(ctx, " ORDER BY ", orderBy);
+    }
+
+    // Compile `OFFSET ...` / `LIMIT ...`.
+    var offset = this._offset;
+    var limit = this._limit;
+
+    if (offset || limit) {
+      s += " " + this._compileOffsetLimit(ctx, offset, limit);
+    }
+
+    return s;
+  },
+
+  _compileOrderBy: SelectQuery.prototype._compileOrderBy,
+  _compileOffsetLimit: Query.prototype._compileOffsetLimit,
+
+  ALL: function(value) {
+    return this.setFlag(NodeFlags.kAll, value);
+  },
+
+  DISTINCT: function(value) {
+    return this.setFlag(NodeFlags.kDistinct, value);
+  },
+
+  ORDER_BY: Query.prototype.ORDER_BY,
+  OFFSET: Query.prototype.OFFSET,
+  LIMIT: Query.prototype.LIMIT
+});
+
 // \function RAW(string:String, bindings:Array?)
 function RAW(string, bindings) {
   return new Raw(string, bindings);
@@ -3109,42 +3149,42 @@ qsql.OR = OR;
 // \function EXCEPT(...)
 function EXCEPT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Combine("EXCEPT", values);
+  return new CombinedQuery("EXCEPT", values);
 }
 qsql.EXCEPT = EXCEPT;
 
 // \function EXCEPT_ALL(...)
 function EXCEPT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Combine("EXCEPT", values).ALL();
+  return new CombinedQuery("EXCEPT", values).ALL();
 }
 qsql.EXCEPT_ALL = EXCEPT_ALL;
 
 // \function INTERSECT(...)
 function INTERSECT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Combine("INTERSECT", values);
+  return new CombinedQuery("INTERSECT", values);
 }
 qsql.INTERSECT = INTERSECT;
 
 // \function INTERSECT_ALL(...)
 function INTERSECT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Combine("INTERSECT", values).ALL();
+  return new CombinedQuery("INTERSECT", values).ALL();
 }
 qsql.INTERSECT_ALL = INTERSECT_ALL;
 
 // \function UNION(...)
 function UNION(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Combine("UNION", values);
+  return new CombinedQuery("UNION", values);
 }
 qsql.UNION = UNION;
 
 // \function UNION_ALL(...)
 function UNION_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Combine("UNION", values).ALL();
+  return new CombinedQuery("UNION", values).ALL();
 }
 qsql.UNION_ALL = UNION_ALL;
 
