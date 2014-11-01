@@ -287,6 +287,10 @@ describe("QSql", function() {
 
   it("should test SELECT ... JOIN ...", function() {
     shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x", "y"),
+      'SELECT "a", "b", "c" FROM "x" CROSS JOIN "y"');
+
+    shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").CROSS_JOIN("y"),
       'SELECT "a", "b", "c" FROM "x" CROSS JOIN "y"');
   });

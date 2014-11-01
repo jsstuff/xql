@@ -8,6 +8,16 @@ var core = qsql.core = {};
 // \namespace util
 var util = qsql.util = {};
 
+var misc = qsql.misc = {};
+
+// qsql.misc.VERSION
+//
+// Version string of `qsql` library as "major.minor.patch".
+//
+// Note: Version information has been put into the `qsql.misc` namespace to
+// prevent clash with SQL builder interface exported in the root namespace.
+qsql.misc.VERSION = "0.2.0";
+
 // \internal
 // \{
 
@@ -1229,7 +1239,7 @@ function Node$compileQuery(ctx) {
 
 // \class core.Raw
 //
-// Wraps RAW query.
+// Raw SQL expression.
 function Raw(expression, bindings) {
   // Doesn't call `Node` constructor.
   this._type = "RAW";
@@ -2128,7 +2138,7 @@ function Query(type) {
   //
   // Type mapping is sometimes important when it comes to type ambiguity. For
   // example when using PostgreSQL there is ambiguity when escaping `Array`.
-  // It can be escaped by using Postgres `ARRAY[] or {}` or as JSON `[]`.
+  // It can be escaped by using PostgreSQL `ARRAY[] or {}` or as JSON `[]`.
   this._typeMapping = null;
 }
 core.Query = qclass({
@@ -2259,6 +2269,7 @@ core.Query = qclass({
     if (isArray(arg)) {
       args = arg;
       len = args.length;
+      arg = args[0];
     }
     else {
       args = arguments;
@@ -2270,9 +2281,9 @@ core.Query = qclass({
 
     var left = this._fromOrUsing;
     if (left !== null)
-      this._fromOrUsing = new Join(left, "", arg);
+      this._fromOrUsing = left = new Join(left, "", arg);
     else
-      this._fromOrUsing = arg;
+      this._fromOrUsing = left = arg;
 
     if (len <= 1)
       return this;
@@ -2281,9 +2292,10 @@ core.Query = qclass({
     var i = 1;
     do {
       arg = args[i];
-      this._fromOrUsing = new Join(left, "", arg);
+      left = new Join(left, "", arg);
     } while (++i < len);
 
+    this._fromOrUsing = left;
     return this;
   },
 
@@ -2471,10 +2483,21 @@ core.Query = qclass({
     if (orderBy === null)
       orderBy = this._orderBy = [];
 
-    if (isArray(column))
-      orderBy.push.apply(orderBy, column);
-    else
+    if (isArray(column)) {
+      var columns = column;
+      var len = columns.length;
+
+      if (!len)
+        return this;
+
+      for (var i = 0; i < len; i++) {
+        column = columns[i];
+        orderBy.push(new Sort(column, direction, nulls));
+      }
+    }
+    else {
       orderBy.push(new Sort(column, direction, nulls));
+    }
 
     return this;
   },
@@ -2600,10 +2623,10 @@ core.SelectQuery = qclass({
     var s = "";
 
     for (var i = 0, len = orderBy.length; i < len; i++) {
-      var order = orderBy[i];
+      var sort = orderBy[i];
       if (s)
         s += ", ";
-      s += order.compileNode();
+      s += sort.compileNode();
     }
 
     return prefix + s;
