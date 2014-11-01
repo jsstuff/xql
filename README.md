@@ -10,7 +10,7 @@ SQL builder and utilities library designed to work with Node.js and PostgreSQL, 
 Disclaimer
 ----------
 
-This library is used in production, but is not 100% complete. It has been designed for PostgreSQL, but there are plans to include other DB dialects and WebSQL. Use at your own risk and be prepared for some minor API changes in the future.
+This library is used in production, but doesn't contain all possible features of DB engines (currently only PG). Be prepared for some minor API changes before the library reaches v1.0.
 
 
 Introduction
