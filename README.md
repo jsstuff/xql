@@ -27,7 +27,7 @@ There are several reasons why QSql has been developed:
   5. Construction of SQL query doesn't require writing RAW expressions, but it should be easy to use RAW expressions in case they are needed
   6. Ability to queue multiple queries in a single instance of a query builder
 
-There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for QSql is Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. QSql is just a query builder and will stay just a query builder - it has a very minimal support for schemas that can be used to describe column types for serialization, but tjey are not used to describe anything else. QSql is not an ORM and this functionality is not planned for any QSql release.
+There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for QSql is Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. QSql is just a query builder and will stay just a query builder - it has a very minimal support for schemas that can be used to describe column types for serialization, but they are not used to describe anything else. QSql is not an ORM and this functionality is not planned for any QSql release.
 
 QSql itself is just a query builder, it doesn't talk to a database. There is another project in preparation that will bridge QSql and node.js SQL drivers, but since there are many libraries that can be used (including libraries for SQL connection pooling) there was no work done to create another library for this purpose.
 
@@ -39,9 +39,10 @@ Overview
 
 QSql library is structured as follows:
 
-  - `qsql` - Main API and high-level SQL builder interface (both uppercased and lowercased).
-  - `qsql.core` - SQL expression tree; contains `qsql.Node` and classes that inherit from it.
+  - `qsql` - Main API and high-level SQL builder interface (both UPPERCASED and camelCased versions of the same APIs).
+  - `qsql.core` - SQL expression tree; contains `qsql.core.Node` and classes that inherit from it.
   - `qsql.util` - SQL utilities used by QSql made public.
+  - `qsql.misc` - Contains `VERSION` key in a `"major.minor.patch"` form.
 
 QSql contains the following Error classes:
 
@@ -50,7 +51,7 @@ QSql contains the following Error classes:
 
 QSql contains the following SQL nodes (low-level):
 
-  - `qsql.core.Node` - Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether any object is a `qsql.Node`.
+  - `qsql.core.Node` - Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `qsql.core.Node`.
   - `qsql.core.Raw` - Raw SQL expression.
   - `qsql.core.Unary` - Unary SQL node (can contain a single child).
   - `qsql.core.Binary` - Binary SQL node (can contain two children, left and right).
@@ -76,10 +77,10 @@ QSql contains the following SQL nodes (low-level):
 
 QSql contains the following SQL builder concepts (high-level)
 
-  - `qsql.SELECT(...)` - Create a `qsql.core.SelectQuery` node and pass optional arguments to the `SelectQuery.FIELD(...)` method. 
-  - `qsql.INSERT(...)` - Create a `qsql.core.InsertQuery` node and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method.
-  - `qsql.UPDATE(...)` - Create a `qsql.core.UpdateQuery` node and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method.
-  - `qsql.DELETE(...)` - Create a `qsql.core.DeleteQuery` node and use an optional first argument as a table name.
+  - `qsql.SELECT(...)` - Create a `qsql.core.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method. 
+  - `qsql.INSERT(...)` - Create a `qsql.core.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method.
+  - `qsql.UPDATE(...)` - Create a `qsql.core.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method.
+  - `qsql.DELETE(...)` - Create a `qsql.core.DeleteQuery` and use an optional first argument as a table name.
 
   - `qsql.EXCEPT(...)` - Create a `qsql.core.CombinedQuery` describing `EXCEPT` expression.
   - `qsql.EXCEPT_ALL(...)` - Create a `qsql.core.CombinedQuery` describing `EXCEPT ALL` query.
@@ -96,27 +97,27 @@ QSql contains the following SQL builder concepts (high-level)
   - `qsql.AND(...)` - Create a `qsql.core.Logical` expression describing `AND` expression.
   - `qsql.OR(...)` - Create a `qsql.core.Logical` expression describing `OR` expression.
 
-  - `qsql.COL(...)` - Create a `qsql.core.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`.
-  - `qsql.VAL(...)` - Create a `qsql.core.PrimitiveValue` wrapping a primitive value like null, boolean, number, or string. 
+  - `qsql.COL(...)` - Create a `qsql.core.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`).
+  - `qsql.VAL(...)` - Create a `qsql.core.PrimitiveValue` wrapping a primitive value like `null`, `boolean`, `number`, or `string`. 
   - `qsql.ARRAY_VAL(...)` - Create a `qsql.core.ArrayValue` wrapping an array. 
   - `qsql.JSON_VAL(...)` - Create a `qsql.core.ArrayValue` wrapping an object (JSON).
 
-  - `qsql.OP(...)` - Create a `qsql.core.Unary` or `qsql.core.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to desctibe a binary expression. For example `qsql.OP(qsql.COL("salary"), "+", 500).AS("estimatedSalary")` can be used to describe `+` operator. Please note that `AND` and `OR` operators should always use `qsql.core.Logical` as QSql can construct queries containing multiple `AND` and `OR` leaves.
+  - `qsql.OP(...)` - Create a `qsql.core.Unary` or `qsql.core.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to desctibe a binary expression. For example `qsql.OP(qsql.COL("salary"), "+", 500).AS("estimatedSalary")` can be used to describe an expression like `"salary" + 500 AS "estimatedSalary"`. Please note that `AND` and `OR` operators should always use `qsql.core.Logical` as QSql can construct queries containing multiple `AND` and `OR` leaves.
 
-  - `qsql.EQ(a, b)` - Create a `qsql.core.Binary` describing `a = b` expression.
-  - `qsql.NE(a, b)` - Create a `qsql.core.Binary` describing `a <> b` expression.
-  - `qsql.LT(a, b)` - Create a `qsql.core.Binary` describing `a < b` expression.
-  - `qsql.LE(a, b)` - Create a `qsql.core.Binary` describing `a <= b` expression.
-  - `qsql.GT(a, b)` - Create a `qsql.core.Binary` describing `a > b` expression.
-  - `qsql.GE(a, b)` - Create a `qsql.core.Binary` describing `a >= b` expression.
+  - `qsql.EQ(a, b)` - Create a `qsql.core.Binary` node describing `a = b` expression.
+  - `qsql.NE(a, b)` - Create a `qsql.core.Binary` node describing `a <> b` expression.
+  - `qsql.LT(a, b)` - Create a `qsql.core.Binary` node describing `a < b` expression.
+  - `qsql.LE(a, b)` - Create a `qsql.core.Binary` node describing `a <= b` expression.
+  - `qsql.GT(a, b)` - Create a `qsql.core.Binary` node describing `a > b` expression.
+  - `qsql.GE(a, b)` - Create a `qsql.core.Binary` node describing `a >= b` expression.
 
-  - `qsql.FUNCTION_OR_AGGREGATE(...)` - Create a `qsql.core.Func` node describing `FUNCTION_OR_AGGREGATE(...)` expression. Note that `FUNCTION_OR_AGGREGATE` has to be replaced by the name of the function to be used, for example `qsql.SIN(...)` describes `SIN()` function and `qsql.COUNT(...)` describes `COUNT()` aggregate function.
+  - `qsql.FUNCTION_OR_AGGREGATE(...)` - Create a `qsql.core.Func` node describing `FUNCTION_OR_AGGREGATE(...)` expression. Note that `FUNCTION_OR_AGGREGATE` has to be replaced by the name of the function to be used, for example `qsql.SIN(...)` describes `SIN()` function and `qsql.COUNT(...)` describes `COUNT()` aggregate.
 
 
 Generic Interface
 -----------------
 
-Since every node that is used to describe various constructs inherits directly or indirectly from `qsql.core.Node` all nodes share a common interface.
+Since every node that is used to describe various constructs inherits directly or indirectly from `qsql.core.Node` all nodes share the common interface:
 
   - `getType()`, `setType(type)` - Get/Set a type (string) of the node. For example a `qsql.core.SelectQuery` is `SELECT` type, logical operator is `AND` or `OR`, etc...
   - `getLabel()`, `setLabel(label)` - Get/Set a label, `AS "label"` clause of the query.
@@ -125,7 +126,7 @@ Since every node that is used to describe various constructs inherits directly o
 
   - `compileNode(ctx)` - Compile the node into a string. The `ctx` argument is currently not used, but it's designed in a way to pass an additional information to the compiler so multiple dialects can be used in the future.
 
-  - `compileQuery(ctx?)` - Compile the query, it's basically a `compileNode()` call with semicolon `";"` at the end. 
+  - `compileQuery(ctx?)` - Compile the query, it's basically a `compileNode()` call with semicolon `";"` at the end. This method should be used to return the query to be executed by your DB engine. It's provided by all query nodes.
 
   - `AS(label)` - alias to `setLabel()`.
 
