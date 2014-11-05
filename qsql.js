@@ -3,11 +3,18 @@
 "use strict";
 
 // \namespace core
+//
+// Core namespace contains all expression nodes.
 var core = qsql.core = {};
 
 // \namespace util
+//
+// Utility functions.
 var util = qsql.util = {};
 
+// \namespace misc
+//
+// Miscellaneous.
 var misc = qsql.misc = {};
 
 // qsql.misc.VERSION
@@ -1164,11 +1171,11 @@ core.Node = qclass({
     return this;
   },
 
-  getLabel: function() {
+  getAlias: function() {
     return this._as;
   },
 
-  setLabel: function(as) {
+  setAlias: function(as) {
     this._as = as;
     return this;
   },
