@@ -23,7 +23,7 @@ var misc = qsql.misc = {};
 //
 // Note: Version information has been put into the `qsql.misc` namespace to
 // prevent clash with SQL builder interface exported in the root namespace.
-qsql.misc.VERSION = "0.2.0";
+misc.VERSION = "0.2.0";
 
 // \internal
 // \{
@@ -1761,9 +1761,16 @@ core.Sort = qclass({
     //   - `number` - describes column order,
     //   - `string` - describes column name.
     //   - `Node`   - SQL expression/column.
-    var s = typeof value === "number"
-      ? "" + value
-      : escapeIdentifier(this._value);
+    var s;
+
+    if (typeof value === "number")
+      s = "" + value;
+    else if (typeof value === "string")
+      s = escapeIdentifier(value);
+    else if (value instanceof Node)
+      s = value.compileNode();
+    else
+      throw new CompileError("Sort.compileNode() - Invalid value type " + typeof value + ".");
 
     if (flags & NodeFlags.kAscending)
       s += " ASC";
