@@ -22,7 +22,8 @@ var misc = qsql.misc = {};
 // Version string of `qsql` library as "major.minor.patch".
 //
 // Note: Version information has been put into the `qsql.misc` namespace to
-// prevent clash with SQL builder interface exported in the root namespace.
+// prevent a possible clashing with SQL builder's interface exported in the
+// root namespace.
 misc.VERSION = "0.2.0";
 
 // \internal
