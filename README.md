@@ -187,7 +187,7 @@ Sample SQL selects:
 
 Complex SQL selects are possible by combining various SQL expressions:
 
-```[JS]
+```JS
 var query = SELECT()
   .FIELD("name")
   .FIELD(
@@ -227,7 +227,7 @@ Sample SQL insert:
 var query = INSERT()
   .INTO("tasks")
   .VALUES({
-    title: "Try QSql,
+    title: "Try QSql",
     duration: 5
   })
   .RETURNING("id");
