@@ -6,12 +6,10 @@ SQL builder and utilities library designed to work with Node.js and PostgreSQL, 
   * [Official Repository (jshq/qsql)](https://github.com/jshq/qsql)
   * [Unlicense] (http://unlicense.org)
 
-
 Disclaimer
 ----------
 
 This library is used in production, but it doesn't contain all possible features of all available DB engines (currently only PG). Be prepared for some minor API changes before the library reaches v1.0.
-
 
 Introduction
 ------------
@@ -32,7 +30,6 @@ There are several node.js libraries that focus on SQL query building, but none h
 QSql itself is just a query builder, it doesn't talk to a database. There is another project in preparation that will bridge QSql and node.js SQL drivers, but since there are many libraries that can be used (including libraries for SQL connection pooling) there was no work done to create another library for this purpose.
 
 QSql has been designed primarily to work with PostgreSQL, but the project will be extended to support also other database engines; it's planned.
-
 
 Overview
 --------
@@ -83,7 +80,7 @@ Node                       | Description
 
 QSql contains the following high-level SQL builder concepts:
 
-SQL Nodes                  | Description
+SQL-Builder API            | Description
 :------------------------- | :------------------------------------
 `qsql.SELECT(...)`         | Create a `qsql.core.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
 `qsql.INSERT(...)`         | Create a `qsql.core.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
@@ -112,29 +109,28 @@ SQL Nodes                  | Description
 `qsql.GE(a, b)`            | Create a `qsql.core.Binary` node describing `a >= b` expression
 `qsql.FUNCTION_NAME(...)`  | Create a `qsql.core.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `qsql.SIN(...)` describes `SIN()` function and `qsql.COUNT(...)` describes `COUNT()` aggregate
 
-
 Generic Interface
 -----------------
 
-Since every node that is used to describe various constructs inherits directly or indirectly from `qsql.core.Node` all nodes share the common interface:
+Since every node that is used to describe various constructs inherits directly or indirectly from `qsql.core.Node` all nodes share a common interface:
 
 qsql.core.Node             | Description
 :------------------------- | :------------------------------------
-`getType()`                | Get the node type {String}. For example a `qsql.core.SelectQuery` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
-`setType(type)`            | Set the node type (used internally)
-`getLabel()`               | Get the node label that is rendered as `AS "label"` in SQL
-`setLabel(label)`          | Set the noode label
-`canExecute()`             | Can be used to check whether the node can be executed by SQL engine. Only `SELECT`, `INSERT`, `UPDATE`, and `DELETE` queries and `UNION`, `INTERSECT`, and `EXCEPT` operators can be executed.
-`compileNode(ctx)`         | Compile the node into a string. The `ctx` argument is currently not used, but it's designed in a way to pass an additional information to the compiler so multiple dialects can be used in the future.
-`compileQuery(ctx?)`       | Compile the query, it's basically a `compileNode()` call with semicolon `";"` at the end. This method should be used to return the query to be executed by your DB engine. It's provided by all query nodes.
-`AS(label)`                | Alias to `setLabel()`.
-`EQ(b)`                    | Returns `this = b` expression.
-`NE(b)`                    | Returns `this <> b` expression.
-`LT(b)`                    | Returns `this < b` expression.
-`LE(b)`                    | Returns `this <= b` expression.
-`GT(b)`                    | Returns `this > b` expression.
-`GE(b)`                    | Returns `this >= b` expression.
-`IN(b)`                    | Returns `this IN b` expression.
+`.getType()`               | Get the node type {String}. For example a `qsql.core.SelectQuery` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
+`.setType(type)`           | Set the node type (used internally)
+`.getLabel()`              | Get the node label that is rendered as `AS "label"` in SQL
+`.setLabel(label)`         | Set the node label
+`.canExecute()`            | Can be used to check whether the node can be executed by SQL engine. Only `SELECT`, `INSERT`, `UPDATE`, and `DELETE` queries and `UNION`, `INTERSECT`, and `EXCEPT` operators can be executed.
+`.compileNode(ctx)`        | Compile the node into a string. The `ctx` argument is currently not used, but it's designed in a way to pass an additional information to the compiler so multiple dialects can be used in the future.
+`.compileQuery(ctx?)`      | Compile the query, it's basically a `compileNode()` call with semicolon `";"` at the end. This method should be used to return the query to be executed by your DB engine. It's provided by all query nodes.
+`.AS(label)`               | Alias to `setLabel()`.
+`.EQ(b)`                   | Returns `this = b` expression.
+`.NE(b)`                   | Returns `this <> b` expression.
+`.LT(b)`                   | Returns `this < b` expression.
+`.LE(b)`                   | Returns `this <= b` expression.
+`.GT(b)`                   | Returns `this > b` expression.
+`.GE(b)`                   | Returns `this >= b` expression.
+`.IN(b)`                   | Returns `this IN b` expression.
 
 For example `COL("a").EQ(1)` yields the same tree as `OP(COL("a"), "=", 1)`
 
@@ -142,20 +138,19 @@ The `qsql.core.Unary` interface:
 
 qsql.core.Unary            | Description
 :------------------------- | :------------------------------------
-`getValue()`               | Get the child node or value
-`setValue(value)`          | Set the child node or value
+`.getValue()`              | Get the child node or value
+`.setValue(value)`         | Set the child node or value
 
 The `qsql.core.Binary` interface:
 
 qsql.core.Binary           | Description
 :------------------------- | :------------------------------------
-`getLeft()`                | Get the left node or value
-`setLeft(left)`            | Set the left node or value
-`getRight()`               | Get the right node or value
-`setRight(right)`          | Set the right node or value
-`addLeft(left)`            |
-`addRight(right)`          | Helpers, can only be used if the target value is an array, in such case the value `left` or `right` is pushed into it.
-
+`.getLeft()`               | Get the left node or value
+`.setLeft(left)`           | Set the left node or value
+`.getRight()`              | Get the right node or value
+`.setRight(right)`         | Set the right node or value
+`.addLeft(left)`           |
+`.addRight(right)`         | Helpers, can only be used if the target value is an array, in such case the value `left` or `right` is pushed into it.
 
 SELECT
 ------
@@ -166,33 +161,33 @@ The `qsql.core.SelectQuery` implements the following interface:
 
 qsql.core.SelectQuery      | Description
 :------------------------- | :------------------------------------
-`FIELD(...)`               |
-`FIELD([...])`             | Add a field or expression to be selected. It accepts a `qsql.core.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
-`DISTINCT(...)`            | Add a `DISTINCT` clause to the query. <br><br>Please note that `DISTINCT(...)` passes all optional arguments to the `FIELD()` method making `SELECT(...).DISTINCT()` and `SELECT().DISTINCT(...)` constructs equivalent
-`FROM(...)`                |
-`FROM([...])`              | Add `FROM` clause to the query. The method accepts multiple arguments or a list of arguments. Most of the time `FROM` is used with a single argument describing the table to select from, however, multiple arguments forming an implicit `CROSS JOIN` construct, which matches the SQL specification, are allowed. <br><br>For example `FROM(a)` construct will generate `SELECT ... FROM "a"` query, while `FROM(a, b)` construct will generate `SELECT ... FROM "a", "b"` or `SELECT ... FROM "a" CROSS JOIN "b"` (these are equivalent, QSql can generate any of these depending on QSql version and implementation changes)
-`CROSS_JOIN(with, cond)`   |
-`INNER_JOIN(...)`          |
-`LEFT_JOIN(...)`           |
-`RIGHT_JOIN(...)`          |
-`FULL_JOIN(...)`           | Add a `JOIN` clause to the query. Joins always join the current query with a new table. For example `FROM("a").INNER_JOIN("b").LEFT_JOIN("c")` construct will generate `SELECT ... FROM "a" INNER JOIN "b" LEFT OUTER JOIN "c"` query
-`WHERE(node)`              |
-`WHERE(a, b)`              |
-`WHERE(a, op, b)`          | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `AND`ed with other `WHERE` clauses if present)
-`OR_WHERE(node)`           |
-`OR_WHERE(a, b)`           |
-`OR_WHERE(a, op, b)`       | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
-`GROUP_BY(...)`            |
-`GROUP_BY([...])`          | Add a `GROUP BY` clause to the query. Group by can be specified as a column or a `qsql.core.Node`
-`HAVING(node)`             |
-`HAVING(a, b)`             |
-`HAVING(a, op, b)`         | Add a `HAVING` clause `node`, `HAVING a = b`, or `HAVING a op b` to the query (implicitly `AND`ed with other `HAVING` clauses if present)
-`OR_HAVING(node)`          |
-`OR_HAVING(a, b)`          |
-`OR_HAVING(a, op, b)`      | Add a `HAVING` clause `node`, `HAVING a = b`, or `HAVING a op b` to the query (implicitly `OR`ed with other `HAVING` clauses if present)
-`ORDER_BY(col, dir, nulls)`| Add an `ORDER BY` expression of the form `"col" [ASC/DESC] [NULLS FIRST/LAST]`. If `col` is an array the builder will insert multiple sort clauses with the same `dir` and `nulls` order
-`OFFSET(offset)`           | Add an `OFFSET` clause to the query
-`LIMIT(limit)`             | Add a `LIMIT` clause to the query
+`.FIELD(...)`              |
+`.FIELD([...])`            | Add a field or expression to be selected. It accepts a `qsql.core.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
+`.DISTINCT(...)`           | Add a `DISTINCT` clause to the query. <br><br>Please note that `DISTINCT(...)` passes all optional arguments to the `FIELD()` method making `SELECT(...).DISTINCT()` and `SELECT().DISTINCT(...)` constructs equivalent
+`.FROM(...)`               |
+`.FROM([...])`             | Add `FROM` clause to the query. The method accepts multiple arguments or a list of arguments. Most of the time `FROM` is used with a single argument describing the table to select from, however, multiple arguments forming an implicit `CROSS JOIN` construct, which matches the SQL specification, are allowed. <br><br>For example `FROM(a)` construct will generate `SELECT ... FROM "a"` query, while `FROM(a, b)` construct will generate `SELECT ... FROM "a", "b"` or `SELECT ... FROM "a" CROSS JOIN "b"` (these are equivalent, QSql can generate any of these depending on QSql version and implementation changes)
+`.CROSS_JOIN(with, cond)`  |
+`.INNER_JOIN(...)`         |
+`.LEFT_JOIN(...)`          |
+`.RIGHT_JOIN(...)`         |
+`.FULL_JOIN(...)`          | Add a `JOIN` clause to the query. Joins always join the current query with a new table. For example `FROM("a").INNER_JOIN("b").LEFT_JOIN("c")` construct will generate `SELECT ... FROM "a" INNER JOIN "b" LEFT OUTER JOIN "c"` query
+`.WHERE(node)`             |
+`.WHERE(a, b)`             |
+`.WHERE(a, op, b)`         | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `AND`ed with other `WHERE` clauses if present)
+`.OR_WHERE(node)`          |
+`.OR_WHERE(a, b)`          |
+`.OR_WHERE(a, op, b)`      | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
+`.GROUP_BY(...)`           |
+`.GROUP_BY([...])`         | Add a `GROUP BY` clause to the query. Group by can be specified as a column or a `qsql.core.Node`
+`.HAVING(node)`            |
+`.HAVING(a, b)`            |
+`.HAVING(a, op, b)`        | Add a `HAVING` clause `node`, `HAVING a = b`, or `HAVING a op b` to the query (implicitly `AND`ed with other `HAVING` clauses if present)
+`.OR_HAVING(node)`         |
+`.OR_HAVING(a, b)`         |
+`.OR_HAVING(a, op, b)`     | Add a `HAVING` clause `node`, `HAVING a = b`, or `HAVING a op b` to the query (implicitly `OR`ed with other `HAVING` clauses if present)
+`.ORDER_BY(col, dir, nulls)`| Add an `ORDER BY` expression of the form `"col" [ASC/DESC] [NULLS FIRST/LAST]`. If `col` is an array the builder will insert multiple sort clauses with the same `dir` and `nulls` order
+`.OFFSET(offset)`          | Add an `OFFSET` clause to the query
+`.LIMIT(limit)`            | Add a `LIMIT` clause to the query
 
 Sample SQL selects:
 
@@ -246,7 +241,6 @@ FROM
   "states";
 ```
 
-
 INSERT
 ------
 
@@ -256,10 +250,10 @@ The `qsql.core.InsertQuery` implements the following interface:
 
 qsql.core.InsertQuery      | Description
 :------------------------- | :------------------------------------
-`TABLE(table)`             |
-`INTO(table)`              | Specify a target `table`
-`VALUES(data)`             | Specify a data to be inserted. The `data` argument can be both array or object. If an array is passed each element describes one row (it has to be array of objects), of an object is passed, it describes only one row. If `VALUES()` is called multiple times it pushes more rows to be inserted by the query
-`RETURNING(...)`           | Specify a `RETURNING` clause, uses the same syntax as `SELECT()`
+`.TABLE(table)`            |
+`.INTO(table)`             | Specify a target `table`
+`.VALUES(data)`            | Specify a data to be inserted. The `data` argument can be both array or object. If an array is passed each element describes one row (it has to be array of objects), of an object is passed, it describes only one row. If `VALUES()` is called multiple times it pushes more rows to be inserted by the query
+`.RETURNING(...)`          | Specify a `RETURNING` clause, uses the same syntax as `SELECT()`
 
 Sample SQL insert:
 
@@ -285,25 +279,24 @@ RETURNING
   "id";
 ```
 
-
 UPDATE
 ------
 
-Insert query is described by `qsql.core.UpdateQuery` node and wrapped by `qsql.UPDATE(...)`. Note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
+Update query is described by `qsql.core.UpdateQuery` node and wrapped by `qsql.UPDATE(...)`. Please note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
 
 The `qsql.core.UpdateQuery` implements the following interface:
 
 qsql.core.UpdateQuery      | Description
 :------------------------- | :------------------------------------
-`TABLE(table)`             | Specify a target `table`
-`FROM(...)`                | Specify a `FROM` clause, uses the same syntax as `FROM()` defined by `SELECT` query
-`WHERE(node)`              |
-`WHERE(a, b)`              |
-`WHERE(a, op, b)`          | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `AND`ed with other `WHERE` clauses if present)
-`OR_WHERE(node)`           |
-`OR_WHERE(a, b)`           |
-`OR_WHERE(a, op, b)`       | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
-`RETURNING(...)`           | Specify a `RETURNING` clause, uses the same syntax as `FIELD()` defined by `SELECT` query
+`.TABLE(table)`            | Specify a target `table`
+`.FROM(...)`               | Specify a `FROM` clause, uses the same syntax as `FROM()` defined by `SELECT` query
+`.WHERE(node)`             |
+`.WHERE(a, b)`             |
+`.WHERE(a, op, b)`         | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `AND`ed with other `WHERE` clauses if present)
+`.OR_WHERE(node)`          |
+`.OR_WHERE(a, b)`          |
+`.OR_WHERE(a, op, b)`      | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
+`.RETURNING(...)`          | Specify a `RETURNING` clause, uses the same syntax as `FIELD()` defined by `SELECT` query
 
 Sample SQL update:
 
@@ -337,16 +330,16 @@ The `qsql.core.DeleteQuery` implements the following interface:
 
 qsql.core.DeleteQuery      | Description
 :------------------------- | :------------------------------------
-`TABLE(table)`             |
-`FROM(table)`              | Specify a target `table`
-`USING(...)`               | Specify a `USING` clause, uses the same syntax as `FROM()` defined by `SELECT` query
-`WHERE(node)`              |
-`WHERE(a, b)`              |
-`WHERE(a, op, b)`          | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `AND`ed with other `WHERE` clauses if present)
-`OR_WHERE(node)`           |
-`OR_WHERE(a, b)`           |
-`OR_WHERE(a, op, b)`       | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
-`RETURNING(...)`           | Specify a `RETURNING` clause, uses the same syntax as `FIELD()` defined by `SELECT` query.
+`.TABLE(table)`            |
+`.FROM(table)`             | Specify a target `table`
+`.USING(...)`              | Specify a `USING` clause, uses the same syntax as `FROM()` defined by `SELECT` query
+`.WHERE(node)`             |
+`.WHERE(a, b)`             |
+`.WHERE(a, op, b)`         | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `AND`ed with other `WHERE` clauses if present)
+`.OR_WHERE(node)`          |
+`.OR_WHERE(a, b)`          |
+`.OR_WHERE(a, op, b)`      | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
+`.RETURNING(...)`          | Specify a `RETURNING` clause, uses the same syntax as `FIELD()` defined by `SELECT` query.
 
 Sample SQL delete:
 
@@ -359,7 +352,6 @@ yields to:
 ```SQL
 DELETE FROM "tasks" WHERE "completed" = TRUE;
 ```
-
 
 Type Mapping
 ------------
@@ -392,7 +384,6 @@ SET
 WHERE 
   "userId" = 1;
 ```
-
 
 More QSql Samples
 -----------------
