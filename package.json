@@ -1,6 +1,6 @@
 {
   "name": "qsql",
-  "version": "0.2.0",
+  "version": "0.2.2",
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
