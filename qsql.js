@@ -93,9 +93,12 @@ Object.keys(BoolMap).forEach(function(key) {
 var TypeMap = {
   "bool"    : "boolean",
   "boolean" : "boolean",
-  "smallint": "integer",
+
+  "bigint"  : "integer",
   "int"     : "integer",
   "integer" : "integer",
+  "smallint": "integer",
+
   "real"    : "number",
   "float"   : "number",
   "number"  : "number",

@@ -220,7 +220,7 @@ Sample SQL selects:
 
 Complex SQL selects are possible by combining various SQL expressions together:
 
-```JS
+```js
 var query = SELECT()
   .FIELD("name")
   .FIELD(
@@ -257,7 +257,7 @@ qsql.core.InsertQuery      | Description
 
 Sample SQL insert:
 
-```JS
+```js
 // INSERT("tasks", {...}).RETURNING(...) would also work.
 var query = INSERT()
   .INTO("tasks")
@@ -300,7 +300,7 @@ qsql.core.UpdateQuery      | Description
 
 Sample SQL update:
 
-```JS
+```js
 var query = UPDATE("users")
   .VALUES({
     address: "Friedrichstrasse 50, Berlin",
@@ -343,7 +343,7 @@ qsql.core.DeleteQuery      | Description
 
 Sample SQL delete:
 
-```JS
+```js
 var query = DELETE().FROM("tasks").WHERE("completed", "=", true)
 ```
 
@@ -360,7 +360,7 @@ QSql has a feature called `TypeMapping`, which allows to override a default seri
 
 The following example illustrates how type mapping may affect data serialization:
 
-```JS
+```js
 var typeMapping = {
   tagsArray: "ARRAY", 
   tagsJson : "JSON" 
