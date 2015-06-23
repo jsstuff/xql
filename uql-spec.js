@@ -1,38 +1,38 @@
-// QSql <https://github.com/jshq/qsql>
+// uql.js <https://github.com/exceptionaljs/uql>
 "use strict";
 
 var assert = require("assert");
-var qsql = require("./qsql");
+var uql = require("./uql");
 
 // Queryable.
-var SELECT           = qsql.SELECT;
-var UPDATE           = qsql.UPDATE;
-var INSERT           = qsql.INSERT;
-var DELETE           = qsql.DELETE;
-var EXCEPT           = qsql.EXCEPT;
-var EXCEPT_ALL       = qsql.EXCEPT_ALL;
-var UNION            = qsql.UNION;
-var UNION_ALL        = qsql.UNION_ALL;
-var INTERSECT        = qsql.INTERSECT;
-var INTERSECT_ALL    = qsql.INTERSECT_ALL;
+var SELECT           = uql.SELECT;
+var UPDATE           = uql.UPDATE;
+var INSERT           = uql.INSERT;
+var DELETE           = uql.DELETE;
+var EXCEPT           = uql.EXCEPT;
+var EXCEPT_ALL       = uql.EXCEPT_ALL;
+var UNION            = uql.UNION;
+var UNION_ALL        = uql.UNION_ALL;
+var INTERSECT        = uql.INTERSECT;
+var INTERSECT_ALL    = uql.INTERSECT_ALL;
 
 // Query building.
-var COL              = qsql.COL;
-var VAL              = qsql.VAL;
-var ARRAY_VAL        = qsql.ARRAY_VAL;
-var JSON_VAL         = qsql.JSON_VAL;
+var COL              = uql.COL;
+var VAL              = uql.VAL;
+var ARRAY_VAL        = uql.ARRAY_VAL;
+var JSON_VAL         = uql.JSON_VAL;
 
 // Operators/Functions
-var AND              = qsql.AND;
-var OR               = qsql.OR;
-var OP               = qsql.OP;
-var MIN              = qsql.MIN;
-var MAX              = qsql.MAX;
+var AND              = uql.AND;
+var OR               = uql.OR;
+var OP               = uql.OP;
+var MIN              = uql.MIN;
+var MAX              = uql.MAX;
 
 // Helpers.
-var escapeIdentifier = qsql.escapeIdentifier;
-var escapeValue      = qsql.escapeValue;
-var substitute       = qsql.substitute;
+var escapeIdentifier = uql.escapeIdentifier;
+var escapeValue      = uql.escapeValue;
+var substitute       = uql.substitute;
 
 function simplify(s) {
   return s.trim().replace(/\s+/g, " ");
@@ -40,8 +40,8 @@ function simplify(s) {
 
 function shouldMatch(a, b) {
   // Compile `a` and/or `b` if needed.
-  if (a instanceof qsql.core.Node) a = a.compileNode();
-  if (b instanceof qsql.core.Node) b = b.compileNode();
+  if (a instanceof uql.core.Node) a = a.compileNode();
+  if (b instanceof uql.core.Node) b = b.compileNode();
 
   // Simplify, basically removes redundant spaces.
   a = simplify(a);
@@ -67,7 +67,7 @@ function shouldThrow(fn) {
   } catch(ex) { /* Success. */ }
 }
 
-describe("QSql", function() {
+describe("uql", function() {
   // Escape.
   it("should escape identifier.", function() {
     // Proper identifiers.

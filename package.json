@@ -1,6 +1,6 @@
 {
-  "name": "qsql",
-  "version": "0.2.2",
+  "name": "uql",
+  "version": "1.0.0",
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
@@ -21,9 +21,9 @@
     "wrapper"
   ],
 
-  "homepage": "https://github.com/jshq/qsql",
+  "homepage": "https://github.com/exceptionaljs/uql",
   "bugs": {
-    "url": "https://github.com/jshq/qsql/issues"
+    "url": "https://github.com/exceptionaljs/uql/issues"
   },
 
   "contributors": [{
@@ -34,7 +34,7 @@
 
   "license": "Unlicense",
 
-  "main": "qsql.js",
+  "main": "uql.js",
 
   "dependencies": {
     "qclass": ">=0.1.0"
@@ -46,10 +46,10 @@
 
   "repository" : {
     "type": "git",
-    "url": "https://github.com/jshq/qsql.git"
+    "url": "https://github.com/exceptionaljs/uql.git"
   },
 
   "scripts": {
-    "test": "mocha qsql-spec.js"
+    "test": "mocha uql-spec.js"
   }
 }

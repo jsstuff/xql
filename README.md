@@ -1,10 +1,10 @@
-QSql
-====
+uql.js
+======
 
-SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/qsql-interactive.html).
+SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/uql-interactive.html).
 
-  * [Official Repository (jshq/qsql)](https://github.com/jshq/qsql)
-  * [Unlicense] (http://unlicense.org)
+  * [Official Repository (exceptionaljs/uql)](https://github.com/exceptionaljs/uql)
+  * [Public Domain (unlicense.org)](http://unlicense.org)
 
 Disclaimer
 ----------
@@ -14,9 +14,9 @@ This library is used in production, but it doesn't contain all possible features
 Introduction
 ------------
 
-QSql is a library designed to build SQL queries programmatically. It implements a SQL expression tree that is created by high level API calls which mimic SQL syntax. QSql is basically a just tool that helps to create an expression tree based on `Node`s that is compiled at the last moment into a single SQL string. The library has been designed to be used in DAO/DB layers, but can be also used independently at any layer, according to your preference.
+uql.js is a library designed to build SQL queries programmatically. It implements a SQL expression tree that is created by high level API calls which mimic SQL syntax. It's basically just a tool that helps to create the expression tree that is compiled into a single SQL string at the end of the building phase. The library has been designed primarily for DAO/DB layers, but use-cases are nearly unlimited.
 
-There are several reasons why QSql has been developed:
+There are several reasons why uql.js has been developed:
 
   1. Full support and focus on PostgreSQL backend (at the moment)
   2. High performance and low memory footprint
@@ -25,98 +25,98 @@ There are several reasons why QSql has been developed:
   5. Construction of SQL query doesn't require writing RAW expressions, but it should be easy to use RAW expressions in case they are needed
   6. Ability to queue multiple queries in a single instance of a query builder
 
-There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for QSql is Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. QSql is just a query builder and will stay just a query builder - it has a very minimal support for schemas that can be used to describe column types for serialization, but they are not used to describe relations or anything else. QSql is not an ORM and this functionality is not planned for any QSql release.
+There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for uql.js was Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. However, uql.js is just a query builder that has a minimal support for schemas that can be used to describe column types for serialization, but they are not used to describe relations or anything else. There are no plans to add ORM support to uql.js in any future release.
 
-QSql itself is just a query builder, it doesn't talk to a database. There is another project in preparation that will bridge QSql and node.js SQL drivers, but since there are many libraries that can be used (including libraries for SQL connection pooling) there was no work done to create another library for this purpose.
+To simplify the library design and use cases, uql.js itself doesn't implement any functionality to talk to a real database - is just a query builder. There is another project in preparation that will bridge uql.js with node.js SQL drivers, but since there are so many libraries that can be used (including libraries for SQL connection pooling) there was no real work done to create another library for this purpose.
 
-QSql has been designed primarily to work with PostgreSQL, but the project will be extended to support also other database engines; it's planned.
+At the beginning, uql.js has been designed to work primarily with PostgreSQL, but the project will be extended to support also other database engines; it's planned.
 
 Overview
 --------
 
-QSql library consists of several nested namespaces, however, they are rarely used outside of `qsql` itself:
+uql.js library consists of several nested namespaces, however, they are rarely used outside of `uql` implementation:
 
 Namespace                  | Description
 :------------------------- | :------------------------------------
-`qsql`                     | Main API and high-level SQL builder interface (both UPPERCASED and camelCased versions of the same APIs)
-`qsql.core`                | Expression tree nodes, contains `qsql.core.Node` and all nodes that inherit from it
-`qsql.util`                | SQL utilities made public
-`qsql.misc`                | Contains `VERSION` key in a `"major.minor.patch"` form
+`uql`                      | Main API and high-level SQL builder interface (both UPPERCASED and camelCased versions of the same APIs)
+`uql.core`                 | Expression tree nodes, contains `uql.core.Node` and all nodes that inherit from it
+`uql.util`                 | SQL utilities made public
+`uql.misc`                 | Contains `VERSION` key in a `"major.minor.patch"` form
 
 Error classes:
 
 Error                      | Description
 :------------------------- | :------------------------------------
-`qsql.ValueError`          | Error thrown if data is wrong
-`qsql.CompileError`        | Error thrown if query is wrong
+`uql.ValueError`           | Error thrown if data is wrong
+`uql.CompileError`         | Error thrown if query is wrong
 
-SQL nodes:
+Expression tree:
 
 Node                       | Description
 :------------------------- | :------------------------------------
-`qsql.core.Node`           | Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `qsql.core.Node`
-`qsql.core.Raw`            | Raw SQL expression
-`qsql.core.Unary`          | Unary SQL node (can contain a single child)
-`qsql.core.Binary`         | Binary SQL node (can contain two children, left and right)
-`qsql.core.Operator`       | SQL operator, like `=`, `+`, `-`, etc...
-`qsql.core.Group`          | Group of SQL nodes
-`qsql.core.Logical`        | Logical operator (Group), like `AND`, `OR`, etc...
-`qsql.core.ObjectOp`       | Special QSql node that contains key/value interface that can be used to construct `WHERE` like expressions
-`qsql.core.Identifier`     | SQL identifier, like table or column
-`qsql.core.Join`           | SQL `JOIN` construct
-`qsql.core.Sort`           | SQL `ORDER BY` construct
-`qsql.core.Func`           | SQL function expression
-`qsql.core.Aggregate`      | SQL aggregate expression
-`qsql.core.Value`          | SQL value base class
-`qsql.core.PrimitiveValue` | Primitive value like `NULL`, boolean, number, or string
-`qsql.core.ArrayValue`     | Array value (can serialize as JSON or ARRAY)
-`qsql.core.JsonValue`      | JSON value (can serialize as JSON or STRING)
-`qsql.core.Query`          | SQL query base class
-`qsql.core.SelectQuery`    | SQL `SELECT` query
-`qsql.core.InsertQuery`    | SQL `INSERT` query
-`qsql.core.UpdateQuery`    | SQL `UPDATE` query
-`qsql.core.DeleteQuery`    | SQL `DELETE` query
-`qsql.core.CombinedQuery`  | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
+`uql.core.Node`            | Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `uql.core.Node`
+`uql.core.Raw`             | Raw SQL expression
+`uql.core.Unary`           | Unary SQL node (can contain a single child)
+`uql.core.Binary`          | Binary SQL node (can contain two children, left and right)
+`uql.core.Operator`        | SQL operator, like `=`, `+`, `-`, etc...
+`uql.core.Group`           | Group of SQL nodes
+`uql.core.Logical`         | Logical operator (Group), like `AND`, `OR`, etc...
+`uql.core.ObjectOp`        | Special node that contains key/value interface that can be used to construct `WHERE` like expressions
+`uql.core.Identifier`      | SQL identifier, like table or column
+`uql.core.Join`            | SQL `JOIN` construct
+`uql.core.Sort`            | SQL `ORDER BY` construct
+`uql.core.Func`            | SQL function expression
+`uql.core.Aggregate`       | SQL aggregate expression
+`uql.core.Value`           | SQL value base class
+`uql.core.PrimitiveValue`  | Primitive value like `NULL`, boolean, number, or string
+`uql.core.ArrayValue`      | Array value (can serialize as JSON or ARRAY)
+`uql.core.JsonValue`       | JSON value (can serialize as JSON or STRING)
+`uql.core.Query`           | SQL query base class
+`uql.core.SelectQuery`     | SQL `SELECT` query
+`uql.core.InsertQuery`     | SQL `INSERT` query
+`uql.core.UpdateQuery`     | SQL `UPDATE` query
+`uql.core.DeleteQuery`     | SQL `DELETE` query
+`uql.core.CombinedQuery`   | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
 
-QSql contains the following high-level SQL builder concepts:
+High-level SQL builder concepts:
 
 SQL-Builder API            | Description
 :------------------------- | :------------------------------------
-`qsql.SELECT(...)`         | Create a `qsql.core.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
-`qsql.INSERT(...)`         | Create a `qsql.core.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
-`qsql.UPDATE(...)`         | Create a `qsql.core.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
-`qsql.DELETE(...)`         | Create a `qsql.core.DeleteQuery` and use an optional first argument as a table name
-`qsql.EXCEPT(...)`         | Create a `qsql.core.CombinedQuery` describing `EXCEPT` expression
-`qsql.EXCEPT_ALL(...)`     | Create a `qsql.core.CombinedQuery` describing `EXCEPT ALL` query
-`qsql.INTERSECT(...)`      | Create a `qsql.core.CombinedQuery` describing `INTERSECT` query
-`qsql.INTERSECT_ALL(...)`  | Create a `qsql.core.CombinedQuery` describing `INTERSECT ALL` query
-`qsql.UNION(...)`          | Create a `qsql.core.CombinedQuery` describing `UNION` query
-`qsql.UNION_ALL(...)`      | Create a `qsql.core.CombinedQuery` describing `UNION ALL` query
-`qsql.SORT(c, sort, nulls)`| Create a `qsql.core.Sort` node wrapping an `ORDER BY` clause
-`qsql.RAW(s, bindings)`    | Create a RAW query `qsql.core.Raw` node based on query string `s` and optional `bindings`
-`qsql.AND(...)`            | Create a `qsql.core.Logical` expression describing `AND` expression
-`qsql.OR(...)`             | Create a `qsql.core.Logical` expression describing `OR` expression
-`qsql.COL(...)`            | Create a `qsql.core.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
-`qsql.VAL(...)`            | Create a `qsql.core.PrimitiveValue` wrapping a primitive value like `null`, `boolean`, `number`, or `string`
-`qsql.ARRAY_VAL(...)`      | Create a `qsql.core.ArrayValue` wrapping an array
-`qsql.JSON_VAL(...)`       | Create a `qsql.core.ArrayValue` wrapping an object (JSON)
-`qsql.OP(...)`             | Create a `qsql.core.Unary` or `qsql.core.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to desctibe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `qsql.core.Logical` as QSql can construct queries containing multiple `AND` and `OR` leaves
-`qsql.EQ(a, b)`            | Create a `qsql.core.Binary` node describing `a = b` expression
-`qsql.NE(a, b)`            | Create a `qsql.core.Binary` node describing `a <> b` expression
-`qsql.LT(a, b)`            | Create a `qsql.core.Binary` node describing `a < b` expression
-`qsql.LE(a, b)`            | Create a `qsql.core.Binary` node describing `a <= b` expression
-`qsql.GT(a, b)`            | Create a `qsql.core.Binary` node describing `a > b` expression
-`qsql.GE(a, b)`            | Create a `qsql.core.Binary` node describing `a >= b` expression
-`qsql.FUNCTION_NAME(...)`  | Create a `qsql.core.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `qsql.SIN(...)` describes `SIN()` function and `qsql.COUNT(...)` describes `COUNT()` aggregate
+`uql.SELECT(...)`          | Create a `uql.core.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
+`uql.INSERT(...)`          | Create a `uql.core.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
+`uql.UPDATE(...)`          | Create a `uql.core.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
+`uql.DELETE(...)`          | Create a `uql.core.DeleteQuery` and use an optional first argument as a table name
+`uql.EXCEPT(...)`          | Create a `uql.core.CombinedQuery` describing `EXCEPT` expression
+`uql.EXCEPT_ALL(...)`      | Create a `uql.core.CombinedQuery` describing `EXCEPT ALL` query
+`uql.INTERSECT(...)`       | Create a `uql.core.CombinedQuery` describing `INTERSECT` query
+`uql.INTERSECT_ALL(...)`   | Create a `uql.core.CombinedQuery` describing `INTERSECT ALL` query
+`uql.UNION(...)`           | Create a `uql.core.CombinedQuery` describing `UNION` query
+`uql.UNION_ALL(...)`       | Create a `uql.core.CombinedQuery` describing `UNION ALL` query
+`uql.SORT(c, sort, nulls)` | Create a `uql.core.Sort` node wrapping an `ORDER BY` clause
+`uql.RAW(s, bindings)`     | Create a RAW query `uql.core.Raw` node based on query string `s` and optional `bindings`
+`uql.AND(...)`             | Create a `uql.core.Logical` expression describing `AND` expression
+`uql.OR(...)`              | Create a `uql.core.Logical` expression describing `OR` expression
+`uql.COL(...)`             | Create a `uql.core.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
+`uql.VAL(...)`             | Create a `uql.core.PrimitiveValue` wrapping a primitive value like `null`, `boolean`, `number`, or `string`
+`uql.ARRAY_VAL(...)`       | Create a `uql.core.ArrayValue` wrapping an array
+`uql.JSON_VAL(...)`        | Create a `uql.core.ArrayValue` wrapping an object (JSON)
+`uql.OP(...)`              | Create a `uql.core.Unary` or `uql.core.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `uql.core.Logical` as uql.js can construct queries containing multiple `AND` and `OR` leaves
+`uql.EQ(a, b)`             | Create a `uql.core.Binary` node describing `a = b` expression
+`uql.NE(a, b)`             | Create a `uql.core.Binary` node describing `a <> b` expression
+`uql.LT(a, b)`             | Create a `uql.core.Binary` node describing `a < b` expression
+`uql.LE(a, b)`             | Create a `uql.core.Binary` node describing `a <= b` expression
+`uql.GT(a, b)`             | Create a `uql.core.Binary` node describing `a > b` expression
+`uql.GE(a, b)`             | Create a `uql.core.Binary` node describing `a >= b` expression
+`uql.FUNCTION_NAME(...)`   | Create a `uql.core.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `uql.SIN(...)` describes `SIN()` function and `uql.COUNT(...)` describes `COUNT()` aggregate
 
 Generic Interface
 -----------------
 
-Since every node that is used to describe various constructs inherits directly or indirectly from `qsql.core.Node` all nodes share a common interface:
+Since every node that is used to describe various constructs inherits directly or indirectly from `uql.core.Node` all nodes share a common interface:
 
-qsql.core.Node             | Description
+uql.core.Node              | Description
 :------------------------- | :------------------------------------
-`.getType()`               | Get the node type {String}. For example a `qsql.core.SelectQuery` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
+`.getType()`               | Get the node type {String}. For example a `uql.core.SelectQuery` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
 `.setType(type)`           | Set the node type (used internally)
 `.getLabel()`              | Get the node label that is rendered as `AS "label"` in SQL
 `.setLabel(label)`         | Set the node label
@@ -134,16 +134,16 @@ qsql.core.Node             | Description
 
 For example `COL("a").EQ(1)` yields the same tree as `OP(COL("a"), "=", 1)`
 
-The `qsql.core.Unary` interface:
+The `uql.core.Unary` interface:
 
-qsql.core.Unary            | Description
+uql.core.Unary             | Description
 :------------------------- | :------------------------------------
 `.getValue()`              | Get the child node or value
 `.setValue(value)`         | Set the child node or value
 
-The `qsql.core.Binary` interface:
+The `uql.core.Binary` interface:
 
-qsql.core.Binary           | Description
+uql.core.Binary            | Description
 :------------------------- | :------------------------------------
 `.getLeft()`               | Get the left node or value
 `.setLeft(left)`           | Set the left node or value
@@ -155,17 +155,17 @@ qsql.core.Binary           | Description
 SELECT
 ------
 
-Select query is described by `qsql.core.SelectQuery` node and wrapped by `qsql.SELECT(...)`. It accepts arguments that are passed to the `FIELD()` method making the  `SELECT(...)`, `SELECT([...])` and `SELECT().FIELD(...)` constructs equivalent.
+Select query is described by `uql.core.SelectQuery` node and wrapped by `uql.SELECT(...)`. It accepts arguments that are passed to the `FIELD()` method making the  `SELECT(...)`, `SELECT([...])` and `SELECT().FIELD(...)` constructs equivalent.
 
-The `qsql.core.SelectQuery` implements the following interface:
+The `uql.core.SelectQuery` implements the following interface:
 
-qsql.core.SelectQuery      | Description
+uql.core.SelectQuery       | Description
 :------------------------- | :------------------------------------
 `.FIELD(...)`              |
-`.FIELD([...])`            | Add a field or expression to be selected. It accepts a `qsql.core.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
+`.FIELD([...])`            | Add a field or expression to be selected. It accepts a `uql.core.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
 `.DISTINCT(...)`           | Add a `DISTINCT` clause to the query. <br><br>Please note that `DISTINCT(...)` passes all optional arguments to the `FIELD()` method making `SELECT(...).DISTINCT()` and `SELECT().DISTINCT(...)` constructs equivalent
 `.FROM(...)`               |
-`.FROM([...])`             | Add `FROM` clause to the query. The method accepts multiple arguments or a list of arguments. Most of the time `FROM` is used with a single argument describing the table to select from, however, multiple arguments forming an implicit `CROSS JOIN` construct, which matches the SQL specification, are allowed. <br><br>For example `FROM(a)` construct will generate `SELECT ... FROM "a"` query, while `FROM(a, b)` construct will generate `SELECT ... FROM "a", "b"` or `SELECT ... FROM "a" CROSS JOIN "b"` (these are equivalent, QSql can generate any of these depending on QSql version and implementation changes)
+`.FROM([...])`             | Add `FROM` clause to the query. The method accepts multiple arguments or a list of arguments. Most of the time `FROM` is used with a single argument describing the table to select from, however, multiple arguments forming an implicit `CROSS JOIN` construct, which matches the SQL specification, are allowed. <br><br>For example `FROM(a)` construct will generate `SELECT ... FROM "a"` query, while `FROM(a, b)` construct will generate `SELECT ... FROM "a", "b"` or `SELECT ... FROM "a" CROSS JOIN "b"` (these are equivalent, uql.js can generate any of these depending on the version and implementation changes)
 `.CROSS_JOIN(with, cond)`  |
 `.INNER_JOIN(...)`         |
 `.LEFT_JOIN(...)`          |
@@ -178,7 +178,7 @@ qsql.core.SelectQuery      | Description
 `.OR_WHERE(a, b)`          |
 `.OR_WHERE(a, op, b)`      | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
 `.GROUP_BY(...)`           |
-`.GROUP_BY([...])`         | Add a `GROUP BY` clause to the query. Group by can be specified as a column or a `qsql.core.Node`
+`.GROUP_BY([...])`         | Add a `GROUP BY` clause to the query. Group by can be specified as a column or a `uql.core.Node`
 `.HAVING(node)`            |
 `.HAVING(a, b)`            |
 `.HAVING(a, op, b)`        | Add a `HAVING` clause `node`, `HAVING a = b`, or `HAVING a op b` to the query (implicitly `AND`ed with other `HAVING` clauses if present)
@@ -233,22 +233,22 @@ var query = SELECT()
 
 yields to:
 
-```SQL
+```sql
 SELECT
   "name",
   (SELECT MAX("pop") FROM "cities" WHERE "cities"."state" = "states"."name")
-FROM 
+FROM
   "states";
 ```
 
 INSERT
 ------
 
-Insert query is described by `qsql.core.InsertQuery` node and wrapped by `qsql.INSERT(...)`. Note that `INSERT(...)` accepts parameters that can describe a target table and data to be inserted.
+Insert query is described by `uql.core.InsertQuery` node and wrapped by `uql.INSERT(...)`. Note that `INSERT(...)` accepts parameters that can describe a target table and data to be inserted.
 
-The `qsql.core.InsertQuery` implements the following interface:
+The `uql.core.InsertQuery` implements the following interface:
 
-qsql.core.InsertQuery      | Description
+uql.core.InsertQuery       | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            |
 `.INTO(table)`             | Specify a target `table`
@@ -262,7 +262,7 @@ Sample SQL insert:
 var query = INSERT()
   .INTO("tasks")
   .VALUES({
-    title: "Try QSql",
+    title: "Try uql.js",
     duration: 5
   })
   .RETURNING("id");
@@ -270,11 +270,11 @@ var query = INSERT()
 
 yields to:
 
-```SQL
+```sql
 INSERT INTO
   "tasks" ("title", "duration")
 VALUES
-  ('Try QSql', 5)
+  ('Try uql.js', 5)
 RETURNING
   "id";
 ```
@@ -282,11 +282,11 @@ RETURNING
 UPDATE
 ------
 
-Update query is described by `qsql.core.UpdateQuery` node and wrapped by `qsql.UPDATE(...)`. Please note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
+Update query is described by `uql.core.UpdateQuery` node and wrapped by `uql.UPDATE(...)`. Please note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
 
-The `qsql.core.UpdateQuery` implements the following interface:
+The `uql.core.UpdateQuery` implements the following interface:
 
-qsql.core.UpdateQuery      | Description
+uql.core.UpdateQuery       | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            | Specify a target `table`
 `.FROM(...)`               | Specify a `FROM` clause, uses the same syntax as `FROM()` defined by `SELECT` query
@@ -311,10 +311,10 @@ var query = UPDATE("users")
 
 yields to:
 
-```SQL
-UPDATE 
+```sql
+UPDATE
   "users"
-SET 
+SET
   "address" = 'Friedrichstrasse 50, Berlin',
   "addressChanged" = "addressChanged" + 1
 WHERE
@@ -324,11 +324,11 @@ WHERE
 DELETE
 ------
 
-Delete query is described by `qsql.core.DeleteQuery` node and wrapped by `qsql.DELETE(...)`.
+Delete query is described by `uql.core.DeleteQuery` node and wrapped by `uql.DELETE(...)`.
 
-The `qsql.core.DeleteQuery` implements the following interface:
+The `uql.core.DeleteQuery` implements the following interface:
 
-qsql.core.DeleteQuery      | Description
+uql.core.DeleteQuery       | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            |
 `.FROM(table)`             | Specify a target `table`
@@ -349,21 +349,21 @@ var query = DELETE().FROM("tasks").WHERE("completed", "=", true)
 
 yields to:
 
-```SQL
+```sql
 DELETE FROM "tasks" WHERE "completed" = TRUE;
 ```
 
 Type Mapping
 ------------
 
-QSql has a feature called `TypeMapping`, which allows to override a default serialization of data used by `INSERT` and `UPDATE`. The type mapping is an object where a key/value defines a column/data-type pair. It can be set by `setTypeMapping()` and get by `getTypeMapping()` methods of the query object.
+uql.js has a feature called `TypeMapping`, which allows to override a default serialization of data used by `INSERT` and `UPDATE`. The type mapping is an object where a key/value defines a column/data-type pair. It can be set by `setTypeMapping()` and get by `getTypeMapping()` methods of the query object.
 
 The following example illustrates how type mapping may affect data serialization:
 
 ```js
 var typeMapping = {
-  tagsArray: "ARRAY", 
-  tagsJson : "JSON" 
+  tagsArray: "ARRAY",
+  tagsJson : "JSON"
 };
 
 var query = UPDATE("users")
@@ -375,17 +375,22 @@ var query = UPDATE("users")
   .setTypeMapping(typeMapping);
 ```
 
-```SQL
+```sql
 UPDATE
   "users"
-SET 
+SET
   "tagsArray" = ARRAY['accounting', 'customer support'], -- Using PG ARRAY syntax.
   "tagsJson" = '["accounting", "customer support"]'      -- Using PG JSON syntax.
-WHERE 
+WHERE
   "userId" = 1;
 ```
 
-More QSql Samples
------------------
+More Examples
+-------------
 
-There is a project called [QSql-Interactive](http://kobalicek.com/qsql-interactive.html), which can be used to explore QSql possibilities by playing with it online. It contains more snippets and tries to teach by examples.
+There is a project called [uql-interactive](http://kobalicek.com/qsql-interactive.html), which can be used to explore uql.js possibilities by playing with it online. It contains more snippets and tries to teach by examples.
+
+License
+-------
+
+uql.js has been released to public domain, [(see unlicense.org)](http://unlicense.org/).

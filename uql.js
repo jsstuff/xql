@@ -1,30 +1,30 @@
-// QSql <https://github.com/jshq/qsql>
-(function(qclass, qsql) {
+// uql.js <https://github.com/exceptionaljs/uql>
+(function(qclass, uql) {
 "use strict";
 
 // \namespace core
 //
 // Core namespace contains all expression nodes.
-var core = qsql.core = {};
+var core = uql.core = {};
 
 // \namespace util
 //
 // Utility functions.
-var util = qsql.util = {};
+var util = uql.util = {};
 
 // \namespace misc
 //
 // Miscellaneous.
-var misc = qsql.misc = {};
+var misc = uql.misc = {};
 
-// qsql.misc.VERSION
+// uql.misc.VERSION
 //
-// Version string of `qsql` library as "major.minor.patch".
+// Version information in a "major.minor.patch" form.
 //
-// Note: Version information has been put into the `qsql.misc` namespace to
+// Note: Version information has been put into the `uql.misc` namespace to
 // prevent a possible clashing with SQL builder's interface exported in the
 // root namespace.
-misc.VERSION = "0.2.0";
+misc.VERSION = "1.0.0";
 
 // \internal
 // \{
@@ -252,7 +252,7 @@ var NodeFlags = {
   kDistinct     : 0x00000200,
   kAllOrDistinct: 0x00000300
 };
-qsql.NodeFlags = NodeFlags;
+uql.NodeFlags = NodeFlags;
 
 // Sort directions.
 var SortDirection = {
@@ -272,7 +272,7 @@ var SortNulls = {
   "NULLS LAST"  : NodeFlags.kNullsLast
 };
 
-// List of ordinary functions, which will become available in `qsql` namespace.
+// List of ordinary functions, which will become available in `uql` namespace.
 var functionsList = [
   "ABS",
   "ACOS",
@@ -379,7 +379,7 @@ var functionsList = [
   "WIDTH_BUCKET"
 ];
 
-// List of aggregate functions, which will become available in `qsql` namespace.
+// List of aggregate functions, which will become available in `uql` namespace.
 var aggregatesList = [
   "ARRAY_AGG",
   "AVG",
@@ -424,7 +424,7 @@ function ValueError(message) {
   this.message = message;
   this.stack = e.stack || "";
 }
-qsql.ValueError = qclass({
+uql.ValueError = qclass({
   $extend: Error,
   $construct: ValueError
 });
@@ -438,7 +438,7 @@ function CompileError(message) {
   this.message = message;
   this.stack = e.stack || "";
 }
-qsql.CompileError = qclass({
+uql.CompileError = qclass({
   $extend: Error,
   $construct: CompileError
 });
@@ -538,7 +538,7 @@ var escapeIdentifier = (function() {
 
   return escapeIdentifier;
 })();
-qsql.escapeIdentifier = escapeIdentifier;
+uql.escapeIdentifier = escapeIdentifier;
 
 // \function escapeValue(value, explicitType?:String)
 //
@@ -581,7 +581,7 @@ function escapeValue(value, explicitType) {
 
   // Node.
   //
-  // All QSql objects extend `Node`.
+  // All uql objects extend `Node`.
   if (value instanceof Node)
     return value.compileNode();
 
@@ -595,7 +595,7 @@ function escapeValue(value, explicitType) {
 
   return escapeString(JSON.stringify(value));
 }
-qsql.escapeValue = escapeValue;
+uql.escapeValue = escapeValue;
 
 // \function escapeValueExplicit(value, explicitType:String)
 function escapeValueExplicit(value, explicitType) {
@@ -729,7 +729,7 @@ function escapeValueExplicit(value, explicitType) {
   throw new ValueError(
     "Couldn't convert '" + typeOf(value) + "' to '" + explicitType + "'.");
 }
-qsql.escapeValueExplicit = escapeValueExplicit;
+uql.escapeValueExplicit = escapeValueExplicit;
 
 // \function escapeString(value)
 //
@@ -769,7 +769,7 @@ var escapeString = (function() {
 
   return escapeString;
 })();
-qsql.escapeString = escapeString;
+uql.escapeString = escapeString;
 
 // \function escapeNumber(value)
 function escapeNumber(value) {
@@ -784,13 +784,13 @@ function escapeNumber(value) {
 
   return value.toString();
 }
-qsql.escapeNumber = escapeNumber;
+uql.escapeNumber = escapeNumber;
 
 // \function escapeBuffer(value)
 function escapeBuffer(value) {
   return "E'\\x" + value.toString("hex") + "'";
 }
-qsql.escapeBuffer = escapeBuffer;
+uql.escapeBuffer = escapeBuffer;
 
 // \function escapeValues(value)
 function escapeValues(value) {
@@ -810,7 +810,7 @@ function escapeValues(value) {
 
   return "(" + s + ")";
 }
-qsql.escapeValues = escapeValues;
+uql.escapeValues = escapeValues;
 
 // \function escapeArray(value, isNested)
 function escapeArray(value, isNested) {
@@ -837,13 +837,13 @@ function escapeArray(value, isNested) {
   else
     return "ARRAY[" + s + "]";
 }
-qsql.escapeArray = escapeArray;
+uql.escapeArray = escapeArray;
 
 // \function escapeJson(value)
 function escapeJson(value) {
   return escapeString(JSON.stringify(value));
 }
-qsql.escapeJson = escapeJson;
+uql.escapeJson = escapeJson;
 
 // \function substitute(query, bindings)
 //
@@ -1095,7 +1095,7 @@ var substitute = (function() {
 
   return substitute;
 })();
-qsql.substitute = substitute;
+uql.substitute = substitute;
 
 // \class core.Node
 //
@@ -1966,7 +1966,7 @@ core.Aggregate = qclass({
 //
 // `Value` shouldn't be in general used for all types, only types where the
 // mapping is ambiguous and can't be automatically deduced. For example
-// PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case QSql
+// PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `uql`
 // has no knowledge which format to use and will choose ARRAY over JSON.
 //
 // Value is an alternative to schema. If schema is provided it's unnecessary
@@ -3127,7 +3127,7 @@ core.CombinedQuery = qclass({
 function RAW(string, bindings) {
   return new Raw(string, bindings);
 }
-qsql.RAW = RAW;
+uql.RAW = RAW;
 
 // \function SELECT(...)
 function SELECT(/* ... */) {
@@ -3136,7 +3136,7 @@ function SELECT(/* ... */) {
     q.FIELD.apply(q, arguments);
   return q;
 }
-qsql.SELECT = SELECT;
+uql.SELECT = SELECT;
 
 // \function INSERT(...)
 function INSERT(/* ... */) {
@@ -3162,7 +3162,7 @@ function INSERT(/* ... */) {
 
   return q;
 }
-qsql.INSERT = INSERT;
+uql.INSERT = INSERT;
 
 // \function UPDATE(...)
 function UPDATE(/* ... */) {
@@ -3188,7 +3188,7 @@ function UPDATE(/* ... */) {
 
   return q;
 }
-qsql.UPDATE = UPDATE;
+uql.UPDATE = UPDATE;
 
 // \function DELETE(...)
 function DELETE(from) {
@@ -3197,93 +3197,93 @@ function DELETE(from) {
     q._table = from;
   return q;
 }
-qsql.DELETE = DELETE;
+uql.DELETE = DELETE;
 
 // \function AND(...)
 function AND(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("AND", values);
 }
-qsql.AND = AND;
+uql.AND = AND;
 
 // \function OR(...)
 function OR(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("OR", values);
 }
-qsql.OR = OR;
+uql.OR = OR;
 
 // \function EXCEPT(...)
 function EXCEPT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("EXCEPT", values);
 }
-qsql.EXCEPT = EXCEPT;
+uql.EXCEPT = EXCEPT;
 
 // \function EXCEPT_ALL(...)
 function EXCEPT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("EXCEPT", values).ALL();
 }
-qsql.EXCEPT_ALL = EXCEPT_ALL;
+uql.EXCEPT_ALL = EXCEPT_ALL;
 
 // \function INTERSECT(...)
 function INTERSECT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("INTERSECT", values);
 }
-qsql.INTERSECT = INTERSECT;
+uql.INTERSECT = INTERSECT;
 
 // \function INTERSECT_ALL(...)
 function INTERSECT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("INTERSECT", values).ALL();
 }
-qsql.INTERSECT_ALL = INTERSECT_ALL;
+uql.INTERSECT_ALL = INTERSECT_ALL;
 
 // \function UNION(...)
 function UNION(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("UNION", values);
 }
-qsql.UNION = UNION;
+uql.UNION = UNION;
 
 // \function UNION_ALL(...)
 function UNION_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("UNION", values).ALL();
 }
-qsql.UNION_ALL = UNION_ALL;
+uql.UNION_ALL = UNION_ALL;
 
 // \function COL(string, as)
 function COL(string, as) {
   return new Identifier(string, as);
 }
-qsql.COL = COL;
+uql.COL = COL;
 
 // \function VAL(value, as)
 function VAL(value, as) {
   return new PrimitiveValue(value, as);
 }
-qsql.VAL = VAL;
+uql.VAL = VAL;
 
 // \function ARRAY_VAL(value, as)
 function ARRAY_VAL(value, as) {
   return new ArrayValue(value, as);
 }
-qsql.ARRAY_VAL = ARRAY_VAL;
+uql.ARRAY_VAL = ARRAY_VAL;
 
 // \function JSON_VAL(value, as)
 function JSON_VAL(value, as) {
   return new ArrayValue(value, as);
 }
-qsql.JSON_VAL = JSON_VAL;
+uql.JSON_VAL = JSON_VAL;
 
 // \function SORT(column, direction, nulls)
 function SORT(column, direction, nulls) {
   return new Sort(column, direction, nulls);
 }
-qsql.SORT = SORT;
+uql.SORT = SORT;
 
 // \function OP(...)
 //
@@ -3298,7 +3298,7 @@ function OP(a, op, b) {
   else
     throw new CompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed).");
 }
-qsql.OP = OP;
+uql.OP = OP;
 
 function EQ(a, b) { return OP(a, "=" , b); }
 function NE(a, b) { return OP(a, "!=", b); }
@@ -3307,35 +3307,35 @@ function LE(a, b) { return OP(a, "<=", b); }
 function GT(a, b) { return OP(a, ">" , b); }
 function GE(a, b) { return OP(a, ">=", b); }
 
-qsql.EQ = EQ;
-qsql.NE = NE;
-qsql.LT = LT;
-qsql.LE = LE;
-qsql.GT = GT;
-qsql.GE = GE;
+uql.EQ = EQ;
+uql.NE = NE;
+uql.LT = LT;
+uql.LE = LE;
+uql.GT = GT;
+uql.GE = GE;
 
-// Add functions to `qsql`.
+// Add functions to `uql`.
 functionsList.forEach(function(name) {
   var func = function(/* ... */) {
     return new Func(name, slice.call(arguments, 0));
   };
-  qsql[name] = func;
+  uql[name] = func;
 });
 
-// Add aggregates to `qsql`.
+// Add aggregates to `uql`.
 aggregatesList.forEach(function(name) {
   var func = function(/* ... */) {
     return new Aggregate(name, slice.call(arguments, 0));
   };
-  qsql[name] = func;
+  uql[name] = func;
 });
 
-// Link camel-cased equivalents of all functions in `qsql` namespace.
-Object.keys(qsql).forEach(function(name) {
+// Link camel-cased equivalents of all functions in `uql` namespace.
+Object.keys(uql).forEach(function(name) {
   if (reUpperCase.test(name)) {
-    qsql[toCamelCase(name)] = qsql[name];
+    uql[toCamelCase(name)] = uql[name];
   }
 });
 
 }).apply(this, typeof module === "object"
-  ? [require("qclass"), exports] : [this.qclass, this.qsql = {}]);
+  ? [require("qclass"), exports] : [this.qclass, this.uql = {}]);
