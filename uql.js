@@ -1,5 +1,5 @@
 // uql.js <https://github.com/exceptionaljs/uql>
-(function(qclass, uql) {
+(function(exclass, uql) {
 "use strict";
 
 // \namespace core
@@ -24,7 +24,7 @@ var misc = uql.misc = {};
 // Note: Version information has been put into the `uql.misc` namespace to
 // prevent a possible clashing with SQL builder's interface exported in the
 // root namespace.
-misc.VERSION = "1.0.0";
+misc.VERSION = "1.0.1";
 
 // \internal
 // \{
@@ -424,7 +424,7 @@ function ValueError(message) {
   this.message = message;
   this.stack = e.stack || "";
 }
-uql.ValueError = qclass({
+uql.ValueError = exclass({
   $extend: Error,
   $construct: ValueError
 });
@@ -438,7 +438,7 @@ function CompileError(message) {
   this.message = message;
   this.stack = e.stack || "";
 }
-uql.CompileError = qclass({
+uql.CompileError = exclass({
   $extend: Error,
   $construct: CompileError
 });
@@ -1111,7 +1111,7 @@ function Node(type, as) {
 
   this._as = as || "";
 }
-core.Node = qclass({
+core.Node = exclass({
   $construct: Node,
 
   // \function Node.shouldWrap()
@@ -1260,7 +1260,7 @@ function Raw(expression, bindings) {
   this._value = expression || "";
   this._bindings = bindings || null;
 }
-core.Raw = qclass({
+core.Raw = exclass({
   $extend: Node,
   $construct: Raw,
 
@@ -1312,7 +1312,7 @@ function Unary(type, value) {
   this._as = "";
   this._value = value;
 }
-core.Unary = qclass({
+core.Unary = exclass({
   $extend: Node,
   $construct: Unary,
 
@@ -1366,7 +1366,7 @@ function Binary(left, type, right, as) {
   this._left = left;
   this._right = right;
 }
-core.Binary = qclass({
+core.Binary = exclass({
   $extend: Node,
   $construct: Binary,
 
@@ -1419,7 +1419,7 @@ function Operator(left, type, right, as) {
   this._left = left;
   this._right = right;
 }
-core.Operator = qclass({
+core.Operator = exclass({
   $extend: Binary,
   $construct: Operator,
 
@@ -1497,7 +1497,7 @@ function Group(type, values) {
   this._as = "";
   this._values = values || [];
 }
-core.Group = qclass({
+core.Group = exclass({
   $extend: Node,
   $construct: Group,
 
@@ -1519,7 +1519,7 @@ core.Group = qclass({
 function Logical() {
   Group.apply(this, arguments);
 }
-core.Logical = qclass({
+core.Logical = exclass({
   $extend: Group,
   $construct: Logical,
 
@@ -1564,7 +1564,7 @@ function ObjectOp(type, value) {
   this._as = "";
   this._value = value;
 }
-core.ObjectOp = qclass({
+core.ObjectOp = exclass({
   $extend: Unary,
   $construct: ObjectOp,
 
@@ -1609,7 +1609,7 @@ function Identifier(value, as) {
   this._as = as || "";
   this._value = value;
 }
-core.Identifier = qclass({
+core.Identifier = exclass({
   $extend: Node,
   $construct: Identifier,
 
@@ -1648,7 +1648,7 @@ function Join(left, type, right, condition) {
   this._right = right;
   this._condition = condition;
 }
-core.Join = qclass({
+core.Join = exclass({
   $extend: Binary,
   $construct: Join,
 
@@ -1753,7 +1753,7 @@ function Sort(column, direction, nulls) {
   this._as = ""; // Sort expression never uses `AS`.
   this._value = column;
 }
-core.Sort = qclass({
+core.Sort = exclass({
   $extend: Identifier,
   $construct: Sort,
 
@@ -1889,7 +1889,7 @@ function Func(type, values) {
   this._as = "";
   this._values = values || [];
 }
-core.Func = qclass({
+core.Func = exclass({
   $extend: Group,
   $construct: Func,
 
@@ -1944,7 +1944,7 @@ core.Func = qclass({
 function Aggregate() {
   Func.apply(this, arguments);
 }
-core.Aggregate = qclass({
+core.Aggregate = exclass({
   $extend: Func,
   $construct: Aggregate,
 
@@ -1979,7 +1979,7 @@ function Value(type, value, as) {
   this._as = as || "";
   this._value = value;
 }
-core.Value = qclass({
+core.Value = exclass({
   $extend: Node,
   $construct: Value,
 
@@ -2018,7 +2018,7 @@ function PrimitiveValue(value, as) {
   this._as = as || "";
   this._value = value;
 }
-core.PrimitiveValue = qclass({
+core.PrimitiveValue = exclass({
   $extend: Value,
   $construct: PrimitiveValue
 });
@@ -2034,7 +2034,7 @@ function ArrayValue(value, as) {
   this._as = as || "";
   this._value = value;
 }
-core.ArrayValue = qclass({
+core.ArrayValue = exclass({
   $extend: Value,
   $construct: ArrayValue,
 
@@ -2060,7 +2060,7 @@ function JsonValue(value, as) {
   this._as = as || "";
   this._value = value;
 }
-core.JsonValue = qclass({
+core.JsonValue = exclass({
   $extend: Value,
   $construct: JsonValue,
 
@@ -2159,7 +2159,7 @@ function Query(type) {
   // It can be escaped by using PostgreSQL `ARRAY[] or {}` or as JSON `[]`.
   this._typeMapping = null;
 }
-core.Query = qclass({
+core.Query = exclass({
   $extend: Node,
   $construct: Query,
 
@@ -2543,7 +2543,7 @@ function SelectQuery() {
   // `HAVING` clause.
   this._having = null;
 }
-core.SelectQuery = qclass({
+core.SelectQuery = exclass({
   $extend: Query,
   $construct: SelectQuery,
 
@@ -2791,7 +2791,7 @@ core.SelectQuery = qclass({
 function InsertQuery() {
   Query.call(this, "INSERT");
 }
-core.InsertQuery = qclass({
+core.InsertQuery = exclass({
   $extend: Query,
   $construct: InsertQuery,
 
@@ -2873,7 +2873,7 @@ core.InsertQuery = qclass({
 function UpdateQuery() {
   Query.call(this, "UPDATE");
 }
-core.UpdateQuery = qclass({
+core.UpdateQuery = exclass({
   $extend: Query,
   $construct: UpdateQuery,
 
@@ -2966,7 +2966,7 @@ core.UpdateQuery = qclass({
 function DeleteQuery() {
   Query.call(this, "DELETE");
 }
-core.DeleteQuery = qclass({
+core.DeleteQuery = exclass({
   $extend: Query,
   $construct: DeleteQuery,
 
@@ -3050,7 +3050,7 @@ function CombinedQuery() {
   // Nodes supporting type mapping.
   this._typeMapping = null;
 }
-core.CombinedQuery = qclass({
+core.CombinedQuery = exclass({
   $extend: Group,
   $construct: CombinedQuery,
 
@@ -3338,4 +3338,4 @@ Object.keys(uql).forEach(function(name) {
 });
 
 }).apply(this, typeof module === "object"
-  ? [require("qclass"), exports] : [this.qclass, this.uql = {}]);
+  ? [require("exclass"), exports] : [this.exclass, this.uql = {}]);

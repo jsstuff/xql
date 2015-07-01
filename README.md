@@ -393,4 +393,4 @@ There is a project called [uql-interactive](http://kobalicek.com/qsql-interactiv
 License
 -------
 
-uql.js has been released to public domain, [(see unlicense.org)](http://unlicense.org/).
+uql.js has been released to public domain, [see unlicense.org](http://unlicense.org/).

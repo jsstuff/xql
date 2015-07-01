@@ -1,6 +1,6 @@
 {
   "name": "uql",
-  "version": "1.0.0",
+  "version": "1.0.1",
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
@@ -37,7 +37,7 @@
   "main": "uql.js",
 
   "dependencies": {
-    "qclass": ">=0.1.0"
+    "exclass": "*"
   },
 
   "devDependencies": {
