@@ -1,7 +1,7 @@
 uql.js
 ======
 
-SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/uql-interactive.html).
+SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/fiddle-uql.html).
 
   * [Official Repository (exceptionaljs/uql)](https://github.com/exceptionaljs/uql)
   * [Public Domain (unlicense.org)](http://unlicense.org)
@@ -388,7 +388,7 @@ WHERE
 More Examples
 -------------
 
-There is a project called [uql-interactive](http://kobalicek.com/qsql-interactive.html), which can be used to explore uql.js possibilities by playing with it online. It contains more snippets and tries to teach by examples.
+There is a project called [uql-fiddle](http://kobalicek.com/fiddle-uql.html), which can be used to explore uql.js possibilities by playing with it online. It contains more snippets and tries to teach by examples.
 
 License
 -------
