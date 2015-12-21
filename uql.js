@@ -1,4 +1,4 @@
-// uql.js <https://github.com/exceptionaljs/uql>
+// uql.js <https://github.com/exjs/uql>
 (function(exclass, uql) {
 "use strict";
 
@@ -24,7 +24,7 @@ var misc = uql.misc = {};
 // Note: Version information has been put into the `uql.misc` namespace to
 // prevent a possible clashing with SQL builder's interface exported in the
 // root namespace.
-misc.VERSION = "1.0.1";
+misc.VERSION = "1.1.0";
 
 // \internal
 // \{

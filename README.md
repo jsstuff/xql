@@ -3,7 +3,7 @@ uql.js
 
 SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/fiddle-uql.html).
 
-  * [Official Repository (exceptionaljs/uql)](https://github.com/exceptionaljs/uql)
+  * [Official Repository (exjs/uql)](https://github.com/exjs/uql)
   * [Public Domain (unlicense.org)](http://unlicense.org)
 
 Disclaimer

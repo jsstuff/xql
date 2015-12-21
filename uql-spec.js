@@ -1,4 +1,4 @@
-// uql.js <https://github.com/exceptionaljs/uql>
+// uql.js <https://github.com/exjs/uql>
 "use strict";
 
 var assert = require("assert");

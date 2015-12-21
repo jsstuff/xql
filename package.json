@@ -1,6 +1,6 @@
 {
   "name": "uql",
-  "version": "1.0.1",
+  "version": "1.1.0",
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
@@ -21,9 +21,9 @@
     "wrapper"
   ],
 
-  "homepage": "https://github.com/exceptionaljs/uql",
+  "homepage": "https://github.com/exjs/uql",
   "bugs": {
-    "url": "https://github.com/exceptionaljs/uql/issues"
+    "url": "https://github.com/exjs/uql/issues"
   },
 
   "contributors": [{
@@ -46,7 +46,7 @@
 
   "repository" : {
     "type": "git",
-    "url": "https://github.com/exceptionaljs/uql.git"
+    "url": "https://github.com/exjs/uql.git"
   },
 
   "scripts": {
