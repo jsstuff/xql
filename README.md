@@ -1,10 +1,10 @@
-uql.js
+xql.js
 ======
 
-SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/fiddle-uql.html).
+SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/fiddle-xql.html).
 
-  * [Official Repository (exjs/uql)](https://github.com/exjs/uql)
-  * [Public Domain (unlicense.org)](http://unlicense.org)
+  * [Official Repository (exjs/xql)](https://github.com/exjs/xql)
+  * [Public Domain (unlicense.org)](https://unlicense.org)
 
 Disclaimer
 ----------
@@ -14,9 +14,9 @@ This library is used in production, but it doesn't contain all possible features
 Introduction
 ------------
 
-uql.js is a library designed to build SQL queries programmatically. It implements a SQL expression tree that is created by high level API calls which mimic SQL syntax. It's basically just a tool that helps to create the expression tree that is compiled into a single SQL string at the end of the building phase. The library has been designed primarily for DAO/DB layers, but use-cases are nearly unlimited.
+xql.js is a library designed to build SQL queries programmatically. It implements a SQL expression tree that is created by high level API calls which mimic SQL syntax. It's basically just a tool that helps to create the expression tree that is compiled into a single SQL string at the end of the building phase. The library has been designed primarily for DAO/DB layers, but use-cases are nearly unlimited.
 
-There are several reasons why uql.js has been developed:
+There are several reasons why xql.js has been developed:
 
   1. Full support and focus on PostgreSQL backend (at the moment)
   2. High performance and low memory footprint
@@ -25,98 +25,98 @@ There are several reasons why uql.js has been developed:
   5. Construction of SQL query doesn't require writing RAW expressions, but it should be easy to use RAW expressions in case they are needed
   6. Ability to queue multiple queries in a single instance of a query builder
 
-There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for uql.js was Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. However, uql.js is just a query builder that has a minimal support for schemas that can be used to describe column types for serialization, but they are not used to describe relations or anything else. There are no plans to add ORM support to uql.js in any future release.
+There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for xql.js was Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. However, xql.js is just a query builder that has a minimal support for schemas that can be used to describe column types for serialization, but they are not used to describe relations or anything else. There are no plans to add ORM support to xql.js in any future release.
 
-To simplify the library design and use cases, uql.js itself doesn't implement any functionality to talk to a real database - is just a query builder. There is another project in preparation that will bridge uql.js with node.js SQL drivers, but since there are so many libraries that can be used (including libraries for SQL connection pooling) there was no real work done to create another library for this purpose.
+To simplify the library design and use cases, xql.js itself doesn't implement any functionality to talk to a real database - is just a query builder. There is another project in preparation that will bridge xql.js with node.js SQL drivers, but since there are so many libraries that can be used (including libraries for SQL connection pooling) there was no real work done to create another library for this purpose.
 
-At the beginning, uql.js has been designed to work primarily with PostgreSQL, but the project will be extended to support also other database engines; it's planned.
+At the beginning, xql.js has been designed to work primarily with PostgreSQL, but the project will be extended to support also other database engines; it's planned.
 
 Overview
 --------
 
-uql.js library consists of several nested namespaces, however, they are rarely used outside of `uql` implementation:
+xql.js library consists of several nested namespaces, however, they are rarely used outside of `xql` implementation:
 
 Namespace                  | Description
 :------------------------- | :------------------------------------
-`uql`                      | Main API and high-level SQL builder interface (both UPPERCASED and camelCased versions of the same APIs)
-`uql.core`                 | Expression tree nodes, contains `uql.core.Node` and all nodes that inherit from it
-`uql.util`                 | SQL utilities made public
-`uql.misc`                 | Contains `VERSION` key in a `"major.minor.patch"` form
+`xql`                      | Main API and high-level SQL builder interface (both UPPERCASED and camelCased versions of the same APIs)
+`xql.node`                 | Expression tree, contains `xql.node.Node` and all nodes that inherit from it
+`xql.utils`                | Some SQL utilities xql is using made public
+`xql.misc`                 | Contains `VERSION` key in a `"major.minor.patch"` form
 
 Error classes:
 
 Error                      | Description
 :------------------------- | :------------------------------------
-`uql.ValueError`           | Error thrown if data is wrong
-`uql.CompileError`         | Error thrown if query is wrong
+`xql.ValueError`           | Error thrown if data is wrong
+`xql.CompileError`         | Error thrown if query is wrong
 
 Expression tree:
 
 Node                       | Description
 :------------------------- | :------------------------------------
-`uql.core.Node`            | Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `uql.core.Node`
-`uql.core.Raw`             | Raw SQL expression
-`uql.core.Unary`           | Unary SQL node (can contain a single child)
-`uql.core.Binary`          | Binary SQL node (can contain two children, left and right)
-`uql.core.Operator`        | SQL operator, like `=`, `+`, `-`, etc...
-`uql.core.Group`           | Group of SQL nodes
-`uql.core.Logical`         | Logical operator (Group), like `AND`, `OR`, etc...
-`uql.core.ObjectOp`        | Special node that contains key/value interface that can be used to construct `WHERE` like expressions
-`uql.core.Identifier`      | SQL identifier, like table or column
-`uql.core.Join`            | SQL `JOIN` construct
-`uql.core.Sort`            | SQL `ORDER BY` construct
-`uql.core.Func`            | SQL function expression
-`uql.core.Aggregate`       | SQL aggregate expression
-`uql.core.Value`           | SQL value base class
-`uql.core.PrimitiveValue`  | Primitive value like `NULL`, boolean, number, or string
-`uql.core.ArrayValue`      | Array value (can serialize as JSON or ARRAY)
-`uql.core.JsonValue`       | JSON value (can serialize as JSON or STRING)
-`uql.core.Query`           | SQL query base class
-`uql.core.SelectQuery`     | SQL `SELECT` query
-`uql.core.InsertQuery`     | SQL `INSERT` query
-`uql.core.UpdateQuery`     | SQL `UPDATE` query
-`uql.core.DeleteQuery`     | SQL `DELETE` query
-`uql.core.CombinedQuery`   | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
+`xql.node.Node`            | Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `xql.node.Node`
+`xql.node.Raw`             | Raw SQL expression
+`xql.node.Unary`           | Unary SQL node (can contain a single child)
+`xql.node.Binary`          | Binary SQL node (can contain two children, left and right)
+`xql.node.Operator`        | SQL operator, like `=`, `+`, `-`, etc...
+`xql.node.Group`           | Group of SQL nodes
+`xql.node.Logical`         | Logical operator (Group), like `AND`, `OR`, etc...
+`xql.node.ObjectOp`        | Special node that contains key/value interface that can be used to construct `WHERE` like expressions
+`xql.node.Identifier`      | SQL identifier, like table or column
+`xql.node.Join`            | SQL `JOIN` construct
+`xql.node.Sort`            | SQL `ORDER BY` construct
+`xql.node.Func`            | SQL function expression
+`xql.node.Aggregate`       | SQL aggregate expression
+`xql.node.Value`           | SQL value base class
+`xql.node.PrimitiveValue`  | Primitive value like `NULL`, boolean, number, or string
+`xql.node.ArrayValue`      | Array value (can serialize as JSON or ARRAY)
+`xql.node.JsonValue`       | JSON value (can serialize as JSON or STRING)
+`xql.node.Query`           | SQL query base class
+`xql.node.SelectQuery`     | SQL `SELECT` query
+`xql.node.InsertQuery`     | SQL `INSERT` query
+`xql.node.UpdateQuery`     | SQL `UPDATE` query
+`xql.node.DeleteQuery`     | SQL `DELETE` query
+`xql.node.CombinedQuery`   | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
 
 High-level SQL builder concepts:
 
 SQL-Builder API            | Description
 :------------------------- | :------------------------------------
-`uql.SELECT(...)`          | Create a `uql.core.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
-`uql.INSERT(...)`          | Create a `uql.core.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
-`uql.UPDATE(...)`          | Create a `uql.core.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
-`uql.DELETE(...)`          | Create a `uql.core.DeleteQuery` and use an optional first argument as a table name
-`uql.EXCEPT(...)`          | Create a `uql.core.CombinedQuery` describing `EXCEPT` expression
-`uql.EXCEPT_ALL(...)`      | Create a `uql.core.CombinedQuery` describing `EXCEPT ALL` query
-`uql.INTERSECT(...)`       | Create a `uql.core.CombinedQuery` describing `INTERSECT` query
-`uql.INTERSECT_ALL(...)`   | Create a `uql.core.CombinedQuery` describing `INTERSECT ALL` query
-`uql.UNION(...)`           | Create a `uql.core.CombinedQuery` describing `UNION` query
-`uql.UNION_ALL(...)`       | Create a `uql.core.CombinedQuery` describing `UNION ALL` query
-`uql.SORT(c, sort, nulls)` | Create a `uql.core.Sort` node wrapping an `ORDER BY` clause
-`uql.RAW(s, bindings)`     | Create a RAW query `uql.core.Raw` node based on query string `s` and optional `bindings`
-`uql.AND(...)`             | Create a `uql.core.Logical` expression describing `AND` expression
-`uql.OR(...)`              | Create a `uql.core.Logical` expression describing `OR` expression
-`uql.COL(...)`             | Create a `uql.core.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
-`uql.VAL(...)`             | Create a `uql.core.PrimitiveValue` wrapping a primitive value like `null`, `boolean`, `number`, or `string`
-`uql.ARRAY_VAL(...)`       | Create a `uql.core.ArrayValue` wrapping an array
-`uql.JSON_VAL(...)`        | Create a `uql.core.ArrayValue` wrapping an object (JSON)
-`uql.OP(...)`              | Create a `uql.core.Unary` or `uql.core.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `uql.core.Logical` as uql.js can construct queries containing multiple `AND` and `OR` leaves
-`uql.EQ(a, b)`             | Create a `uql.core.Binary` node describing `a = b` expression
-`uql.NE(a, b)`             | Create a `uql.core.Binary` node describing `a <> b` expression
-`uql.LT(a, b)`             | Create a `uql.core.Binary` node describing `a < b` expression
-`uql.LE(a, b)`             | Create a `uql.core.Binary` node describing `a <= b` expression
-`uql.GT(a, b)`             | Create a `uql.core.Binary` node describing `a > b` expression
-`uql.GE(a, b)`             | Create a `uql.core.Binary` node describing `a >= b` expression
-`uql.FUNCTION_NAME(...)`   | Create a `uql.core.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `uql.SIN(...)` describes `SIN()` function and `uql.COUNT(...)` describes `COUNT()` aggregate
+`xql.SELECT(...)`          | Create a `xql.node.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
+`xql.INSERT(...)`          | Create a `xql.node.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
+`xql.UPDATE(...)`          | Create a `xql.node.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
+`xql.DELETE(...)`          | Create a `xql.node.DeleteQuery` and use an optional first argument as a table name
+`xql.EXCEPT(...)`          | Create a `xql.node.CombinedQuery` describing `EXCEPT` expression
+`xql.EXCEPT_ALL(...)`      | Create a `xql.node.CombinedQuery` describing `EXCEPT ALL` query
+`xql.INTERSECT(...)`       | Create a `xql.node.CombinedQuery` describing `INTERSECT` query
+`xql.INTERSECT_ALL(...)`   | Create a `xql.node.CombinedQuery` describing `INTERSECT ALL` query
+`xql.UNION(...)`           | Create a `xql.node.CombinedQuery` describing `UNION` query
+`xql.UNION_ALL(...)`       | Create a `xql.node.CombinedQuery` describing `UNION ALL` query
+`xql.SORT(c, sort, nulls)` | Create a `xql.node.Sort` node wrapping an `ORDER BY` clause
+`xql.RAW(s, bindings)`     | Create a RAW query `xql.node.Raw` node based on query string `s` and optional `bindings`
+`xql.AND(...)`             | Create a `xql.node.Logical` expression describing `AND` expression
+`xql.OR(...)`              | Create a `xql.node.Logical` expression describing `OR` expression
+`xql.COL(...)`             | Create a `xql.node.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
+`xql.VAL(...)`             | Create a `xql.node.PrimitiveValue` wrapping a primitive value like `null`, `boolean`, `number`, or `string`
+`xql.ARRAY_VAL(...)`       | Create a `xql.node.ArrayValue` wrapping an array
+`xql.JSON_VAL(...)`        | Create a `xql.node.ArrayValue` wrapping an object (JSON)
+`xql.OP(...)`              | Create a `xql.node.Unary` or `xql.node.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `xql.node.Logical` as xql.js can construct queries containing multiple `AND` and `OR` leaves
+`xql.EQ(a, b)`             | Create a `xql.node.Binary` node describing `a = b` expression
+`xql.NE(a, b)`             | Create a `xql.node.Binary` node describing `a <> b` expression
+`xql.LT(a, b)`             | Create a `xql.node.Binary` node describing `a < b` expression
+`xql.LE(a, b)`             | Create a `xql.node.Binary` node describing `a <= b` expression
+`xql.GT(a, b)`             | Create a `xql.node.Binary` node describing `a > b` expression
+`xql.GE(a, b)`             | Create a `xql.node.Binary` node describing `a >= b` expression
+`xql.FUNCTION_NAME(...)`   | Create a `xql.node.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `xql.SIN(...)` describes `SIN()` function and `xql.COUNT(...)` describes `COUNT()` aggregate
 
 Generic Interface
 -----------------
 
-Since every node that is used to describe various constructs inherits directly or indirectly from `uql.core.Node` all nodes share a common interface:
+Since every node that is used to describe various constructs inherits directly or indirectly from `xql.node.Node` all nodes share a common interface:
 
-uql.core.Node              | Description
+xql.node.Node              | Description
 :------------------------- | :------------------------------------
-`.getType()`               | Get the node type {String}. For example a `uql.core.SelectQuery` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
+`.getType()`               | Get the node type {String}. For example a `xql.node.SelectQuery` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
 `.setType(type)`           | Set the node type (used internally)
 `.getLabel()`              | Get the node label that is rendered as `AS "label"` in SQL
 `.setLabel(label)`         | Set the node label
@@ -134,16 +134,16 @@ uql.core.Node              | Description
 
 For example `COL("a").EQ(1)` yields the same tree as `OP(COL("a"), "=", 1)`
 
-The `uql.core.Unary` interface:
+The `xql.node.Unary` interface:
 
-uql.core.Unary             | Description
+xql.node.Unary             | Description
 :------------------------- | :------------------------------------
 `.getValue()`              | Get the child node or value
 `.setValue(value)`         | Set the child node or value
 
-The `uql.core.Binary` interface:
+The `xql.node.Binary` interface:
 
-uql.core.Binary            | Description
+xql.node.Binary            | Description
 :------------------------- | :------------------------------------
 `.getLeft()`               | Get the left node or value
 `.setLeft(left)`           | Set the left node or value
@@ -155,17 +155,17 @@ uql.core.Binary            | Description
 SELECT
 ------
 
-Select query is described by `uql.core.SelectQuery` node and wrapped by `uql.SELECT(...)`. It accepts arguments that are passed to the `FIELD()` method making the  `SELECT(...)`, `SELECT([...])` and `SELECT().FIELD(...)` constructs equivalent.
+Select query is described by `xql.node.SelectQuery` node and wrapped by `xql.SELECT(...)`. It accepts arguments that are passed to the `FIELD()` method making the  `SELECT(...)`, `SELECT([...])` and `SELECT().FIELD(...)` constructs equivalent.
 
-The `uql.core.SelectQuery` implements the following interface:
+The `xql.node.SelectQuery` implements the following interface:
 
-uql.core.SelectQuery       | Description
+xql.node.SelectQuery       | Description
 :------------------------- | :------------------------------------
 `.FIELD(...)`              |
-`.FIELD([...])`            | Add a field or expression to be selected. It accepts a `uql.core.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
+`.FIELD([...])`            | Add a field or expression to be selected. It accepts a `xql.node.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
 `.DISTINCT(...)`           | Add a `DISTINCT` clause to the query. <br><br>Please note that `DISTINCT(...)` passes all optional arguments to the `FIELD()` method making `SELECT(...).DISTINCT()` and `SELECT().DISTINCT(...)` constructs equivalent
 `.FROM(...)`               |
-`.FROM([...])`             | Add `FROM` clause to the query. The method accepts multiple arguments or a list of arguments. Most of the time `FROM` is used with a single argument describing the table to select from, however, multiple arguments forming an implicit `CROSS JOIN` construct, which matches the SQL specification, are allowed. <br><br>For example `FROM(a)` construct will generate `SELECT ... FROM "a"` query, while `FROM(a, b)` construct will generate `SELECT ... FROM "a", "b"` or `SELECT ... FROM "a" CROSS JOIN "b"` (these are equivalent, uql.js can generate any of these depending on the version and implementation changes)
+`.FROM([...])`             | Add `FROM` clause to the query. The method accepts multiple arguments or a list of arguments. Most of the time `FROM` is used with a single argument describing the table to select from, however, multiple arguments forming an implicit `CROSS JOIN` construct, which matches the SQL specification, are allowed. <br><br>For example `FROM(a)` construct will generate `SELECT ... FROM "a"` query, while `FROM(a, b)` construct will generate `SELECT ... FROM "a", "b"` or `SELECT ... FROM "a" CROSS JOIN "b"` (these are equivalent, xql.js can generate any of these depending on the version and implementation changes)
 `.CROSS_JOIN(with, cond)`  |
 `.INNER_JOIN(...)`         |
 `.LEFT_JOIN(...)`          |
@@ -178,7 +178,7 @@ uql.core.SelectQuery       | Description
 `.OR_WHERE(a, b)`          |
 `.OR_WHERE(a, op, b)`      | Add a `WHERE` clause `node`, `WHERE a = b`, or `WHERE a op b` to the query (implicitly `OR`ed with other `WHERE` clauses if present)
 `.GROUP_BY(...)`           |
-`.GROUP_BY([...])`         | Add a `GROUP BY` clause to the query. Group by can be specified as a column or a `uql.core.Node`
+`.GROUP_BY([...])`         | Add a `GROUP BY` clause to the query. Group by can be specified as a column or a `xql.node.Node`
 `.HAVING(node)`            |
 `.HAVING(a, b)`            |
 `.HAVING(a, op, b)`        | Add a `HAVING` clause `node`, `HAVING a = b`, or `HAVING a op b` to the query (implicitly `AND`ed with other `HAVING` clauses if present)
@@ -244,11 +244,11 @@ FROM
 INSERT
 ------
 
-Insert query is described by `uql.core.InsertQuery` node and wrapped by `uql.INSERT(...)`. Note that `INSERT(...)` accepts parameters that can describe a target table and data to be inserted.
+Insert query is described by `xql.node.InsertQuery` node and wrapped by `xql.INSERT(...)`. Note that `INSERT(...)` accepts parameters that can describe a target table and data to be inserted.
 
-The `uql.core.InsertQuery` implements the following interface:
+The `xql.node.InsertQuery` implements the following interface:
 
-uql.core.InsertQuery       | Description
+xql.node.InsertQuery       | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            |
 `.INTO(table)`             | Specify a target `table`
@@ -262,7 +262,7 @@ Sample SQL insert:
 var query = INSERT()
   .INTO("tasks")
   .VALUES({
-    title: "Try uql.js",
+    title: "Try xql.js",
     duration: 5
   })
   .RETURNING("id");
@@ -274,7 +274,7 @@ yields to:
 INSERT INTO
   "tasks" ("title", "duration")
 VALUES
-  ('Try uql.js', 5)
+  ('Try xql.js', 5)
 RETURNING
   "id";
 ```
@@ -282,11 +282,11 @@ RETURNING
 UPDATE
 ------
 
-Update query is described by `uql.core.UpdateQuery` node and wrapped by `uql.UPDATE(...)`. Please note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
+Update query is described by `xql.node.UpdateQuery` node and wrapped by `xql.UPDATE(...)`. Please note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
 
-The `uql.core.UpdateQuery` implements the following interface:
+The `xql.node.UpdateQuery` implements the following interface:
 
-uql.core.UpdateQuery       | Description
+xql.node.UpdateQuery       | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            | Specify a target `table`
 `.FROM(...)`               | Specify a `FROM` clause, uses the same syntax as `FROM()` defined by `SELECT` query
@@ -324,11 +324,11 @@ WHERE
 DELETE
 ------
 
-Delete query is described by `uql.core.DeleteQuery` node and wrapped by `uql.DELETE(...)`.
+Delete query is described by `xql.node.DeleteQuery` node and wrapped by `xql.DELETE(...)`.
 
-The `uql.core.DeleteQuery` implements the following interface:
+The `xql.node.DeleteQuery` implements the following interface:
 
-uql.core.DeleteQuery       | Description
+xql.node.DeleteQuery       | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            |
 `.FROM(table)`             | Specify a target `table`
@@ -356,7 +356,7 @@ DELETE FROM "tasks" WHERE "completed" = TRUE;
 Type Mapping
 ------------
 
-uql.js has a feature called `TypeMapping`, which allows to override a default serialization of data used by `INSERT` and `UPDATE`. The type mapping is an object where a key/value defines a column/data-type pair. It can be set by `setTypeMapping()` and get by `getTypeMapping()` methods of the query object.
+xql.js has a feature called `TypeMapping`, which allows to override a default serialization of data used by `INSERT` and `UPDATE`. The type mapping is an object where a key/value defines a column/data-type pair. It can be set by `setTypeMapping()` and get by `getTypeMapping()` methods of the query object.
 
 The following example illustrates how type mapping may affect data serialization:
 
@@ -388,9 +388,4 @@ WHERE
 More Examples
 -------------
 
-There is a project called [uql-fiddle](http://kobalicek.com/fiddle-uql.html), which can be used to explore uql.js possibilities by playing with it online. It contains more snippets and tries to teach by examples.
-
-License
--------
-
-uql.js has been released to public domain, [see unlicense.org](http://unlicense.org/).
+There is a project called [xql-fiddle](http://kobalicek.com/fiddle-xql.html), which can be used to explore xql.js possibilities by playing with it online. It contains more snippets and tries to teach by examples.

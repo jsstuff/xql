@@ -1,77 +1,80 @@
-// uql.js <https://github.com/exjs/uql>
-(function(exclass, uql) {
+// xql.js <https://github.com/exjs/xql>
+(function(_xql) {
 "use strict";
 
-// \namespace core
-//
-// Core namespace contains all expression nodes.
-var core = uql.core = {};
+const xql = _xql;
 
-// \namespace util
+// \namespace node
+//
+// Namespace that contains expression tree nodes.
+const xql$node = xql.node = {};
+
+// \namespace utils
 //
 // Utility functions.
-var util = uql.util = {};
+const xql$utils = xql.utils = {};
 
 // \namespace misc
 //
-// Miscellaneous.
-var misc = uql.misc = {};
+// Miscellaneous namespace.
+const xql$misc = xql.misc = {};
 
-// uql.misc.VERSION
+// xql.misc.VERSION
 //
 // Version information in a "major.minor.patch" form.
 //
-// Note: Version information has been put into the `uql.misc` namespace to
+// Note: Version information has been put into the `xql.misc` namespace to
 // prevent a possible clashing with SQL builder's interface exported in the
 // root namespace.
-misc.VERSION = "1.1.0";
+xql$misc.VERSION = "1.0.0";
 
 // \internal
 // \{
 
 // Always returns false, used internally for browser support.
-function returnFalse() {
-  return false;
-}
+function returnFalse() { return false; }
 
 // Get whether an object is `Array`.
 //
 // Link to `Array.isArray`.
-var isArray = Array.isArray;
+const isArray = Array.isArray;
 
 // Get whether an object is `Buffer`.
 //
 // Returns false if a running environment doesn't support `Buffer` type.
-var isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
+const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
 
 // Link to `Array.prototype.slice`.
-var slice = Array.prototype.slice;
+const slice = Array.prototype.slice;
 
 // Link to `Object.prototype.hasOwnProperty`.
-var hasOwnProperty = Object.prototype.hasOwnProperty;
+const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 // Checks if a string is a well formatted integer with optional '-' sign.
-var reInt = /^-?\d+$/;
+const reInt = /^-?\d+$/;
 
 // Checks if a string is a well formatted integer or floating point number, also
 // accepts scientific notation "E[+-]?xxx".
-var reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
+const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
 
 // Checks if a string is UPPERCASE_ONLY, underscores are accepted.
-var reUpperCase = /^[A-Z_][A-Z_0-9]*$/;
+const reUpperCase = /^[A-Z_][A-Z_0-9]*$/;
+
+// Checks for new line characters.
+const reNewLine = /\n/g;
 
 // Empty object used as an replacement for value of object with no properties.
-var EmptyObject = {};
+const EmptyObject = {};
 
 // \}
 
 // Map of identifiers that are not escaped.
-var IdentifierMap = {
+const IdentifierMap = {
   "*"       : true
 };
 
 // Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
-var BoolMap = {
+const BoolMap = {
   "0"       : "FALSE",
   "f"       : "FALSE",
   "false"   : "FALSE",
@@ -90,7 +93,7 @@ Object.keys(BoolMap).forEach(function(key) {
   BoolMap[key.toUpperCase()] = BoolMap[key];
 });
 
-var TypeMap = {
+const TypeMap = {
   "bool"    : "boolean",
   "boolean" : "boolean",
 
@@ -121,7 +124,7 @@ Object.keys(TypeMap).forEach(function(key) {
 });
 
 // Operator flags.
-var OperatorFlags = {
+const OperatorFlags = {
   kUnary       : 0x00000001, // Operator is unary (has one child node - `value`).
   kBinary      : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
 
@@ -142,32 +145,32 @@ var OperatorFlags = {
 };
 
 // Operator definitions.
-var OperatorDefs = (function() {
-  var kUnary        = OperatorFlags.kUnary;
-  var kBinary       = OperatorFlags.kBinary;
+const OperatorDefs = (function() {
+  const kUnary        = OperatorFlags.kUnary;
+  const kBinary       = OperatorFlags.kBinary;
 
-  var kCond         = OperatorFlags.kCond;
-  var kData         = OperatorFlags.kData;
+  const kCond         = OperatorFlags.kCond;
+  const kData         = OperatorFlags.kData;
 
-  var kInPlaceNot   = OperatorFlags.kInPlaceNot;
-  var kLeftValues   = OperatorFlags.kLeftValues;
-  var kRightValues  = OperatorFlags.kRightValues;
+  const kInPlaceNot   = OperatorFlags.kInPlaceNot;
+  const kLeftValues   = OperatorFlags.kLeftValues;
+  const kRightValues  = OperatorFlags.kRightValues;
 
-  var kBoolean      = OperatorFlags.kBoolean;
-  var kNumber       = OperatorFlags.kNumber;
-  var kString       = OperatorFlags.kString;
-  var kArray        = OperatorFlags.kArray;
-  var kJson         = OperatorFlags.kJson;
-  var kRange        = OperatorFlags.kRange;
-  var kGeometry     = OperatorFlags.kGeometry;
+  const kBoolean      = OperatorFlags.kBoolean;
+  const kNumber       = OperatorFlags.kNumber;
+  const kString       = OperatorFlags.kString;
+  const kArray        = OperatorFlags.kArray;
+  const kJson         = OperatorFlags.kJson;
+  const kRange        = OperatorFlags.kRange;
+  const kGeometry     = OperatorFlags.kGeometry;
 
-  var kAnyType      = kBoolean  |
-                      kNumber   |
-                      kString   |
-                      kArray    |
-                      kJson     |
-                      kRange    |
-                      kGeometry ;
+  const kAnyType      = kBoolean  |
+                        kNumber   |
+                        kString   |
+                        kArray    |
+                        kJson     |
+                        kRange    |
+                        kGeometry ;
 
   var defs = {};
 
@@ -190,8 +193,8 @@ var OperatorDefs = (function() {
   add("<"      , kBinary | kCond           | kNumber | kString                 );
   add("<="     , kBinary | kCond           | kNumber | kString                 );
   add("<>"     , kBinary | kCond           | kNumber | kString                 );
-  add("@>"     , kBinary | kCond           | kArray | kRange                   ); // Contains
-  add("<@"     , kBinary | kCond           | kArray | kRange                   ); // Contained By.
+  add("@>"     , kBinary | kCond           | kArray  | kRange                  ); // Contains
+  add("<@"     , kBinary | kCond           | kArray  | kRange                  ); // Contained By.
   add("&&"     , kBinary | kCond           | kRange                            ); // Overlap.
   add("&<"     , kBinary | kCond           | kRange                            ); // Right Of.
   add("&>"     , kBinary | kCond           | kRange                            ); // Left Of.
@@ -239,7 +242,7 @@ var OperatorDefs = (function() {
 })();
 
 // Node flags.
-var NodeFlags = {
+const NodeFlags = {
   kImmutable    : 0x00000001,
   kNot          : 0x00000002,
 
@@ -252,10 +255,10 @@ var NodeFlags = {
   kDistinct     : 0x00000200,
   kAllOrDistinct: 0x00000300
 };
-uql.NodeFlags = NodeFlags;
+xql.NodeFlags = NodeFlags;
 
 // Sort directions.
-var SortDirection = {
+const SortDirection = {
   ""            : 0,
   "0"           : 0,
 
@@ -267,13 +270,13 @@ var SortDirection = {
 };
 
 // Sort nulls.
-var SortNulls = {
+const SortNulls = {
   "NULLS FIRST" : NodeFlags.kNullsFirst,
   "NULLS LAST"  : NodeFlags.kNullsLast
 };
 
-// List of ordinary functions, which will become available in `uql` namespace.
-var functionsList = [
+// List of ordinary functions, which will become available in `xql` namespace.
+const functionsList = [
   "ABS",
   "ACOS",
   "ARRAY_APPEND",
@@ -379,8 +382,8 @@ var functionsList = [
   "WIDTH_BUCKET"
 ];
 
-// List of aggregate functions, which will become available in `uql` namespace.
-var aggregatesList = [
+// List of aggregate functions, which will become available in `xql` namespace.
+const aggregatesList = [
   "ARRAY_AGG",
   "AVG",
   "BIT_AND",
@@ -415,35 +418,49 @@ var aggregatesList = [
   "XMLAGG"
 ];
 
+// ============================================================================
+// [xql.?Error]
+// ============================================================================
+
 // \class ValueError
 //
 // Error thrown if data is wrong.
-function ValueError(message) {
-  var e = Error.call(this, message);
-
-  this.message = message;
-  this.stack = e.stack || "";
+class ValueError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ValueError";
+    this.message = message;
+  }
 }
-uql.ValueError = exclass({
-  $extend: Error,
-  $construct: ValueError
-});
 
 // \class CompileError
 //
 // Error thrown if query is wrong.
-function CompileError(message) {
-  var e = Error.call(this, message);
-
-  this.message = message;
-  this.stack = e.stack || "";
+class CompileError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ValueError";
+    this.message = message;
+  }
 }
-uql.CompileError = exclass({
-  $extend: Error,
-  $construct: CompileError
-});
 
-// \function util.typeOf(value)
+function throwTypeError(message) {
+  throw new TypeError(message);
+}
+
+function throwValueError(message) {
+  throw new ValueError(message);
+}
+
+function throwCompileError(message) {
+  throw new CompileError(message);
+}
+
+// ============================================================================
+// [xql.utils]
+// ============================================================================
+
+// \function utils.typeOf(value)
 //
 // Get type of `value` as a string. This function extends standard `typeof`
 // operator with "array", "buffer", "null" and "undefined". The `typeOf` is
@@ -467,11 +484,13 @@ function typeOf(value) {
 
   return "object";
 }
-util.typeOf = typeOf;
+xql$utils.typeOf = typeOf;
 
-// \internal
-var toCamelCase = (function() {
-  var re = /_[a-z]/g;
+// \function utils.toCamelCase(s)
+//
+// Convert a given string `s` into a camelCase representation.
+const toCamelCase = (function() {
+  const re = /_[a-z]/g;
 
   function fn(s) {
     return s.charAt(1);
@@ -483,15 +502,205 @@ var toCamelCase = (function() {
 
   return toCamelCase;
 })();
+xql$utils.toCamelCase = toCamelCase;
 
-// \function escapeIdentifier(...)
+function indent(s, indentation) {
+  return (s && indentation) ? indentation + s.replace(reNewLine, "\n" + indentation) : s;
+}
+xql$utils.indent = indent;
+
+function alias(obj, dst, src) {
+  obj[dst] = obj[src];
+}
+
+// ============================================================================
+// [xql.registry]
+// ============================================================================
+
+const xql$registry$map = {};
+
+// \object registry
 //
-// Escape SQL identifier.
-var escapeIdentifier = (function() {
-  var re = /[\.\x00]/g;
+// Database dialects registry.
+const xql$registry = new class Registry {
+  add(dialect, ContextClass) {
+    xql$registry$map[dialect] = ContextClass;
+  }
 
-  function escapeIdentifier() {
-    var s = "";
+  has(dialect) {
+    return hasOwnProperty.call(xql$registry$map, dialect);
+  }
+
+  create(options) {
+    if (typeof options !== "object" || options === null)
+      throwTypeError("xql.registry.create() - Options must be Object");
+
+    var dialect = options.dialect;
+    if (typeof dialect !== "string")
+      throwTypeError("xql.registry.create() - Options must have dialect");
+
+    if (!hasOwnProperty.call(xql$registry$map, dialect))
+      throwTypeError("xql.registry.create() - Unknown dialect '" + dialect + "'");
+
+    var ContextClass = xql$registry$map[dialect];
+    return new ContextClass(options);
+  }
+};
+xql.registry = xql$registry;
+
+function createContext(options) {
+  return xql$registry.create(options);
+}
+xql.createContext = createContext;
+
+// ============================================================================
+// [xql.BaseContext]
+// ============================================================================
+
+// \class Context
+//
+// Base context interface.
+class BaseContext {
+  constructor(dialect, options) {
+    this.dialect = dialect;
+    this.pretty = options.pretty ? true : false;
+    this.indentation = options.indentation || 2;
+
+    this.space = "";     // Space character, either " " or "\n" (pretty).
+    this.commaStr = "";  // Comma separator, either ", " or ",\n" (pretty).
+    this.indentStr = ""; // Indentation string.
+    this.concatStr = ""; // Concatenation string, equals to `space + indentStr`.
+
+    this.indent = null;
+    this.concat = null;
+
+    this._update();
+  }
+
+  // \function xql.Context.escapeIdentifier(...)
+  //
+  // Escape SQL identifier.
+  escapeIdentifier() {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeValue(value, explicitType?:String)
+  //
+  // Escape `value` so it can be inserted into a SQL query.
+  //
+  // The `value` can be any JS type that can be implicitly or explicitly
+  // converted to SQL. The `explicitType` parameter can be used to force
+  // the type explicitly in case of ambiguity.
+  escapeValue(value, explicitType) {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeValueExplicit(value, explicitType:String)
+  escapeValueExplicit(value, explicitType) {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeNumber(value)
+  escapeNumber(value) {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeString(value)
+  //
+  // Escape a given `value` of type string so it can be used in SQL query.
+  escapeString(value) {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeBuffer(value)
+  escapeBuffer(value) {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeValues(value)
+  escapeValues(value) {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeArray(value, isNested)
+  escapeArray(value, isNested) {
+    throwTypeError("Abstract method called");
+  }
+
+  // \function xql.Context.escapeJson(value)
+  escapeJson(value) {
+    throwTypeError("Abstract method called");
+  }
+
+  _update() {
+    var pretty = this.pretty;
+
+    this.space = pretty ? "\n" : " ";
+    this.commaStr = pretty ? ",\n" : ", ";
+    this.indentStr = " ".repeat(this.indentation);
+    this.concatStr = this.space + this.indentStr;
+
+    this.indent = pretty ? this._indent$pretty : this._indent$none;
+    this.concat = pretty ? this._concat$pretty : this._concat$none;
+  }
+
+  _indent$none(s) {
+    return s;
+  }
+
+  _indent$pretty(s) {
+    var indentStr = this.indentStr;
+    return indentStr + s.replace(reNewLine, "\n" + indentStr);
+  }
+
+  _concat$none(s) {
+    return " " + s;
+  }
+
+  _concat$pretty(s) {
+    var concatStr = this.concatStr;
+    return concatStr + s.replace(reNewLine, concatStr);
+  }
+}
+xql.BaseContext = BaseContext;
+
+// ============================================================================
+// [xql.pgsql]
+// ============================================================================
+
+(function() {
+
+const reEscapeIdent = /[\.\x00]/g;
+const reEscapeChars = /[\"\$\'\?]/g;
+
+const reEscapeString =  /[\0\b\f\n\r\t\\\']/g;
+const mpEscapeString = {
+  "\0": "\\x00",// Null character.
+  "\b": "\\b",  // Backspace.
+  "\f": "\\f",  // Form Feed.
+  "\n": "\\n",  // New Line.
+  "\r": "\\r",  // Carriage Return.
+  "\t": "\\t",  // Tag.
+  "\\": "\\\\", // Backslash.
+  "\'": "\\\'"  // Single Quote.
+};
+function fnEscapeString(s) {
+  if (s.charCodeAt(0) === 0)
+    throwCompileError("String can't contain NULL character");
+  return mpEscapeString[s];
+}
+
+// \class PGSQLContext
+//
+// PostgreSQL context.
+class PGSQLContext extends BaseContext {
+  constructor(options) {
+    super("pgsql", options);
+  }
+
+  // \reimplement
+  escapeIdentifier() {
+    var output = "";
 
     for (var i = 0, len = arguments.length; i < len; i++) {
       var a = arguments[i];
@@ -502,29 +711,27 @@ var escapeIdentifier = (function() {
 
       // Apply escaping to all parts of an identifier (if any).
       for (;;) {
-        var m = a.search(re);
+        var m = a.search(reEscapeIdent);
         var p = a;
 
         // Multiple arguments are joined by using ".".
-        if (s)
-          s += ".";
+        if (output)
+          output += ".";
 
         if (m !== -1) {
           var c = a.charCodeAt(m);
 
           // '.' ~= 46.
-          if (c === 46) {
+          if (c === 46)
             p = a.substr(0, m);
-          }
-          else { // (c === 0)
-            throw new CompileError("Identifier can't contain NULL character.");
-          }
+          else // (c === 0)
+            throwCompileError("Identifier can't contain NULL character");
         }
 
         if (hasOwnProperty.call(IdentifierMap, p))
-          s += p;
+          output += p;
         else
-          s += '"' + p + '"';
+          output += '"' + p + '"';
 
         if (m === -1)
           break;
@@ -533,229 +740,189 @@ var escapeIdentifier = (function() {
       }
     }
 
-    return s;
+    return output;
   }
 
-  return escapeIdentifier;
-})();
-uql.escapeIdentifier = escapeIdentifier;
+  // \reimplement
+  escapeValue(value, explicitType) {
+    // Explicitly Defined Type (`explicitType` is set)
+    // -----------------------------------------------
 
-// \function escapeValue(value, explicitType?:String)
-//
-// Escape `value` so it can be inserted into SQL query.
-//
-// The `value` can be any JS type that can be implicitly or explicitly
-// converted to SQL. The `explicitType` parameter can be used to force
-// the type explicitly in case of ambiguity.
-function escapeValue(value, explicitType) {
-  // Explicitly defined type.
-  if (explicitType)
-    return escapeValueExplicit(value, explicitType);
+    if (explicitType) {
+      if (value instanceof Node)
+        return value.compileNode(this);
 
-  // Type is deduced from `value`.
+      var type = TypeMap[explicitType];
+      if (!type)
+        throwValueError("Unknown explicit type '" + explicitType + "'");
 
-  // Check - `string`, `number` and `boolean`.
-  //
-  // These types are expected in most cases so they are checked first. All
-  // other types require more processing to escape them properly anyway.
-  if (typeof value === "string")
-    return escapeString(value);
+      switch (type) {
+        case "boolean":
+          if (value == null)
+            return "NULL";
 
-  if (typeof value === "number")
-    return escapeNumber(value);
+          if (typeof value === "boolean")
+            return value ? "TRUE" : "FALSE";
 
-  if (typeof value === "boolean")
-    return value ? "TRUE" : "FALSE";
+          if (typeof value === "string" && hasOwnProperty.call(BoolMap, value))
+            return BoolMap[value];
 
-  // Check - `undefined` and `null`.
-  //
-  // Undefined implicitly converts to `NULL`.
-  if (value == null)
-    return "NULL";
+          if (typeof value === "number") {
+            if (value === 0) return "FALSE";
+            if (value === 1) return "TRUE";
+            throwValueError("Couldn't convert 'number(" + value + ")' to 'boolean'");
+          }
 
-  // Sanity.
-  //
-  // At this point the only expected type of value is `object`.
-  if (typeof value !== "object")
-    throw new ValueError("Unexpected implicit value type '" + (typeof value) + "'.");
+          // Will throw.
+          break;
 
-  // Node.
-  //
-  // All uql objects extend `Node`.
-  if (value instanceof Node)
-    return value.compileNode();
+        case "integer":
+          if (value == null) return "NULL";
 
-  // Check - Buffer (BLOB / BINARY).
-  if (isBuffer(value))
-    return escapeBuffer(value);
+          if (typeof value === "number") {
+            if (!isFinite(value) || Math.floor(value) !== value)
+              throwValueError("Couldn't convert 'number(" + value + ")' to 'integer'");
+            return value.toString();
+          }
 
-  // Check - Array (ARRAY).
-  if (isArray(value))
-    return escapeArray(value, false);
+          if (typeof value === "string") {
+            if (!reInt.test(value))
+              throwValueError("Couldn't convert ill formatted 'string' to 'integer'");
+            return value;
+          }
 
-  return escapeString(JSON.stringify(value));
-}
-uql.escapeValue = escapeValue;
+          // Will throw.
+          break;
 
-// \function escapeValueExplicit(value, explicitType:String)
-function escapeValueExplicit(value, explicitType) {
-  if (value instanceof Node)
-    return value.compileNode();
+        case "number":
+          if (value == null) return "NULL";
 
-  var type = TypeMap[explicitType];
+          if (typeof value === "number")
+            return this.escapeNumber(value);
 
-  if (!type)
-    throw new ValueError("Unknown explicit type '" + explicitType + "'.");
+          if (typeof value === "string") {
+            if (!reNumber.test(value))
+              throwValueError("Couldn't convert ill formatted 'string' to 'number'");
+            return value;
+          }
 
-  switch (type) {
-    case "boolean":
-      if (value == null)
-        return "NULL";
+          // Will throw
+          break;
 
-      if (typeof value === "boolean")
-        return value ? "TRUE" : "FALSE";
+        case "string":
+          if (value == null) return "NULL";
 
-      if (typeof value === "string" && hasOwnProperty.call(BoolMap, value))
-        return BoolMap[value];
+          if (typeof value === "string")
+            return this.escapeString(value);
 
-      if (typeof value === "number") {
-        if (value === 0)
-          return "FALSE";
+          if (typeof value === "number" || typeof value === "boolean")
+            return this.escapeString(value.toString());
 
-        if (value === 1)
-          return "TRUE";
+          if (typeof value === "object")
+            return this.escapeString(JSON.stringify(value));
 
-        throw new ValueError(
-          "Couldn't convert 'number(" + value + ")' to 'boolean'.");
+          // Will throw.
+          break;
+
+        case "array":
+          if (value == null)
+            return "NULL";
+
+          if (Array.isArray(value))
+            return this.escapeArray(value, false);
+
+          // Will throw.
+          break;
+
+        case "values":
+          if (value == null)
+            return "NULL";
+
+          if (Array.isArray(value))
+            return this.escapeValues(value, false);
+
+          // Will throw.
+          break;
+
+        case "json":
+          // `undefined` maps to native DB `NULL` type while `null` maps to
+          // JSON `null` type. This is the only way to distinguish between
+          // these. `undefined` is disallowed by JSON anyway.
+          if (value === undefined)
+            return "NULL";
+
+          return this.escapeJson(value);
+
+        case "raw":
+          return value;
       }
 
-      // Will throw.
-      break;
+      throwValueError("Couldn't convert '" + typeOf(value) + "' to '" + explicitType + "'");
+    }
 
-    case "integer":
-      if (value == null)
-        return "NULL";
+    // Implicitly Defined Type (deduced from `value`)
+    // ----------------------------------------------
 
-      if (typeof value === "number") {
-        if (!isFinite(value) || Math.floor(value) !== value) {
-          throw new ValueError(
-            "Couldn't convert 'number(" + value + ")' to 'integer'.");
-        }
+    // Check - `string`, `number` and `boolean`.
+    //
+    // These types are expected in most cases so they are checked first. All
+    // other types require more processing to escape them properly anyway.
+    if (typeof value === "string")
+      return this.escapeString(value);
 
-        return value.toString();
-      }
+    if (typeof value === "number")
+      return this.escapeNumber(value);
 
-      if (typeof value === "string") {
-        if (!reInt.test(value)) {
-          throw new ValueError(
-            "Couldn't convert ill formatted 'string' to 'integer'.");
-        }
+    if (typeof value === "boolean")
+      return value ? "TRUE" : "FALSE";
 
-        return value;
-      }
+    // Check - `undefined` and `null`.
+    //
+    // Undefined implicitly converts to `NULL`.
+    if (value == null)
+      return "NULL";
 
-      // Will throw.
-      break;
+    // Sanity.
+    //
+    // At this point the only expected type of value is `object`.
+    if (typeof value !== "object")
+      throwValueError("Unexpected implicit value type '" + (typeof value) + "'");
 
-    case "number":
-      if (value == null)
-        return "NULL";
+    // Node.
+    //
+    // All xql objects extend `Node`.
+    if (value instanceof Node)
+      return value.compileNode(this);
 
-      if (typeof value === "number") {
-        return escapeNumber(value);
-      }
+    // Check - Buffer (BLOB / BINARY).
+    if (isBuffer(value))
+      return this.escapeBuffer(value);
 
-      if (typeof value === "string") {
-        if (!reNumber.test(value)) {
-          throw new ValueError(
-            "Couldn't convert ill formatted 'string' to 'number'.");
-        }
+    // Check - Array (ARRAY).
+    if (isArray(value))
+      return this.escapeArray(value, false);
 
-        return value;
-      }
-
-      // Will throw
-      break;
-
-    case "string":
-      if (value == null)
-        return "NULL";
-
-      if (typeof value === "string")
-        return escapeString(value);
-
-      if (typeof value === "number" || typeof value === "boolean")
-        return escapeString(value.toString());
-
-      if (typeof value === "object")
-        return escapeString(JSON.stringify(value));
-
-      // Will throw.
-      break;
-
-    case "array":
-      if (value == null)
-        return "NULL";
-
-      if (Array.isArray(value))
-        return escapeArray(value, false);
-
-      // Will throw.
-      break;
-
-    case "values":
-      if (value == null)
-        return "NULL";
-
-      if (Array.isArray(value))
-        return escapeValues(value, false);
-
-      // Will throw.
-      break;
-
-    case "json":
-      // `undefined` maps to native DB `NULL` type while `null` maps to
-      // JSON `null` type. This is the only way to distinguish between
-      // these. `undefined` is disallowed by JSON anyway.
-      if (value === undefined)
-        return "NULL";
-
-      return escapeJson(value);
-
-    case "raw":
-      return value;
+    return this.escapeString(JSON.stringify(value));
   }
 
-  throw new ValueError(
-    "Couldn't convert '" + typeOf(value) + "' to '" + explicitType + "'.");
-}
-uql.escapeValueExplicit = escapeValueExplicit;
+  // \reimplement
+  escapeNumber(value) {
+    if (!isFinite(value)) {
+      if (value === Infinity)
+        return "'Infinity'";
+      if (value === -Infinity)
+        return "'-Infinity'";
 
-// \function escapeString(value)
-//
-// Escape a given `value` of type string so it can be used in SQL query.
-var escapeString = (function() {
-  var re =  /[\0\b\f\n\r\t\\\']/g;
-  var map = {
-    "\0": "\\x00",// Null character.
-    "\b": "\\b",  // Backspace.
-    "\f": "\\f",  // Form Feed.
-    "\n": "\\n",  // New Line.
-    "\r": "\\r",  // Carriage Return.
-    "\t": "\\t",  // Tag.
-    "\\": "\\\\", // Backslash.
-    "\'": "\\\'"  // Single Quote.
-  };
+      return "'NaN'";
+    }
 
-  function fn(s) {
-    if (s.charCodeAt(0) === 0)
-      throw new CompileError("String can't contain NULL character.");
-    return map[s];
+    return value.toString();
   }
 
-  function escapeString(value) {
+  // \reimplement
+  escapeString(value) {
     var oldLength = value.length;
-    value = value.replace(re, fn);
+    value = value.replace(reEscapeString, fnEscapeString);
 
     // We have to tell Postgres explicitly that the string is escaped by
     // a C-style escaping sequence(s).
@@ -767,135 +934,104 @@ var escapeString = (function() {
     return "'" + value + "'";
   }
 
-  return escapeString;
-})();
-uql.escapeString = escapeString;
-
-// \function escapeNumber(value)
-function escapeNumber(value) {
-  if (!isFinite(value)) {
-    if (value === Infinity)
-      return "'Infinity'";
-    if (value === -Infinity)
-      return "'-Infinity'";
-
-    return "'NaN'";
+  // \reimplement
+  escapeBuffer(value) {
+    return "E'\\x" + value.toString("hex") + "'";
   }
 
-  return value.toString();
-}
-uql.escapeNumber = escapeNumber;
+  // \reimplement
+  escapeValues(value) {
+    var out = "";
 
-// \function escapeBuffer(value)
-function escapeBuffer(value) {
-  return "E'\\x" + value.toString("hex") + "'";
-}
-uql.escapeBuffer = escapeBuffer;
+    for (var i = 0, len = value.length; i < len; i++) {
+      var element = value[i];
+      if (out) out += ", ";
 
-// \function escapeValues(value)
-function escapeValues(value) {
-  var s = "";
+      if (isArray(element))
+        out += this.escapeArray(element, false);
+      else
+        out += this.escapeValue(element);
+    }
 
-  for (var i = 0, len = value.length; i < len; i++) {
-    var element = value[i];
-
-    if (s)
-      s += ", ";
-
-    if (isArray(element))
-      s += escapeArray(element, false);
-    else
-      s += escapeValue(element);
+    return "(" + out + ")";
   }
 
-  return "(" + s + ")";
-}
-uql.escapeValues = escapeValues;
+  // \reimplement
+  escapeArray(value, isNested) {
+    var out = "";
+    var i = 0, len = value.length;
 
-// \function escapeArray(value, isNested)
-function escapeArray(value, isNested) {
-  var s = "";
-  var i = 0, len = value.length;
+    if (len === 0)
+      return "'{}'";
 
-  if (len === 0)
-    return "'{}'";
+    do {
+      var element = value[i];
+      if (out) out += ", ";
 
-  do {
-    var element = value[i];
+      if (isArray(element))
+        out += this.escapeArray(element, true);
+      else
+        out += this.escapeValue(element);
+    } while (++i < len);
 
-    if (s)
-      s += ", ";
-
-    if (isArray(element))
-      s += escapeArray(element, true);
+    if (isNested)
+      return "[" + out + "]";
     else
-      s += escapeValue(element);
-  } while (++i < len);
+      return "ARRAY[" + out + "]";
+  }
 
-  if (isNested)
-    return "[" + s + "]";
-  else
-    return "ARRAY[" + s + "]";
-}
-uql.escapeArray = escapeArray;
+  // \reimplement
+  escapeJson(value) {
+    return this.escapeString(JSON.stringify(value));
+  }
 
-// \function escapeJson(value)
-function escapeJson(value) {
-  return escapeString(JSON.stringify(value));
-}
-uql.escapeJson = escapeJson;
-
-// \function substitute(query, bindings)
-//
-// Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
-// string with `bindings` and returns a new string. The function automatically
-// detects the format of `query` string and checks if it's consistent (i.e. it
-// throws if `?` is used together with `$1`).
-//
-// This function knows how to recognize escaped identifiers and strings in the
-// query and skips content of these. For example for a given string `'?' ?` only
-// the second `?` is considered and substituted.
-//
-// NOTE: Although the function understands SQL syntax, the function expects
-// well formed SQL query. The purpose is to replace query parameters and not
-// to perform expensive validation (that will be done by the server anyway).
-var substitute = (function() {
-  var reEscapeChars = /[\"\$\'\?]/g;
-
-  function substitute(query, bindings) {
+  // \function substitute(query, bindings)
+  //
+  // Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
+  // string with `bindings` and returns a new string. The function automatically
+  // detects the format of `query` string and checks if it's consistent (i.e. it
+  // throws if `?` is used together with `$1`).
+  //
+  // This function knows how to recognize escaped identifiers and strings in the
+  // query and skips content of these. For example for a given string `'?' ?` only
+  // the second `?` is considered and substituted.
+  //
+  // NOTE: Although the function understands SQL syntax, the function expects
+  // well formed SQL query. The purpose is to replace query parameters and not
+  // to perform expensive validation (that will be done by the server anyway).
+  substitute(query, bindings) {
     var input = "";
     var output = "";
 
     if (typeof query === "string")
       input = query;
     else if (query instanceof Node)
-      input = query.compileNode();
+      input = query.compileNode(this);
     else
       input = query.toString();
 
     // These are hints for javascript runtime. We really want this rountine
-    // as fast as possible. The `|0` hint tells VM to use integer instead of
-    // double precision floating point.
-    var i = input.search(reEscapeChars)|0;
+    // as fast as possible.
+    var i = input.search(reEscapeChars);
     if (i === -1)
       return input;
 
-    var len = input.length|0;
-    var iStart = 0|0;
+    var len = input.length;
+    var iStart = 0;
 
     // Substitution mode:
     //   0  - Not set.
     //   36 - `$`.
     //   63 - `?`.
-    var mode = 0|0;
+    var mode = 0;
 
     // Bindings index, incremented if query contains `?` or parsed if `$`.
-    var bIndex = 0|0;
+    var bIndex = 0;
     // Count of bindings available.
-    var bLength = bindings.length|0;
+    var bLength = bindings.length;
 
     while (i < len) {
-      var c = input.charCodeAt(i)|0;
+      var c = input.charCodeAt(i);
       i++;
 
       // Check if the character is one of the following:
@@ -912,7 +1048,7 @@ var substitute = (function() {
             if (i === len)
               break;
 
-            c = input.charCodeAt(i)|0;
+            c = input.charCodeAt(i);
             i++;
 
             // Skip anything that is not `"`.
@@ -928,7 +1064,7 @@ var substitute = (function() {
             // Only continue if this is an escape sequence `""`.
             //
             // `"` === 34
-            c = input.charCodeAt(i)|0;
+            c = input.charCodeAt(i);
             if (c !== 34)
               break;
 
@@ -961,7 +1097,7 @@ var substitute = (function() {
               if (i >= len)
                 break;
 
-              c = input.charCodeAt(i)|0;
+              c = input.charCodeAt(i);
               i++;
 
               // Break if matching `'` has been found.
@@ -987,7 +1123,7 @@ var substitute = (function() {
               if (i === len)
                 break;
 
-              c = input.charCodeAt(i)|0;
+              c = input.charCodeAt(i);
               i++;
 
               // Skip anything that is not `'`.
@@ -1003,7 +1139,7 @@ var substitute = (function() {
               // Only continue if this is an escape sequence `''`.
               //
               // `'` === 39
-              c = input.charCodeAt(i)|0;
+              c = input.charCodeAt(i);
               if (c !== 39)
                 break;
 
@@ -1016,9 +1152,9 @@ var substitute = (function() {
         else if (c === 36) {
           if (mode !== c) {
             if (mode !== 0) {
-              throw new CompileError("Substitute() - Mixed substitution marks, " +
+              throwCompileError("Substitute() - Mixed substitution marks, " +
                 "initial '" + String.fromCharCode(mode) + "'" +
-                "is followed by '" + String.fromCharCode(c) + "'.");
+                "is followed by '" + String.fromCharCode(c) + "'");
             }
             mode = c;
           }
@@ -1026,32 +1162,32 @@ var substitute = (function() {
           // Flush accumulated input.
           output += input.substring(iStart, i - 1);
 
-          bIndex = 0|0;
+          bIndex = 0;
           iStart = i;
 
           // Parse the number `[0-9]+` directly to `bIndex`.
           while (i < len) {
-            c = input.charCodeAt(i)|0;
+            c = input.charCodeAt(i);
             // `0` === 48
             // `9` === 57
             if (c < 48 || c > 57)
               break;
 
-            bIndex = (bIndex * 10 + (c - 48)) | 0;
+            bIndex = bIndex * 10 + (c - 48);
             if (bIndex > bLength)
-              throw new CompileError("Substitute() - Index '" + bIndex + "' of range (" + bLength + ").");
+              throwCompileError("Substitute() - Index '" + bIndex + "' of range (" + bLength + ")");
             i++;
           }
 
           if (bIndex === 0)
-            throw new CompileError("Substitute() - Index can't be zero.");
+            throwCompileError("Substitute() - Index can't be zero");
           bIndex--;
 
           if (iStart === i)
-            throw new CompileError("Substitute() - Missing number after '$' mark.");
+            throwCompileError("Substitute() - Missing number after '$' mark");
 
           // Substitute.
-          output += escapeValue(bindings[bIndex]);
+          output += this.escapeValue(bindings[bIndex]);
           iStart = i;
         }
       }
@@ -1060,21 +1196,21 @@ var substitute = (function() {
         // Basically a duplicate from `$`.
         if (mode !== c) {
           if (mode !== 0) {
-            throw new CompileError("Substitute() - Mixed substitution marks, " +
+            throwCompileError("Substitute() - Mixed substitution marks, " +
               "initial '" + String.fromCharCode(mode) + "'" +
-              "is followed by '" + String.fromCharCode(c) + "'.");
+              "is followed by '" + String.fromCharCode(c) + "'");
           }
           mode = c;
         }
 
         if (bIndex >= bLength)
-          throw new CompileError("Substitute() - Index '" + bIndex + "' out of range (" + bLength + ").");
+          throwCompileError("Substitute() - Index '" + bIndex + "' out of range (" + bLength + ")");
 
         // Flush accumulated input.
         output += input.substring(iStart, i - 1);
 
         // Substitute.
-        output += escapeValue(bindings[bIndex]);
+        output += this.escapeValue(bindings[bIndex]);
 
         // Advance.
         iStart = i;
@@ -1092,12 +1228,16 @@ var substitute = (function() {
 
     return output;
   }
+}
+xql$registry.add("pgsql", PGSQLContext);
 
-  return substitute;
 })();
-uql.substitute = substitute;
 
-// \class core.Node
+// ============================================================================
+// [xql.node]
+// ============================================================================
+
+// \class node.Node
 //
 // Base class for all `Node`s related to query building.
 //
@@ -1105,21 +1245,19 @@ uql.substitute = substitute;
 // `_flags` and `_as` members. Classes that inherit `Node` can omit calling
 // `Node`s constructor for performance reasons, but if you do so, please
 // always initialize members in the correct order [_type, _flags, _as].
-function Node(type, as) {
-  this._type = type || "";
-  this._flags = 0|0;
-
-  this._as = as || "";
-}
-core.Node = exclass({
-  $construct: Node,
+class Node {
+  constructor(type, as) {
+    this._type = type || "";
+    this._flags = 0;
+    this._as = as || "";
+  }
 
   // \function Node.shouldWrap()
   //
   // Get whether the not should be wrapped in parentheses.
-  shouldWrap: function(ctx) {
-    throw new CompileError("Node(" + this._type + ").shouldWrap() - Must be reimplemented.");
-  },
+  shouldWrap(ctx) {
+    throwTypeError("Abstract method called");
+  }
 
   // \function Query.compileQuery()
   //
@@ -1129,14 +1267,16 @@ core.Node = exclass({
   // \note This function is `null` by default and only added by nodes which can
   // be executed. Use `Node.canExecute()` method to check whether the node can
   // actually be executed, i.e. compiles into an executable SQL.
-  compileQuery: null,
+  compileQuery(ctx) {
+    throwTypeError("Abstract method called");
+  }
 
   // \function Node.compileNode()
   //
   // Compile the node.
-  compileNode: function(ctx) {
-    throw new CompileError("Node(" + this._type + ").compileNode() - Must be reimplemented.");
-  },
+  compileNode(ctx) {
+    throwTypeError("Abstract method called");
+  }
 
   // \function Node.canExecute()
   //
@@ -1146,24 +1286,24 @@ core.Node = exclass({
   // \note There is not a base class for nodes which can execute, this getter
   // uses reflection; it dynamically checks for presence of `compileQuery` and
   // returns `true` if found.
-  canExecute: function() {
-    return typeof this.compileQuery === "function";
-  },
+  canExecute() {
+    return this.compileQuery !== Node.prototype.compileQuery;
+  }
 
-  getType: function() {
+  getType() {
     return this._type;
-  },
+  }
 
-  setType: function(type) {
+  setType(type) {
     this._type = type;
     return this;
-  },
+  }
 
-  getFlag: function(flag) {
+  getFlag(flag) {
     return (this._flags & flag) !== 0;
-  },
+  }
 
-  setFlag: function(flag, value) {
+  setFlag(flag, value) {
     var flags = this._flags;
 
     if (value || value === undefined)
@@ -1173,57 +1313,57 @@ core.Node = exclass({
 
     this._flags = flags;
     return this;
-  },
+  }
 
-  getAlias: function() {
+  getAlias() {
     return this._as;
-  },
+  }
 
-  setAlias: function(as) {
+  setAlias(as) {
     this._as = as;
     return this;
-  },
+  }
 
   // \function Node.AS(as:String)
-  AS: function(as) {
+  AS(as) {
     this._as = as;
     return this;
-  },
+  }
 
   // \function Node.EQ(b:{Var|Node})
-  EQ: function(b) {
-    return new Operator(this, "=", b);
-  },
+  EQ(b) {
+    return BINARY_OP(this, "=", b);
+  }
 
   // \function Node.NE(b:{Var|Node})
-  NE: function(b) {
-    return new Operator(this, "<>", b);
-  },
+  NE(b) {
+    return BINARY_OP(this, "<>", b);
+  }
 
   // \function Node.LT(b:{Var|Node})
-  LT: function(b) {
-    return new Operator(this, "<", b);
-  },
+  LT(b) {
+    return BINARY_OP(this, "<", b);
+  }
 
   // \function Node.LE(b:{Var|Node})
-  LE: function(b) {
-    return new Operator(this, "<=", b);
-  },
+  LE(b) {
+    return BINARY_OP(this, "<=", b);
+  }
 
   // \function Node.GT(b:{Var|Node})
-  GT: function(b) {
-    return new Operator(this, ">", b);
-  },
+  GT(b) {
+    return BINARY_OP(this, ">", b);
+  }
 
   // \function Node.GE(b:{Var|Node})
-  GE: function(b) {
-    return new Operator(this, ">=", b);
-  },
+  GE(b) {
+    return BINARY_OP(this, ">=", b);
+  }
 
   // \function Node.IN(b:{Var|Node})
   //
   // Returns a new Node which contains `this IN b` expression.
-  IN: function(b) {
+  IN(b) {
     var len = arguments.length;
 
     if (len > 1) {
@@ -1237,199 +1377,170 @@ core.Node = exclass({
       b = [];
     }
 
-    return new Operator(this, "IN", b);
+    return BINARY_OP(this, "IN", b);
   }
-});
-
-// \internal
-//
-// Implementation of `Node.compileQuery()`.
-function Node$compileQuery(ctx) {
-  return this.compileNode(ctx) + ";";
 }
+xql$node.Node = Node;
 
-// \class core.Raw
+// \class node.Raw
 //
 // Raw SQL expression.
-function Raw(expression, bindings) {
-  // Doesn't call `Node` constructor.
-  this._type = "RAW";
-  this._flags = 0|0;
+class Raw extends Node {
+  constructor(expression, bindings) {
+    super("RAW", "");
+    this._value = expression || "";
+    this._bindings = bindings || null;
+  }
 
-  this._as = "";
-  this._value = expression || "";
-  this._bindings = bindings || null;
-}
-core.Raw = exclass({
-  $extend: Node,
-  $construct: Raw,
-
-  shouldWrap: function(ctx) {
+  shouldWrap(ctx) {
     return false;
-  },
+  }
 
-  compileQuery: Node$compileQuery,
+  compileQuery(ctx) {
+    return this.compileNode(ctx) + ";";
+  }
 
-  compileNode: function(ctx) {
-    var s = this._value;
+  compileNode(ctx) {
+    var out = this._value;
 
     var bindings = this._bindings;
     if (bindings && bindings.length)
-      s = substitute(s, bindings);
+      out = ctx.substitute(out, bindings);
 
     var as = this._as;
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
-  },
+    return out;
+  }
 
-  getExpression: function() {
+  getExpression() {
     return this._value;
-  },
+  }
 
-  setExpression: function(expression) {
+  setExpression(expression) {
     this._value = expression;
     return this;
-  },
+  }
 
-  getBindings: function() {
+  getBindings() {
     return this._bindings;
-  },
+  }
 
-  setBindings: function(bindings) {
+  setBindings(bindings) {
     this._bindings = bindings || null;
     return this;
   }
-});
-
-// \class core.Unary
-function Unary(type, value) {
-  // Doesn't call `Node` constructor.
-  this._type = type || "";
-  this._flags = 0|0;
-
-  this._as = "";
-  this._value = value;
 }
-core.Unary = exclass({
-  $extend: Node,
-  $construct: Unary,
+xql$node.Raw = Raw;
 
-  shouldWrap: function(ctx) {
+// \class node.Unary
+class Unary extends Node {
+  constructor(type, value) {
+    super(type, "");
+    this._value = value;
+  }
+
+  shouldWrap(ctx) {
     return false;
-  },
+  }
 
-  compileNode: function(ctx) {
+  compileNode(ctx) {
     var type = this._type;
-    var s = escapeValue(this._value);
+    var out = ctx.escapeValue(this._value);
 
     switch (type) {
       case "NOT":
-        s = "NOT " + s;
+        out = "NOT " + out;
         break;
 
       case "-":
-        s = "-" + s;
+        out = "-" + out;
         break;
 
       default:
         if (type)
-          s = type + " " + s;
+          out = type + " " + out;
         break;
     }
 
     var as = this._as;
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
-  },
+    return out;
+  }
 
-  getValue: function() {
+  getValue() {
     return this._value;
-  },
+  }
 
-  setValue: function(value) {
+  setValue(value) {
     this._value = value;
     return this;
   }
-});
-
-// \class core.Binary
-function Binary(left, type, right, as) {
-  // Doesn't call `Node` constructor.
-  this._type = type || "";
-  this._flags = 0|0;
-
-  this._as = as || "";
-  this._left = left;
-  this._right = right;
 }
-core.Binary = exclass({
-  $extend: Node,
-  $construct: Binary,
+xql$node.Unary = Unary;
 
-  getLeft: function() {
+// \class node.Binary
+class Binary extends Node {
+  constructor(left, type, right, as) {
+    super(type, as);
+    this._left = left;
+    this._right = right;
+  }
+
+  getLeft() {
     return this._left;
-  },
+  }
 
-  setLeft: function(value) {
+  setLeft(value) {
     this._left = value;
     return this;
-  },
+  }
 
-  addLeft: function(value) {
+  addLeft(value) {
     var left = this._left;
-
     if (!isArray(left))
-      throw new CompileError("Binary.addLeft() - Left operand is not an Array.");
+      throwCompileError("Binary.addLeft() - Left operand is not an Array");
 
     left.push(value);
     return this;
-  },
+  }
 
-  getRight: function() {
+  getRight() {
     return this._right;
-  },
+  }
 
-  setRight: function(right) {
+  setRight(right) {
     this._right = right;
     return this;
-  },
+  }
 
-  addRight: function(value) {
+  addRight(value) {
     var right = this._right;
-
     if (!isArray(right))
-      throw new CompileError("Binary.addRight() - Left operand is not an Array.");
+      throwCompileError("Binary.addRight() - Left operand is not an Array.");
 
     right.push(value);
     return this;
   }
-});
-
-// \class core.Operator
-function Operator(left, type, right, as) {
-  // Doesn't call `Binary` constructor.
-  this._type = type || "";
-  this._flags = 0|0;
-
-  this._as = as || "";
-  this._left = left;
-  this._right = right;
 }
-core.Operator = exclass({
-  $extend: Binary,
-  $construct: Operator,
+xql$node.Binary = Binary;
 
-  shouldWrap: function(ctx) {
+// \class node.Operator
+class Operator extends Binary {
+  constructor(left, type, right, as) {
+    super(left, type, right, as);
+  }
+
+  shouldWrap(ctx) {
     return false;
-  },
+  }
 
-  compileNode: function(ctx) {
+  compileNode(ctx) {
     var type = this._type;
-    var s = "";
+    var out = "";
 
     var keyword = "";
 
@@ -1440,19 +1551,17 @@ core.Operator = exclass({
     var right = "";
 
     if (!type)
-      throw new CompileError("Operator.compileNode() - No operator specified.");
+      throwCompileError("Operator.compileNode() - No operator specified");
 
     if (hasOwnProperty.call(OperatorDefs, type)) {
       var op = OperatorDefs[type];
       var flags = op.flags;
 
-      if (flags & OperatorFlags.kLeftValues) {
-        left = escapeValues(leftNode);
-      }
+      if (flags & OperatorFlags.kLeftValues)
+        left = ctx.escapeValues(leftNode);
 
-      if (flags & OperatorFlags.kRightValues) {
-        right = escapeValues(rightNode);
-      }
+      if (flags & OperatorFlags.kRightValues)
+        right = ctx.escapeValues(rightNode);
 
       // Check if the right operand is `NULL` and convert the operator to `IS`
       // or `IS NOT` if necessary to be more conforming with SQL standard.
@@ -1469,197 +1578,170 @@ core.Operator = exclass({
 
 
     if (!left)
-      left = escapeValue(leftNode);
+      left = ctx.escapeValue(leftNode);
     if (leftNode instanceof Binary)
       left = "(" + left + ")";
 
     if (!right)
-      right = escapeValue(rightNode);
+      right = ctx.escapeValue(rightNode);
     if (rightNode instanceof Binary)
       right = "(" + right + ")";
 
-    s = left + keyword + right;
+    out = left + keyword + right;
 
     var as = this._as;
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
+    return out;
   }
-});
-
-// \class core.Group
-function Group(type, values) {
-  // Doesn't call `Node` constructor.
-  this._type = type;
-  this._flags = 0|0;
-
-  this._as = "";
-  this._values = values || [];
 }
-core.Group = exclass({
-  $extend: Node,
-  $construct: Group,
+xql$node.Operator = Operator;
 
-  push: function() {
+// \class node.Group
+class Group extends Node {
+  constructor(type, values) {
+    super(type, "");
+    this._values = values || [];
+  }
+
+  push() {
     var values = this._values;
-    values.push.apply(values, arguments);
+    for (var i = 0, len = arguments.length; i < len; i++)
+      values.push(arguments[i]);
     return this;
-  },
+  }
 
-  concat: function(array) {
+  concat(array) {
     var values = this._values;
     for (var i = 0, len = array.length; i < len; i++)
       values.push(array[i]);
     return this;
   }
-});
-
-// \class core.Logical
-function Logical() {
-  Group.apply(this, arguments);
 }
-core.Logical = exclass({
-  $extend: Group,
-  $construct: Logical,
+xql$node.Group = Group;
 
-  shouldWrap: function(ctx) {
+// \class node.Logical
+class Logical extends Group {
+  shouldWrap(ctx) {
     return this._values.length > 1;
-  },
+  }
 
-  compileNode: function(ctx) {
+  compileNode(ctx) {
     var type = this._type;
-    var s = "";
+    var out = "";
 
     var values = this._values;
     var separator = " " + type + " ";
 
     for (var i = 0, len = values.length; i < len; i++) {
       var value = values[i];
-      var escaped = escapeValue(value);
+      var escaped = ctx.escapeValue(value);
 
-      if (s)
-        s += separator;
+      if (out)
+        out += separator;
 
       if (value.shouldWrap(ctx))
-        s += "(" + escaped + ")";
+        out += "(" + escaped + ")";
       else
-        s += escaped;
+        out += escaped;
     }
 
-    return s;
+    return out;
   }
-});
+}
+xql$node.Logical = Logical;
 
-// \class core.ObjectOp
+// \class node.ObjectOp
 //
 // Condition defined as an object having multiple properties (key/value pairs).
 // Implicit `AND` operator is used to for the query.
-function ObjectOp(type, value) {
-  // Doesn't call `Unary` constructor.
-  this._type = type;
-  this._flags = 0|0;
+class ObjectOp extends Unary {
+  constructor(type, value) {
+    super(type, "");
+    this._value = value;
+  }
 
-  // `_as` is never used.
-  this._as = "";
-  this._value = value;
-}
-core.ObjectOp = exclass({
-  $extend: Unary,
-  $construct: ObjectOp,
-
-  shouldWrap: function(ctx) {
+  shouldWrap(ctx) {
     return false;
-  },
+  }
 
-  compileNode: function(ctx) {
-    var s = "";
+  compileNode(ctx) {
+    var out = "";
 
     var separator = " " + this._type + " ";
     var columns = this._value;
 
     for (var k in columns) {
       var value = columns[k];
-      var compiled = escapeValue(value);
+      var compiled = ctx.escapeValue(value);
 
-      if (s)
-        s += separator;
-      s += escapeIdentifier(k);
+      if (out)
+        out += separator;
+      out += ctx.escapeIdentifier(k);
 
       if (compiled === "NULL")
-        s += " IS ";
+        out += " IS ";
       else
-        s += " = ";
+        out += " = ";
 
       if (value instanceof Node && value.shouldWrap())
-        s += "(" + compiled + ")";
+        out += "(" + compiled + ")";
       else
-        s += compiled;
+        out += compiled;
     }
 
-    return s;
+    return out;
   }
-});
-
-function Identifier(value, as) {
-  // Doesn't call `Node` constructor.
-  this._type = "IDENTIFIER";
-  this._flags = 0|0;
-
-  this._as = as || "";
-  this._value = value;
 }
-core.Identifier = exclass({
-  $extend: Node,
-  $construct: Identifier,
+xql$node.ObjectOp = ObjectOp;
 
-  shouldWrap: function() {
+class Identifier extends Node {
+  constructor(value, as) {
+    super("IDENTIFIER", as);
+    this._value = value;
+  }
+
+  shouldWrap() {
     return false;
-  },
+  }
 
-  compileNode: function(ctx) {
-    var s = escapeIdentifier(this._value);
+  compileNode(ctx) {
+    var out = ctx.escapeIdentifier(this._value);
     var as = this._as;
 
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
-  },
+    return out;
+  }
 
-  getValue: function() {
+  getValue() {
     return this._value;
-  },
+  }
 
-  setValue: function(value) {
+  setValue(value) {
     this._value = value;
     return this;
   }
-});
-
-// \class core.Join
-function Join(left, type, right, condition) {
-  // Doesn't call `Binary` constructor.
-  this._type = type || "";
-  this._flags = 0|0;
-
-  this._as = "";
-  this._left = left;
-  this._right = right;
-  this._condition = condition;
 }
-core.Join = exclass({
-  $extend: Binary,
-  $construct: Join,
+xql$node.Identifier = Identifier;
 
-  shouldWrap: function(ctx) {
+// \class node.Join
+class Join extends Binary {
+  constructor(left, type, right, condition) {
+    super(left, type, right, "");
+    this._condition = condition;
+  }
+
+  shouldWrap(ctx) {
     return false;
-  },
+  }
 
-  compileNode: function(ctx) {
+  compileNode(ctx) {
+    var out = "";
+
     var type = this._type;
-    var s = "";
-
     var keyword = "";
 
     switch (type) {
@@ -1676,24 +1758,16 @@ core.Join = exclass({
         break;
     }
 
-    var left = "";
-    var right = "";
+    var lo = this._left;
+    var ro = this._right;
 
-    if (typeof this._left === "string")
-      left = escapeIdentifier(this._left);
-    else
-      left = this._left.compileNode();
+    var left = typeof lo === "string" ? ctx.escapeIdentifier(lo) : lo.compileNode(ctx);
+    var right = typeof ro === "string" ? ctx.escapeIdentifier(ro) : ro.compileNode(ctx);
 
-    if (typeof this._right === "string")
-      right = escapeIdentifier(this._right);
-    else
-      right = this._right.compileNode();
-
-    s = left + keyword + right;
-
-    var condition = this._condition;
+    out = left + keyword + right;
 
     // Compile `USING (...)` clause.
+    var condition = this._condition;
     if (isArray(condition)) {
       var t = "";
 
@@ -1704,60 +1778,57 @@ core.Join = exclass({
           t += ", ";
 
         if (typeof identifier === "string")
-          t += escapeIdentifier(identifier);
+          t += ctx.escapeIdentifier(identifier);
         else
-          t += identifier.compileNode();
+          t += identifier.compileNode(ctx);
       }
 
       if (t)
-        s += " USING (" + t + ")";
+        out += " USING (" + t + ")";
     }
     // Compile `ON ...` clause.
     else if (condition instanceof Node) {
-      s += " ON " + condition.compileNode();
+      out += " ON " + condition.compileNode(ctx);
     }
 
     var as = this._as;
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
-  },
+    return out;
+  }
 
-  getCondition: function() {
+  getCondition() {
     return this._condition;
-  },
+  }
 
-  setCondition: function(condition) {
+  setCondition(condition) {
     this._condition = condition;
     return this;
   }
-});
+}
+xql$node.Join = Join;
 
-// \class core.Sort
+// \class node.Sort
 //
 // Sort expression that comes after `ORDER BY`.
-function Sort(column, direction, nulls) {
-  var flags = 0|0;
+class Sort extends Identifier {
+  constructor(column, direction, nulls) {
+    var flags = 0;
 
-  if (direction && hasOwnProperty.call(SortDirection, direction))
-    flags |= SortDirection[direction];
+    if (direction && hasOwnProperty.call(SortDirection, direction))
+      flags |= SortDirection[direction];
 
-  if (nulls && hasOwnProperty.call(SortNulls, nulls))
-    flags |= SortNulls[nulls];
+    if (nulls && hasOwnProperty.call(SortNulls, nulls))
+      flags |= SortNulls[nulls];
 
-  // Doesn't call `Identifier` constructor.
-  this._type = "SORT";
-  this._flags = flags;
+    // Doesn't call `Identifier` constructor.
+    super("SORT", "");
+    this._flags = flags;
+    this._value = column;
+  }
 
-  this._as = ""; // Sort expression never uses `AS`.
-  this._value = column;
-}
-core.Sort = exclass({
-  $extend: Identifier,
-  $construct: Sort,
-
-  compileNode: function(ctx) {
+  compileNode(ctx) {
     var value = this._value;
     var flags = this._flags;
 
@@ -1770,11 +1841,11 @@ core.Sort = exclass({
     if (typeof value === "number")
       s = "" + value;
     else if (typeof value === "string")
-      s = escapeIdentifier(value);
+      s = ctx.escapeIdentifier(value);
     else if (value instanceof Node)
-      s = value.compileNode();
+      s = value.compileNode(ctx);
     else
-      throw new CompileError("Sort.compileNode() - Invalid value type " + typeof value + ".");
+      throwCompileError("Sort.compileNode() - Invalid value type " + typeof value);
 
     if (flags & NodeFlags.kAscending)
       s += " ASC";
@@ -1787,9 +1858,9 @@ core.Sort = exclass({
       s += " NULLS LAST";
 
     return s;
-  },
+  }
 
-  getDirection: function() {
+  getDirection() {
     var flags = this._flags;
     if (flags & NodeFlags.kDescending)
       return "DESC";
@@ -1797,26 +1868,26 @@ core.Sort = exclass({
       return "ASC";
     else
       return "";
-  },
+  }
 
-  setDirection: function(direction) {
+  setDirection(direction) {
     var flags = this._flags & ~(NodeFlags.kAscending | NodeFlags.kDescending);
     if (hasOwnProperty.call(SortDirection, direction))
       this._flags = flags | SortDirection[direction];
     else
-      throw new CompileError("Sort.setDirection() - Invalid argument '" + direction + "'.");
+      throwCompileError("Sort.setDirection() - Invalid argument '" + direction + "'");
     return this;
-  },
+  }
 
-  hasAscending: function() {
+  hasAscending() {
     return (this._flags & NodeFlags.kAscending) !== 0;
-  },
+  }
 
-  hasDescending: function() {
+  hasDescending() {
     return (this._flags & NodeFlags.kDescending) !== 0;
-  },
+  }
 
-  getNullsOrder: function() {
+  getNullsOrder() {
     var flags = this._flags;
     if (flags & NodeFlags.kNullsFirst)
       return "NULLS FIRST";
@@ -1824,140 +1895,127 @@ core.Sort = exclass({
       return "NULLS LAST";
     else
       return "";
-  },
+  }
 
-  setNullsOrder: function(nulls) {
+  setNullsOrder(nulls) {
     var flags = this._flags & ~(NodeFlags.kNullsFirst | NodeFlags.kNullsLast);
     if (hasOwnProperty.call(SortNulls, nulls))
       this._flags = flags | SortNulls[nulls];
     else
-      throw new CompileError("Sort.setDirection() - Invalid argument '" + nulls + "'.");
+      throwCompileError("Sort.setDirection() - Invalid argument '" + nulls + "'");
     return this;
-  },
+  }
 
-  hasNullsFirst: function() {
+  hasNullsFirst() {
     return (this._flags & NodeFlags.kNullsFirst) !== 0;
-  },
+  }
 
-  hasNullsLast: function() {
+  hasNullsLast() {
     return (this._flags & NodeFlags.kNullsLast) !== 0;
-  },
+  }
 
   // \function Sort.ASC()
   //
   // Set sorting mode to ascending (`ASC`).
-  ASC: function() {
-    this._flags = this._flags & ~NodeFlags.kDescending
-                              |  NodeFlags.kAscending;
+  ASC() {
+    this._flags = (this._flags & ~NodeFlags.kDescending) | NodeFlags.kAscending;
     return this;
-  },
+  }
 
   // \function Sort.DESC()
   //
   // Set sorting mode to descending (`DESC`).
-  DESC: function() {
-    this._flags = this._flags & ~NodeFlags.kAscending
-                              |  NodeFlags.kDescending;
+  DESC() {
+    this._flags = (this._flags & ~NodeFlags.kAscending) | NodeFlags.kDescending;
     return this;
-  },
+  }
 
   // \function Sort.NULLS_FIRST()
   //
   // Set sorting nulls first (`NULLS FIRST`).
-  NULLS_FIRST: function() {
-    this._flags = this._flags & ~NodeFlags.kNullsLast
-                              |  NodeFlags.kNullsFirst;
+  NULLS_FIRST() {
+    this._flags = (this._flags & ~NodeFlags.kNullsLast) | NodeFlags.kNullsFirst;
     return this;
-  },
+  }
 
   // \function Sort.NULLS_LAST()
   //
   // Set sorting nulls last (`NULLS LAST`).
-  NULLS_LAST: function() {
-    this._flags = this._flags & ~NodeFlags.kNullsFirst
-                              |  NodeFlags.kNullsLast;
+  NULLS_LAST() {
+    this._flags = (this._flags & ~NodeFlags.kNullsFirst) | NodeFlags.kNullsLast;
     return this;
   }
-});
-
-// \class core.Func
-function Func(type, values) {
-  // Doesn't call `Group` constructor.
-  this._type = type || "";
-  this._flags = 0|0;
-
-  this._as = "";
-  this._values = values || [];
 }
-core.Func = exclass({
-  $extend: Group,
-  $construct: Func,
+xql$node.Sort = Sort;
 
-  shouldWrap: function() {
+// \class node.Func
+class Func extends Group {
+  constructor(type, values) {
+    super(type, "");
+    this._values = values || [];
+  }
+
+  shouldWrap() {
     return false;
-  },
+  }
 
-  compileNode: function(ctx) {
-    var s = "";
+  compileNode(ctx) {
+    var out = "";
 
     var flags = this._flags;
     var values = this._values;
 
     for (var i = 0, len = values.length; i < len; i++) {
       var value = values[i];
-      var escaped = escapeValue(value);
+      var escaped = ctx.escapeValue(value);
 
-      if (s)
-        s += ", ";
-      s += escaped;
+      if (out)
+        out += ", ";
+      out += escaped;
     }
 
     // Add `ALL` or `DISTINCT` (support for aggregate functions).
     if (flags & NodeFlags.kAllOrDistinct) {
       var keyword = flags & NodeFlags.kAll ? "ALL" : "DISTINCT";
-      if (!s)
-        s = keyword;
+      if (!out)
+        out = keyword;
       else
-        s = keyword + " " + s;
+        out = keyword + " " + out;
     }
 
-    s = this._type + "(" + s + ")";
+    out = this._type + "(" + out + ")";
 
     var as = this._as;
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
-  },
+    return out;
+  }
 
-  getArguments: function() {
+  getArguments() {
     return this._values;
-  },
+  }
 
-  setArguments: function(args) {
+  setArguments(args) {
     this._values = args || [];
     return this;
   }
-});
-
-// \class core.Aggregate
-function Aggregate() {
-  Func.apply(this, arguments);
 }
-core.Aggregate = exclass({
-  $extend: Func,
-  $construct: Aggregate,
+xql$node.Func = Func;
 
-  ALL: function(value) {
+// \class node.Aggregate
+class Aggregate extends Func {
+  ALL(value) {
     return this.setFlag(NodeFlags.kAll, value);
-  },
+  }
 
-  DISTINCT: function(value) {
+  DISTINCT(value) {
     return this.setFlag(NodeFlags.kDistinct, value);
   }
-});
+}
+xql$node.Aggregate = Aggregate;
 
-// \class core.Value
+// \class node.Value
 //
 // Wrapper class that contains `data` and `type`.
 //
@@ -1966,116 +2024,93 @@ core.Aggregate = exclass({
 //
 // `Value` shouldn't be in general used for all types, only types where the
 // mapping is ambiguous and can't be automatically deduced. For example
-// PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `uql`
+// PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `xql`
 // has no knowledge which format to use and will choose ARRAY over JSON.
 //
 // Value is an alternative to schema. If schema is provided it's unnecessary
 // to wrap values to `Value`.
-function Value(type, value, as) {
-  // Doesn't call `Node` constructor.
-  this._type = type || "";
-  this._flags = 0|0;
+class Value extends Node {
+  constructor(type, value, as) {
+    super(type, as);
+    this._value = value;
+  }
 
-  this._as = as || "";
-  this._value = value;
-}
-core.Value = exclass({
-  $extend: Node,
-  $construct: Value,
-
-  shouldWrap: function() {
+  shouldWrap() {
     return false;
-  },
+  }
 
-  compileNode: function(ctx) {
-    var s = escapeValue(this._value, this._type);
+  compileNode(ctx) {
+    var out = ctx.escapeValue(this._value, this._type);
     var as = this._as;
 
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
-  },
+    return out;
+  }
 
-  getValue: function() {
+  getValue() {
     return this._value;
-  },
+  }
 
-  setValue: function(value) {
+  setValue(value) {
     this._value = value;
     return this;
   }
-});
+}
+xql$node.Value = Value;
 
-// \class core.PrimitiveValue
+// \class node.PrimitiveValue
 //
 // Wraps a primitive data.
-function PrimitiveValue(value, as) {
-  // Doesn't call `Value` constructor.
-  this._type = "";
-  this._flags = 0|0;
-
-  this._as = as || "";
-  this._value = value;
+class PrimitiveValue extends Value {
+  constructor(value, as) {
+    super("", value, as);
+  }
 }
-core.PrimitiveValue = exclass({
-  $extend: Value,
-  $construct: PrimitiveValue
-});
+xql$node.PrimitiveValue = PrimitiveValue;
 
-// \class core.ArrayValue
+// \class node.ArrayValue
 //
 // Wraps ARRAY data.
-function ArrayValue(value, as) {
-  // Doesn't call `Value` constructor.
-  this._type = "ARRAY";
-  this._flags = 0|0;
+class ArrayValue extends Value {
+  constructor(value, as) {
+    super("ARRAY", value, as);
+  }
 
-  this._as = as || "";
-  this._value = value;
-}
-core.ArrayValue = exclass({
-  $extend: Value,
-  $construct: ArrayValue,
-
-  compileNode: function(ctx) {
-    var s = escapeArray(this._value, false);
+  compileNode(ctx) {
+    var out = ctx.escapeArray(this._value, false);
     var as = this._as;
 
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
+    return out;
   }
-});
+}
+xql$node.ArrayValue = ArrayValue;
 
-// \class core.JsonValue
+// \class node.JsonValue
 //
 // Wraps JSON data.
-function JsonValue(value, as) {
-  // Doesn't call `Value` constructor.
-  this._type = "JSON";
-  this._flags = 0|0;
+class JsonValue extends Value {
+  constructor(value, as) {
+    super("JSON", value, as);
+  }
 
-  this._as = as || "";
-  this._value = value;
-}
-core.JsonValue = exclass({
-  $extend: Value,
-  $construct: JsonValue,
-
-  compileNode: function(ctx) {
-    var s = escapeJson(this._value);
+  compileNode(ctx) {
+    var out = ctx.escapeJson(this._value);
     var as = this._as;
 
     if (as)
-      s += " AS " + escapeIdentifier(as);
+      out += " AS " + ctx.escapeIdentifier(as);
 
-    return s;
+    return out;
   }
-});
+}
+xql$node.JsonValue = JsonValue;
 
-// \class core.Query
+// \class node.Query
 //
 // Query implements a generic interface used by:
 //
@@ -2095,88 +2130,94 @@ core.JsonValue = exclass({
 //      and `DELETE` (as `RETURNING` expression).
 //
 //   - `WHERE` - Specifies `WHERE` clause, used by `SELECT`, `UPDATE` and `DELETE`.
-function Query(type) {
-  // Doesn't call `Node` constructor.
-  this._type = type;
-  this._flags = 0|0;
+class Query extends Node {
+  constructor(type) {
+    super(type, "");
 
-  this._as = "";
+    this._values = null;
+    this._columns = null;
 
-  this._values = null;
-  this._columns = null;
+    // Used by:
+    //   - `SELECT` - `SELECT ...`.
+    //   - `INSERT` - `RETURNING ...`.
+    //   - `UPDATE` - `RETURNING ...`.
+    //   - `DELETE` - `RETURNING ...`.
+    this._fieldsOrReturning = null;
 
-  // Used by:
-  //   - `SELECT` - `SELECT ...`.
-  //   - `INSERT` - `RETURNING ...`.
-  //   - `UPDATE` - `RETURNING ...`.
-  //   - `DELETE` - `RETURNING ...`.
-  this._fieldsOrReturning = null;
+    // Used by:
+    //   - `INSERT` - `INSERT INTO ...`.
+    //   - `UPDATE` - `UPDATE ...`.
+    //   - `DELETE` - `DELETE FROM ...`.
+    this._table = null;
 
-  // Used by:
-  //   - `INSERT` - `INSERT INTO ...`.
-  //   - `UPDATE` - `UPDATE ...`.
-  //   - `DELETE` - `DELETE FROM ...`.
-  this._table = null;
+    // Used by:
+    //   - `SELECT` - `FROM ...`
+    //   - `UPDATE` - `FROM ...`.
+    //   - `DELETE` - `USING ...`.
+    //
+    // Contains the `FROM` or `USING` expression. The `_fromOrUsing` can be a
+    // string describing a table name or `Node` that is describing a table name
+    // with optional alias, `JOIN` expression, `VALUES` expression or `SELECT`
+    // expression.
+    this._fromOrUsing = null;
 
-  // Used by:
-  //   - `SELECT` - `FROM ...`
-  //   - `UPDATE` - `FROM ...`.
-  //   - `DELETE` - `USING ...`.
-  //
-  // Contains the `FROM` or `USING` expression. The `_fromOrUsing` can be a
-  // string describing a table name or `Node` that is describing a table name
-  // with optional alias, `JOIN` expression, `VALUES` expression or `SELECT`
-  // expression.
-  this._fromOrUsing = null;
+    // Used by:
+    //   - `SELECT`
+    //   - `UPDATE`
+    //   - `DELETE`
+    this._where = null;
 
-  // Used by:
-  //   - `SELECT`
-  //   - `UPDATE`
-  //   - `DELETE`
-  this._where = null;
+    // Used by:
+    //   - `SELECT`
+    //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombinedQuery`.
+    this._orderBy = null;
 
-  // Used by:
-  //   - `SELECT`
-  //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombinedQuery`.
-  this._orderBy = null;
+    // Used by:
+    //   - `SELECT`
+    //   - `UPDATE`
+    //   - `DELETE`
+    //
+    // Contains `OFFSET ...` and `LIMIT ...` parameters. There are some DB engines
+    // (like SQLite), which allow to specify `OFFSET` / `LIMIT` in `UPDATE` and
+    // `DELETE` This is the main reason that these members are part of Query and
+    // not SelectQuery.
+    this._offset = 0;
+    this._limit = 0;
 
-  // Used by:
-  //   - `SELECT`
-  //   - `UPDATE`
-  //   - `DELETE`
-  //
-  // Contains `OFFSET ...` and `LIMIT ...` parameters. There are some DB engines
-  // (like SQLite), which allow to specify `OFFSET` / `LIMIT` in `UPDATE` and
-  // `DELETE` This is the main reason that these members are part of Query and
-  // not SelectQuery.
-  this._offset = 0;
-  this._limit = 0;
+    // Optional type mapping having keys (columns) and their value types.
+    //
+    // Type mapping is sometimes important when it comes to type ambiguity. For
+    // example when using PostgreSQL there is ambiguity when escaping `Array`.
+    // It can be escaped by using PostgreSQL `ARRAY[] or {}` or as JSON `[]`.
+    this._typeMapping = null;
+  }
 
-  // Optional type mapping having keys (columns) and their value types.
-  //
-  // Type mapping is sometimes important when it comes to type ambiguity. For
-  // example when using PostgreSQL there is ambiguity when escaping `Array`.
-  // It can be escaped by using PostgreSQL `ARRAY[] or {}` or as JSON `[]`.
-  this._typeMapping = null;
-}
-core.Query = exclass({
-  $extend: Node,
-  $construct: Query,
-
-  shouldWrap: function() {
+  shouldWrap() {
     return true;
-  },
+  }
 
-  getTypeMapping: function() {
+  compileQuery(ctx) {
+    return this.compileNode(ctx) + ";";
+  }
+
+  getTypeMapping() {
     return this._typeMapping;
-  },
+  }
 
-  setTypeMapping: function(typeMapping) {
+  setTypeMapping(typeMapping) {
     this._typeMapping = typeMapping;
     return this;
-  },
+  }
 
-  _addFieldsOrReturning: function(defs) {
+  _setFromOrIntoTable(table, keyword) {
+    if (this._table)
+      throwCompileError(keyword + "() - already specified ('" + table + "')");
+
+    this._table = table;
+    return this;
+  }
+
+  _addFieldsOrReturning(defs) {
     var fields = this._fieldsOrReturning;
     var i, len;
 
@@ -2192,7 +2233,7 @@ core.Query = exclass({
       return this;
     }
 
-    // Handle single parameter of type `Object` or `Array`.
+    // Handle a single parameter of type `Object` or `Array`.
     if (typeof defs === "object") {
       // If the `defs` is array it should contain one or multiple columns. In
       // case that `_fieldsOrReturning` is `null` the given array `col` is used
@@ -2243,61 +2284,71 @@ core.Query = exclass({
       fields.push(defs);
 
     return this;
-  },
+  }
 
-  _compileFieldsOrReturning: function(ctx, prefix, list) {
-    var s = "";
+  _compileGroupBy(ctx, groupBy) {
+    var out = "";
+    var commaStr = ctx.commaStr;
+
+    for (var i = 0, len = groupBy.length; i < len; i++) {
+      var group = groupBy[i];
+      if (out) out += commaStr;
+
+      // Group can be in a form of `string` or `Node`.
+      if (typeof group === "string")
+        out += ctx.escapeIdentifier(group);
+      else
+        out += group.compileNode(ctx);
+    }
+
+    return out;
+  }
+
+  _compileOrderBy(ctx, orderBy) {
+    var out = "";
+    var commaStr = ctx.commaStr;
+
+    for (var i = 0, len = orderBy.length; i < len; i++) {
+      var sort = orderBy[i];
+      if (out) out += commaStr;
+      out += sort.compileNode(ctx);
+    }
+
+    return out;
+  }
+
+  _compileFieldsOrReturning(ctx, list) {
+    var out = "";
+    var commaStr = ctx.commaStr;
 
     for (var i = 0, len = list.length; i < len; i++) {
       var column = list[i];
-
-      if (s)
-        s += ", ";
+      if (out) out += commaStr;
 
       // Returning column can be in a form of `string` or `Node`.
       if (typeof column === "string") {
-        s += escapeIdentifier(column);
+        out += ctx.escapeIdentifier(column);
       }
       else {
         var compiled = column.compileNode(ctx);
         if (column.shouldWrap())
-          s += "(" + compiled + ")";
+          out += this._wrapQuery(ctx, compiled);
         else
-          s += compiled;
+          out += compiled;
       }
     }
 
-    return prefix + s;
-  },
-
-  // \function Query._setFromOrIntoTable(...)
-  _setFromOrIntoTable: function(table) {
-    if (this._table)
-      throw new CompileError("INTO() - table already specified ('" + table + "').");
-
-    this._table = table;
-    return this;
-  },
+    return out;
+  }
 
   // \function Query._addFromOrUsing(...)
-  _addFromOrUsing: function(arg) {
-    var args = null;
-    var len = 0;
+  _addFromOrUsing(args) {
+    var len = args.length;
+    if (len < 1) return this;
 
-    if (isArray(arg)) {
-      args = arg;
-      len = args.length;
-      arg = args[0];
-    }
-    else {
-      args = arguments;
-      len = args.length;
-    }
-
-    if (len < 1)
-      return this;
-
+    var arg = args[0];
     var left = this._fromOrUsing;
+
     if (left !== null)
       this._fromOrUsing = left = new Join(left, "", arg);
     else
@@ -2315,33 +2366,31 @@ core.Query = exclass({
 
     this._fromOrUsing = left;
     return this;
-  },
+  }
 
   // \function Query._join(type, with_, condition)
-  _join: function(type, with_, condition) {
+  _join(type, with_, condition) {
     var left = this._fromOrUsing;
 
     // Well this shouldn't be `null`.
     if (left === null)
-      throw new CompileError("Query._join() - There is no table in query to join with.");
+      throwCompileError("Query._join() - There is no table in query to join with");
 
     this._fromOrUsing = new Join(left, type, with_, condition);
     return this;
-  },
+  }
 
-  _compileFromOrUsing: function(ctx, prefix, node) {
-    var s = "";
-
+  _compileFromOrUsing(ctx, node) {
+    var out = "";
     if (typeof node === "string")
-      s += escapeIdentifier(node);
+      out += ctx.escapeIdentifier(node);
     else
-      s += node.compileNode(ctx);
-
-    return prefix + s;
-  },
+      out += node.compileNode(ctx);
+    return out;
+  }
 
   // Add `WHERE` condition of specified `type`.
-  _addWhere: function(type, a, op, b, nArgs) {
+  _addWhere(type, a, op, b, nArgs) {
     var node;
     var where = this._where;
     var aIsArray = false;
@@ -2351,12 +2400,12 @@ core.Query = exclass({
       if (typeof a === "string")
         a = COL(a);
       if (nArgs === 2)
-        node = new Operator(a, "=", op);
+        node = BINARY_OP(a, "=", op);
       else
-        node = new Operator(a, op, b);
+        node = BINARY_OP(a, op, b);
     }
     else if (nArgs !== 1) {
-      throw new CompileError("Query." + (type === "OR" ? "OR_" : "") + "WHERE() - Invalid argument.");
+      throwCompileError("Query." + (type === "OR" ? "OR_" : "") + "WHERE() - Invalid argument");
     }
     else {
       aIsArray = isArray(a);
@@ -2371,7 +2420,7 @@ core.Query = exclass({
     }
     // If the current expression operator is not the same as `type`, wrap the
     // current expression inside a new node.
-    else if (where.type !== type) {
+    else if (where._type !== type) {
       where = new Logical(type);
       where.push(this._where);
       this._where = where;
@@ -2383,54 +2432,56 @@ core.Query = exclass({
       where.push(node);
 
     return this;
-  },
+  }
 
-  _compileWhereOrHaving: function(ctx, prefix, condition) {
-    var s = "";
+  _compileWhereOrHaving(ctx, condition) {
+    var out = "";
 
     var list = condition._values;
     var i, len = list.length;
 
-    if (len === 0)
-      return s;
-
     if (len === 1)
-      return prefix + list[0].compileNode(ctx);
+      return list[0].compileNode(ctx);
 
     for (i = 0; i < len; i++) {
       var expression = list[i];
       var compiled = expression.compileNode(ctx);
 
-      if (s)
-        s += " " + condition._type + " ";
+      if (out)
+        out += " " + condition._type + " ";
 
       if (expression.shouldWrap())
-        s += "(" + compiled + ")";
+        out += "(" + compiled + ")";
       else
-        s += compiled;
+        out += compiled;
     }
 
-    return prefix + s;
-  },
+    return out;
+  }
 
-  _compileOffsetLimit: function(ctx, offset, limit) {
-    var s = "";
+  _compileOffsetLimit(ctx, offset, limit) {
+    var out = "";
 
-    if (offset) {
-      s += "OFFSET " + offset;
-    }
+    if (offset)
+      out += "OFFSET" + ctx.concatStr + offset;
 
     if (limit) {
-      if (s)
-        s += " ";
-      s += "LIMIT " + limit;
+      if (out) out += ctx.space;
+      out += "LIMIT" + ctx.concatStr + limit;
     }
 
-    return s;
-  },
+    return out;
+  }
+
+  _wrapQuery(ctx, str) {
+    if (ctx.pretty)
+      return "(" + indent(str + ")", " ").substr(1);
+    else
+      return "(" + str + ")";
+  }
 
   // \function Query.VALUES(data)
-  VALUES: function(data) {
+  VALUES(data) {
     var values = this._values;
     var columns = this._columns;
 
@@ -2463,7 +2514,7 @@ core.Query = exclass({
     }
 
     return this;
-  },
+  }
 
   // \function Query.WHERE(...)
   //
@@ -2481,21 +2532,21 @@ core.Query = exclass({
   //
   // 3. `where(a:String, op:String, b:Variant)`
   //   Adds one `WHERE` clause in the form `a op b`.
-  WHERE: function(a, op, b) {
+  WHERE(a, op, b) {
     return this._addWhere("AND", a, op, b, arguments.length);
-  },
+  }
 
   // \function Query.OR_WHERE(...)
   //
   // Add top-level `OR` to the query.
   //
   // This function accepts the same arguments and behaves identically as `WHERE`.
-  OR_WHERE: function(a, op, b) {
+  OR_WHERE(a, op, b) {
     return this._addWhere("OR", a, op, b, arguments.length);
-  },
+  }
 
   // \function Query.ORDER_BY(...)
-  ORDER_BY: function(column, direction, nulls) {
+  ORDER_BY(column, direction, nulls) {
     var orderBy = this._orderBy;
 
     if (orderBy === null)
@@ -2518,140 +2569,93 @@ core.Query = exclass({
     }
 
     return this;
-  },
+  }
 
   // \function Query.OFFSET(offset)
-  OFFSET: function(offset) {
+  OFFSET(offset) {
     this._offset = offset;
     return this;
-  },
+  }
 
   // \function Query.LIMIT(limit)
-  LIMIT: function(limit) {
+  LIMIT(limit) {
     this._limit = limit;
     return this;
   }
-});
-
-// \class core.SelectQuery
-function SelectQuery() {
-  Query.call(this, "SELECT");
-
-  // `GROUP BY` clause.
-  this._groupBy = null;
-
-  // `HAVING` clause.
-  this._having = null;
 }
-core.SelectQuery = exclass({
-  $extend: Query,
-  $construct: SelectQuery,
+xql$node.Query = Query;
 
-  compileQuery: Node$compileQuery,
+// \class node.SelectQuery
+class SelectQuery extends Query {
+  constructor() {
+    super("SELECT");
 
-  compileNode: function(ctx) {
-    var s = "SELECT";
+    // `GROUP BY` clause.
+    this._groupBy = null;
+
+    // `HAVING` clause.
+    this._having = null;
+  }
+
+  compileNode(ctx) {
+    var out = "SELECT";
+    var space = ctx.space;
     var flags = this._flags;
 
     // Compile `SELECT [ALL|DISTINCT]`
     //
     // Use `*` if  fields are not used.
-    if (flags & NodeFlags.kAllOrDistinct) {
-      if (flags & NodeFlags.kAll)
-        s += " ALL";
-      else
-        s += " DISTINCT";
-    }
+    if (flags & NodeFlags.kAllOrDistinct)
+      out += (flags & NodeFlags.kAll) ? " ALL" : " DISTINCT";
 
     // Compile `[*|fields]`
     //
     // Note, `*` is only used if there are no columns specified.
-    var columns = this._fieldsOrReturning;
-    if (columns && columns.length)
-      s += this._compileFieldsOrReturning(ctx, " ", columns);
-    else
-      s += " *";
+    var cols = this._fieldsOrReturning;
+    out += ctx.concat(cols && cols.length ? this._compileFieldsOrReturning(ctx, cols) : "*");
 
     // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
     var from = this._fromOrUsing;
-    if (from) {
-      s += this._compileFromOrUsing(ctx, " FROM ", from);
-    }
+    if (from)
+      out += space + "FROM" + ctx.concat(this._compileFromOrUsing(ctx, from));
 
     // Compile `WHERE ...`.
     var where = this._where;
-    if (where && where._values.length) {
-      s += this._compileWhereOrHaving(ctx, " WHERE ", where);
-    }
+    if (where && where._values.length)
+      out += space + "WHERE" + ctx.concat(this._compileWhereOrHaving(ctx, where));
 
     // Compile `GROUP BY ...`.
     var groupBy = this._groupBy;
-    if (groupBy && groupBy.length) {
-      s += this._compileGroupBy(ctx, " GROUP BY ", groupBy);
-    }
+    if (groupBy && groupBy.length)
+      out += space + "GROUP BY" + ctx.concat(this._compileGroupBy(ctx, groupBy));
 
     // Compile `HAVING ...`.
     var having = this._having;
-    if (having && having._values.length) {
-      s += this._compileWhereOrHaving(ctx, " HAVING ", having);
-    }
+    if (having && having._values.length)
+      out += space + "HAVING" + ctx.concat(this._compileWhereOrHaving(ctx, having));
 
     // TODO: Compile `WINDOW ...`.
 
     // Compile `ORDER BY ...`.
     var orderBy = this._orderBy;
-    if (orderBy && orderBy.length) {
-      s += this._compileOrderBy(ctx, " ORDER BY ", orderBy);
-    }
+    if (orderBy && orderBy.length)
+      out += space + "ORDER BY" + ctx.concat(this._compileOrderBy(ctx, orderBy));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     var offset = this._offset;
     var limit = this._limit;
 
-    if (offset || limit) {
-      s += " " + this._compileOffsetLimit(ctx, offset, limit);
-    }
+    if (offset || limit)
+      out += space + this._compileOffsetLimit(ctx, offset, limit);
 
     // TODO: Compile `FETCH ...`.
     // TODO: Compile `FOR ...`.
 
-    return s;
-  },
-
-  _compileGroupBy: function(ctx, prefix, groupBy) {
-    var s = "";
-
-    for (var i = 0, len = groupBy.length; i < len; i++) {
-      var group = groupBy[i];
-
-      if (s)
-        s += ", ";
-
-      // Group can be in a form of `string` or `Node`.
-      if (typeof group === "string")
-        s += escapeIdentifier(group);
-      else
-        s += group.compileNode(ctx);
-    }
-
-    return prefix + s;
-  },
-
-  _compileOrderBy: function(ctx, prefix, orderBy) {
-    var s = "";
-
-    for (var i = 0, len = orderBy.length; i < len; i++) {
-      var sort = orderBy[i];
-      if (s)
-        s += ", ";
-      s += sort.compileNode();
-    }
-
-    return prefix + s;
-  },
+    return out;
+  }
 
   // Add `HAVING` condition of specified `type`.
-  _addHaving: function(type, a, op, b, nArgs) {
+  _addHaving(type, a, op, b, nArgs) {
     var node;
     var having = this._having;
     var aIsArray = false;
@@ -2661,12 +2665,12 @@ core.SelectQuery = exclass({
       if (typeof a === "string")
         a = COL(a);
       if (nArgs === 2)
-        node = new Operator(a, "=", op);
+        node = BINARY_OP(a, "=", op);
       else
-        node = new Operator(a, op, b);
+        node = BINARY_OP(a, op, b);
     }
     else if (nArgs !== 1) {
-      throw new CompileError((type === "OR" ? "OR_" : "") + "HAVING - Invalid argument.");
+      throwCompileError((type === "OR" ? "OR_" : "") + "HAVING - Invalid argument");
     }
     else {
       aIsArray = isArray(a);
@@ -2681,7 +2685,7 @@ core.SelectQuery = exclass({
     }
     // If the current expression operator is not the same as `type`, wrap the
     // current expression inside a new `Node`.
-    else if (having.type !== type) {
+    else if (having._type !== type) {
       having = new Logical(type);
       having.push(this._having);
       this._having = having;
@@ -2693,7 +2697,7 @@ core.SelectQuery = exclass({
       having.push(node);
 
     return this;
-  },
+  }
 
   // \function SelectQuery.DISTINCT(...)
   //
@@ -2704,46 +2708,49 @@ core.SelectQuery = exclass({
   //   - `SELECT(["a", "b", "c"]).DISTINCT()`
   //   - `SELECT().DISTINCT(["a", "b", "c"])`
   //   - `SELECT().DISTINCT().FIELD(["a", "b", "c"])`
-  DISTINCT: function(/* ... */) {
+  DISTINCT(/* ... */) {
     this._flags |= NodeFlags.kDistinct;
     if (arguments.length)
       this.FIELD.apply(this, arguments);
     return this;
-  },
+  }
 
   // \function SelectQuery.FROM(...)
-  FROM: Query.prototype._addFromOrUsing,
+  FROM() {
+    var arg;
+    if (arguments.length === 1 && isArray((arg = arguments[0])))
+      return this._addFromOrUsing(arg);
+    else
+      return this._addFromOrUsing(slice.call(arguments, 0));
+  }
 
   // \function SelectQuery.CROSS_JOIN(...)
-  CROSS_JOIN: function(with_, condition) {
+  CROSS_JOIN(with_, condition) {
     return this._join("CROSS", with_, condition);
-  },
+  }
 
   // \function SelectQuery.INNER_JOIN(...)
-  INNER_JOIN: function(with_, condition) {
+  INNER_JOIN(with_, condition) {
     return this._join("INNER", with_, condition);
-  },
+  }
 
   // \function SelectQuery.LEFT_JOIN(...)
-  LEFT_JOIN: function(with_, condition) {
+  LEFT_JOIN(with_, condition) {
     return this._join("LEFT", with_, condition);
-  },
+  }
 
   // \function SelectQuery.RIGHT_JOIN(...)
-  RIGHT_JOIN: function(with_, condition) {
+  RIGHT_JOIN(with_, condition) {
     return this._join("RIGHT", with_, condition);
-  },
+  }
 
   // \function SelectQuery.FULL_JOIN(...)
-  FULL_JOIN: function(with_, condition) {
+  FULL_JOIN(with_, condition) {
     return this._join("FULL", with_, condition);
-  },
+  }
 
-  // \function Query.FIELD(...)
-  FIELD: Query.prototype._addFieldsOrReturning,
-
-  // \function Query.GROUP_BY(...)
-  GROUP_BY: function(arg) {
+  // \function SelectQuery.GROUP_BY(...)
+  GROUP_BY(arg) {
     var groupBy = this._groupBy;
     var i, len;
 
@@ -2774,138 +2781,136 @@ core.SelectQuery = exclass({
     }
 
     return this;
-  },
+  }
 
-  // \function Query.HAVING(...)
-  HAVING: function(a, op, b) {
+  // \function SelectQuery.FIELD(...)
+
+  // \function SelectQuery.HAVING(...)
+  HAVING(a, op, b) {
     return this._addHaving("AND", a, op, b, arguments.length);
-  },
+  }
 
-  // \function Query.OR_HAVING(...)
-  OR_HAVING: function(a, op, b) {
+  // \function SelectQuery.OR_HAVING(...)
+  OR_HAVING(a, op, b) {
     return this._addHaving("OR", a, op, b, arguments.length);
   }
-});
-
-// \class core.InsertQuery
-function InsertQuery() {
-  Query.call(this, "INSERT");
 }
-core.InsertQuery = exclass({
-  $extend: Query,
-  $construct: InsertQuery,
+alias(SelectQuery.prototype, "FIELD", "_addFieldsOrReturning");
+xql$node.SelectQuery = SelectQuery;
 
-  compileQuery: Node$compileQuery,
+// \class node.InsertQuery
+class InsertQuery extends Query {
+  constructor() {
+    super("INSERT");
+  }
 
-  compileNode: function(ctx) {
-    var s = "";
+  compileNode(ctx) {
+    var out = "";
+
     var t = "";
+    var space = ctx.space;
 
     var k;
     var i, len;
 
-    // Compile `INSERT INTO table (...)`
+    // Compile `INSERT INTO table (...)`.
     var table = this._table;
     var columns = this._columns;
     var typeMapping = this._typeMapping || EmptyObject;
 
-    if (!table) {
-      throw new CompileError(
-        "InsertQuery.compileNode() - Table not defined.");
-    }
+    if (!table)
+      throwCompileError("InsertQuery.compileNode() - Table not defined");
 
+    // Compile `INSERT INTO table (...)`.
     if (typeof table === "string")
-      t = escapeIdentifier(table);
+      t = ctx.escapeIdentifier(table);
     else
-      t = table.compileNode();
+      t = table.compileNode(ctx);
 
     for (k in columns) {
-      if (s)
-        s += ", ";
-      s += escapeIdentifier(k);
+      if (out) out += ", ";
+      out += ctx.escapeIdentifier(k);
     }
-    s = "INSERT INTO " + t + " (" + s + ")";
+    out = "INSERT INTO" + ctx.concat(t + " (" + out + ")");
 
     // Compile `VALUES (...)[, (...)]`.
     var objects = this._values;
-    s += " VALUES";
+    var prefix = (ctx.pretty ? ctx.concatStr : " ") + "(";
 
+    out += space + "VALUES";
     for (i = 0, len = objects.length; i < len; i++) {
       var object = objects[i];
 
       t = "";
       for (k in columns) {
-        if (t)
-          t += ", ";
-
+        if (t) t += ", ";
         if (hasOwnProperty.call(object, k))
-          t += escapeValue(object[k], typeMapping[k]);
+          t += ctx.escapeValue(object[k], typeMapping[k]);
         else
           t += "DEFAULT";
       }
 
-      if (i !== 0)
-        s += ",";
-      s += " (" + t + ")";
+      if (i !== 0) out += ",";
+      out += prefix + t + ")";
     }
 
     // Compile `RETURNING ...`.
     var returning = this._fieldsOrReturning;
     if (returning && returning.length)
-      s += this._compileFieldsOrReturning(ctx, " RETURNING ", returning);
+      out += space + "RETURNING" + ctx.concat(this._compileFieldsOrReturning(ctx, returning));
 
-    return s;
-  },
+    return out;
+  }
 
   // \function InsertQuery.TABLE(table)
-  TABLE: Query.prototype._setFromOrIntoTable,
   //
   // Alias to `InsertQuery.INTO(table)`.
+  TABLE(table) {
+    return this._setFromOrIntoTable(table, "TABLE");
+  }
 
   // \function InsertQuery.INTO(table)
-  INTO: Query.prototype._setFromOrIntoTable,
+  INTO(table) {
+    return this._setFromOrIntoTable(table, "INTO");
+  }
 
   // \function InsertQuery.RETURNING(...)
-  RETURNING: Query.prototype._addFieldsOrReturning
-});
-
-// \class core.UpdateQuery
-function UpdateQuery() {
-  Query.call(this, "UPDATE");
 }
-core.UpdateQuery = exclass({
-  $extend: Query,
-  $construct: UpdateQuery,
+alias(InsertQuery.prototype, "RETURNING", "_addFieldsOrReturning");
+xql$node.InsertQuery = InsertQuery;
 
-  compileQuery: Node$compileQuery,
+// \class node.UpdateQuery
+class UpdateQuery extends Query {
+  constructor() {
+    super("UPDATE");
+  }
 
-  compileNode: function(ctx) {
-    var s = "";
+  compileNode(ctx) {
+    var out = "";
+
     var t = "";
+    var space = ctx.space;
+    var commaStr = ctx.commaStr;
 
     // Compile `UPDATE ...`
     var table = this._table;
     if (!table)
-      throw new CompileError(
-        "UpdateQuery.compileNode() - Table not defined.");
+      throwCompileError("UpdateQuery.compileNode() - Table not defined");
 
     if (typeof table === "string")
-      t = escapeIdentifier(table);
+      t = ctx.escapeIdentifier(table);
     else
-      t = table.compileNode();
-
-    s += "UPDATE " + t;
+      t = table.compileNode(ctx);
+    out = "UPDATE" + ctx.concat(t);
 
     // Compile `SET ...`
     var objects = this._values;
 
     if (!objects)
-      throw new CompileError(
-        "UpdateQuery.compileNode() - No data to update provided.");
+      throwCompileError("UpdateQuery.compileNode() - No data to update provided");
 
     if (objects.length !== 1)
-      throw new CompileError(
-        "UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided).");
+      throwCompileError("UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided)");
 
     var values = objects[0];
     var typeMapping = this._typeMapping || EmptyObject;
@@ -2916,218 +2921,212 @@ core.UpdateQuery = exclass({
       var compiled;
 
       if (!(value instanceof Node))
-        compiled = escapeValue(value, typeMapping[k]);
+        compiled = ctx.escapeValue(value, typeMapping[k]);
       else
-        compiled = value.compileNode();
+        compiled = value.compileNode(ctx);
 
-      if (t)
-        t += ", ";
-
-      t += escapeIdentifier(k) + " = " + compiled;
+      if (t) t += commaStr;
+      t += ctx.escapeIdentifier(k) + " = " + compiled;
     }
-    s += " SET " + t;
+    out += space + "SET" + ctx.concat(t);
 
     // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
     var from = this._fromOrUsing;
     if (from)
-      s += this._compileFromOrUsing(ctx, " FROM ", from);
+      out += space + "FROM"  + ctx.concat(this._compileFromOrUsing(ctx, from));
 
-    // Compile `WHERE ...`
+    // Compile `WHERE ...`.
     var where = this._where;
     if (where && where._values.length)
-      s += this._compileWhereOrHaving(ctx, " WHERE ", where);
+      out += space + "WHERE" + ctx.concat(this._compileWhereOrHaving(ctx, where));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     var offset = this._offset;
     var limit = this._limit;
 
     if (offset || limit)
-      s += " " + this._compileOffsetLimit(ctx, offset, limit);
+      out += space + this._compileOffsetLimit(ctx, offset, limit);
 
     // Compile `RETURNING ...`.
     var returning = this._fieldsOrReturning;
     if (returning && returning.length)
-      s += this._compileFieldsOrReturning(ctx, " RETURNING ", returning);
+      out += space + "RETURNING" + ctx.concat(this._compileFieldsOrReturning(ctx, returning));
 
-    return s;
-  },
+    return out;
+  }
 
   // \function UpdateQuery.TABLE(table)
-  TABLE: Query.prototype._setFromOrIntoTable,
+  TABLE(table) {
+    return this._setFromOrIntoTable(table, "TABLE");
+  }
 
   // \function UpdateQuery.FROM(...)
-  FROM: Query.prototype._addFromOrUsing,
+  FROM(table) {
+    return this._setFromOrIntoTable(table, "FROM");
+  }
 
   // \function UpdateQuery.RETURNING(...)
-  RETURNING: Query.prototype._addFieldsOrReturning
-});
-
-// \class core.DeleteQuery
-function DeleteQuery() {
-  Query.call(this, "DELETE");
 }
-core.DeleteQuery = exclass({
-  $extend: Query,
-  $construct: DeleteQuery,
+alias(UpdateQuery.prototype, "RETURNING", "_addFieldsOrReturning");
+xql$node.UpdateQuery = UpdateQuery;
 
-  compileQuery: Node$compileQuery,
+// \class node.DeleteQuery
+class DeleteQuery extends Query {
+  constructor() {
+    super("DELETE");
+  }
 
-  compileNode: function(ctx) {
-    var s = "";
+  compileNode(ctx) {
+    var out = "";
+
     var t = "";
+    var space = ctx.space;
 
     // Compile `DELETE FROM ...`
     var table = this._table;
     if (!table)
-      throw new CompileError(
-        "DeleteQuery.compileNode() - Table not defined.");
+      throwCompileError("DeleteQuery.compileNode() - Table not defined");
 
     if (typeof table === "string")
-      t = escapeIdentifier(table);
+      t = ctx.escapeIdentifier(table);
     else
-      t = table.compileNode();
+      t = table.compileNode(ctx);
 
-    s += "DELETE FROM " + t;
+    out += "DELETE FROM" + ctx.concat(t);
 
     // Compile `USING table[, table[, ...]]` or `USING table JOIN table [, JOIN ...]`.
     var using = this._fromOrUsing;
     if (using)
-      s += this._compileFromOrUsing(ctx, " USING ", using);
+      out += space + "USING" + ctx.concat(this._compileFromOrUsing(ctx, using));
 
     // Compile `WHERE ...`
     var where = this._where;
     if (where && where._values.length)
-      s += this._compileWhereOrHaving(ctx, " WHERE ", where);
+      out += space + "WHERE" + ctx.concat(this._compileWhereOrHaving(ctx, where));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     var offset = this._offset;
     var limit = this._limit;
 
     if (offset || limit)
-      s += " " + this._compileOffsetLimit(ctx, offset, limit);
+      out += space + this._compileOffsetLimit(ctx, offset, limit);
 
     // Compile `RETURNING ...`.
     var returning = this._fieldsOrReturning;
     if (returning && returning.length)
-      s += this._compileFieldsOrReturning(ctx, " RETURNING ", returning);
+      out += space + "RETURNING" + ctx.concat(this._compileFieldsOrReturning(ctx, returning));
 
-    return s;
-  },
+    return out;
+  }
 
   // \function DeleteQuery.TABLE(table)
   //
   // Alias to `DeleteQuery.FROM(table)`.
-  TABLE: Query.prototype._setFromOrIntoTable,
 
   // \function DeleteQuery.FROM(table)
-  FROM: Query.prototype._setFromOrIntoTable,
-
-  // \function DeleteQuery.USING(...)
-  USING: Query.prototype._addFromOrUsing,
 
   // \function DeleteQuery.RETURNING(...)
-  RETURNING: Query.prototype._addFieldsOrReturning
-});
 
-// \class core.CombinedQuery
-function CombinedQuery() {
-  Group.apply(this, arguments);
-
-  // Make these members use the same layout as `Query` so JS engine can use the
-  // same hidden class for `CombinedQuery`.
-  this._columns = null;
-  this._fieldsOrReturning = null;
-  this._table = null;
-  this._fromOrUsing = null;
-  this._where = null;
-
-  // These are actually used.
-  this._orderBy = null;
-  this._offset = 0;
-  this._limit = 0;
-
-  // TODO: Not used, I think when a type-mapping is set it should set it in all
-  // Nodes supporting type mapping.
-  this._typeMapping = null;
+  // \function DeleteQuery.USING(...)
+  USING() {
+    var arg;
+    if (arguments.length === 1 && isArray((arg = arguments[0])))
+      return this._addFromOrUsing(arg);
+    else
+      return this._addFromOrUsing(slice.call(arguments, 0));
+  }
 }
-core.CombinedQuery = exclass({
-  $extend: Group,
-  $construct: CombinedQuery,
+alias(DeleteQuery.prototype, "FROM", "_setFromOrIntoTable");
+alias(DeleteQuery.prototype, "TABLE", "_setFromOrIntoTable");
+alias(DeleteQuery.prototype, "RETURNING", "_addFieldsOrReturning");
+xql$node.DeleteQuery = DeleteQuery;
 
-  shouldWrap: function(ctx) {
+// \class node.CombinedQuery
+class CombinedQuery extends Query {
+  constructor(type, values) {
+    super(type);
+    this._values = values || [];
+  }
+
+  shouldWrap(ctx) {
     return true;
-  },
+  }
 
-  compileQuery: Node$compileQuery,
+  compileNode(ctx) {
+    var out = "";
+    var space = ctx.space;
 
-  compileNode: function(ctx) {
-    var s = "";
-
-    var type = this._type;
     var flags = this._flags;
+    var combineOp = this._type;
 
-    if (flags & NodeFlags.kAllOrDistinct) {
-      if (flags & NodeFlags.kDistinct)
-        type += " DISTINCT";
-      else
-        type += " ALL";
-    }
+    if (flags & NodeFlags.kAllOrDistinct)
+      combineOp += (flags & NodeFlags.kDistinct) ? " DISTINCT" : " ALL";
 
     var values = this._values;
-    var separator = " " + type + " ";
+    var separator = space + combineOp + space;
 
     for (var i = 0, len = values.length; i < len; i++) {
       var value = values[i];
-      var compiled = escapeValue(value);
+      var compiled = ctx.escapeValue(value);
 
-      if (s)
-        s += separator;
+      if (out)
+        out += separator;
 
-      // Wrap if the value if it's not a query.
-      if (!(value instanceof Query))
-        s += "(" + compiled + ")";
-      else
-        s += compiled;
+      // TODO: This is not nice, introduce something better than this.
+      var mustWrap = !(value instanceof Query) || (value instanceof CombinedQuery);
+      if (mustWrap)
+        compiled = this._wrapQuery(ctx, compiled);
+
+      out += compiled;
     }
 
     // Compile `ORDER BY ...`.
     var orderBy = this._orderBy;
-    if (orderBy && orderBy.length) {
-      s += this._compileOrderBy(ctx, " ORDER BY ", orderBy);
-    }
+    if (orderBy && orderBy.length)
+      out += space + "ORDER BY" + ctx.concat(this._compileOrderBy(ctx, orderBy));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     var offset = this._offset;
     var limit = this._limit;
 
-    if (offset || limit) {
-      s += " " + this._compileOffsetLimit(ctx, offset, limit);
-    }
+    if (offset || limit)
+      out += space + this._compileOffsetLimit(ctx, offset, limit);
 
-    return s;
-  },
+    return out;
+  }
 
-  _compileOrderBy: SelectQuery.prototype._compileOrderBy,
-  _compileOffsetLimit: Query.prototype._compileOffsetLimit,
-
-  ALL: function(value) {
+  ALL(value) {
     return this.setFlag(NodeFlags.kAll, value);
-  },
+  }
 
-  DISTINCT: function(value) {
+  DISTINCT(value) {
     return this.setFlag(NodeFlags.kDistinct, value);
-  },
+  }
 
-  ORDER_BY: Query.prototype.ORDER_BY,
-  OFFSET: Query.prototype.OFFSET,
-  LIMIT: Query.prototype.LIMIT
-});
+  push() {
+    var values = this._values;
+    values.push.apply(values, arguments);
+    return this;
+  }
+
+  concat(array) {
+    var values = this._values;
+    for (var i = 0, len = array.length; i < len; i++)
+      values.push(array[i]);
+    return this;
+  }
+}
+xql$node.CombinedQuery = CombinedQuery;
+
+// ============================================================================
+// [xql.SQL]
+// ============================================================================
 
 // \function RAW(string:String, bindings:Array?)
 function RAW(string, bindings) {
   return new Raw(string, bindings);
 }
-uql.RAW = RAW;
+xql.RAW = RAW;
 
 // \function SELECT(...)
 function SELECT(/* ... */) {
@@ -3136,7 +3135,7 @@ function SELECT(/* ... */) {
     q.FIELD.apply(q, arguments);
   return q;
 }
-uql.SELECT = SELECT;
+xql.SELECT = SELECT;
 
 // \function INSERT(...)
 function INSERT(/* ... */) {
@@ -3162,7 +3161,7 @@ function INSERT(/* ... */) {
 
   return q;
 }
-uql.INSERT = INSERT;
+xql.INSERT = INSERT;
 
 // \function UPDATE(...)
 function UPDATE(/* ... */) {
@@ -3188,7 +3187,7 @@ function UPDATE(/* ... */) {
 
   return q;
 }
-uql.UPDATE = UPDATE;
+xql.UPDATE = UPDATE;
 
 // \function DELETE(...)
 function DELETE(from) {
@@ -3197,93 +3196,136 @@ function DELETE(from) {
     q._table = from;
   return q;
 }
-uql.DELETE = DELETE;
+xql.DELETE = DELETE;
 
 // \function AND(...)
 function AND(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("AND", values);
 }
-uql.AND = AND;
+xql.AND = AND;
 
 // \function OR(...)
 function OR(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("OR", values);
 }
-uql.OR = OR;
+xql.OR = OR;
 
 // \function EXCEPT(...)
 function EXCEPT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("EXCEPT", values);
 }
-uql.EXCEPT = EXCEPT;
+xql.EXCEPT = EXCEPT;
 
 // \function EXCEPT_ALL(...)
 function EXCEPT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("EXCEPT", values).ALL();
 }
-uql.EXCEPT_ALL = EXCEPT_ALL;
+xql.EXCEPT_ALL = EXCEPT_ALL;
 
 // \function INTERSECT(...)
 function INTERSECT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("INTERSECT", values);
 }
-uql.INTERSECT = INTERSECT;
+xql.INTERSECT = INTERSECT;
 
 // \function INTERSECT_ALL(...)
 function INTERSECT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("INTERSECT", values).ALL();
 }
-uql.INTERSECT_ALL = INTERSECT_ALL;
+xql.INTERSECT_ALL = INTERSECT_ALL;
 
 // \function UNION(...)
 function UNION(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("UNION", values);
 }
-uql.UNION = UNION;
+xql.UNION = UNION;
 
 // \function UNION_ALL(...)
 function UNION_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new CombinedQuery("UNION", values).ALL();
 }
-uql.UNION_ALL = UNION_ALL;
+xql.UNION_ALL = UNION_ALL;
 
-// \function COL(string, as)
-function COL(string, as) {
-  return new Identifier(string, as);
+// \function COL(value, as)
+function COL(column, as) {
+  // High-performane version of:
+  //   `new Identifier(column, as)`
+  return {
+    __proto__: Identifier.prototype,
+    _type    : "",
+    _flags   : 0,
+    _as      : as || "",
+    _value   : column
+  };
 }
-uql.COL = COL;
+xql.COL = COL;
 
 // \function VAL(value, as)
 function VAL(value, as) {
-  return new PrimitiveValue(value, as);
+  // High-performane version of:
+  //   `new PrimitiveValue(value, as)`
+  return {
+    __proto__: PrimitiveValue.prototype,
+    _type    : "",
+    _flags   : 0,
+    _as      : as || "",
+    _value   : value
+  };
 }
-uql.VAL = VAL;
+xql.VAL = VAL;
 
 // \function ARRAY_VAL(value, as)
 function ARRAY_VAL(value, as) {
   return new ArrayValue(value, as);
 }
-uql.ARRAY_VAL = ARRAY_VAL;
+xql.ARRAY_VAL = ARRAY_VAL;
 
 // \function JSON_VAL(value, as)
 function JSON_VAL(value, as) {
   return new ArrayValue(value, as);
 }
-uql.JSON_VAL = JSON_VAL;
+xql.JSON_VAL = JSON_VAL;
 
 // \function SORT(column, direction, nulls)
 function SORT(column, direction, nulls) {
   return new Sort(column, direction, nulls);
 }
-uql.SORT = SORT;
+xql.SORT = SORT;
+
+// \internal
+function UNARY_OP(op, child) {
+  // High-performane version of:
+  //   `new Unary(op, x)`
+  return {
+    __proto__: Unary.prototype,
+    _type    : op,
+    _flags   : 0,
+    _as      : "",
+    _value   : child,
+  };
+}
+
+// \internal
+function BINARY_OP(a, op, b) {
+  // High-performane version of:
+  //   `new Operator(a, op, b)`
+  return {
+    __proto__: Operator.prototype,
+    _type    : op,
+    _flags   : 0,
+    _as      : "",
+    _left    : a,
+    _right   : b
+  };
+}
 
 // \function OP(...)
 //
@@ -3292,50 +3334,49 @@ function OP(a, op, b) {
   var len = arguments.length;
 
   if (len === 2)
-    return new Unary(op, a);
+    return UNARY_OP(op, a);
   else if (len === 3)
-    return new Operator(a, op, b);
+    return BINARY_OP(a, op, b);
   else
-    throw new CompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed).");
+    throwCompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed)");
 }
-uql.OP = OP;
+xql.OP = OP;
 
-function EQ(a, b) { return OP(a, "=" , b); }
-function NE(a, b) { return OP(a, "!=", b); }
-function LT(a, b) { return OP(a, "<" , b); }
-function LE(a, b) { return OP(a, "<=", b); }
-function GT(a, b) { return OP(a, ">" , b); }
-function GE(a, b) { return OP(a, ">=", b); }
+function EQ(a, b) { return BINARY_OP(a, "=" , b); }
+function NE(a, b) { return BINARY_OP(a, "!=", b); }
+function LT(a, b) { return BINARY_OP(a, "<" , b); }
+function LE(a, b) { return BINARY_OP(a, "<=", b); }
+function GT(a, b) { return BINARY_OP(a, ">" , b); }
+function GE(a, b) { return BINARY_OP(a, ">=", b); }
 
-uql.EQ = EQ;
-uql.NE = NE;
-uql.LT = LT;
-uql.LE = LE;
-uql.GT = GT;
-uql.GE = GE;
+xql.EQ = EQ;
+xql.NE = NE;
+xql.LT = LT;
+xql.LE = LE;
+xql.GT = GT;
+xql.GE = GE;
 
-// Add functions to `uql`.
+// Add functions to `xql`.
 functionsList.forEach(function(name) {
   var func = function(/* ... */) {
     return new Func(name, slice.call(arguments, 0));
   };
-  uql[name] = func;
+  xql[name] = func;
 });
 
-// Add aggregates to `uql`.
+// Add aggregates to `xql`.
 aggregatesList.forEach(function(name) {
   var func = function(/* ... */) {
     return new Aggregate(name, slice.call(arguments, 0));
   };
-  uql[name] = func;
+  xql[name] = func;
 });
 
-// Link camel-cased equivalents of all functions in `uql` namespace.
-Object.keys(uql).forEach(function(name) {
+// Link camel-cased equivalents of all functions in `xql` namespace.
+Object.keys(xql).forEach(function(name) {
   if (reUpperCase.test(name)) {
-    uql[toCamelCase(name)] = uql[name];
+    xql[toCamelCase(name)] = xql[name];
   }
 });
 
-}).apply(this, typeof module === "object"
-  ? [require("exclass"), exports] : [this.exclass, this.uql = {}]);
+}).apply(this, typeof module === "object" ? [exports] : [this.xql = {}]);

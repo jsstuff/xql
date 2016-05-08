@@ -1,38 +1,36 @@
-// uql.js <https://github.com/exjs/uql>
+// xql.js <https://github.com/exjs/xql>
 "use strict";
 
-var assert = require("assert");
-var uql = require("./uql");
+const assert = require("assert");
+const xql = require("./xql");
 
 // Queryable.
-var SELECT           = uql.SELECT;
-var UPDATE           = uql.UPDATE;
-var INSERT           = uql.INSERT;
-var DELETE           = uql.DELETE;
-var EXCEPT           = uql.EXCEPT;
-var EXCEPT_ALL       = uql.EXCEPT_ALL;
-var UNION            = uql.UNION;
-var UNION_ALL        = uql.UNION_ALL;
-var INTERSECT        = uql.INTERSECT;
-var INTERSECT_ALL    = uql.INTERSECT_ALL;
+const SELECT           = xql.SELECT;
+const UPDATE           = xql.UPDATE;
+const INSERT           = xql.INSERT;
+const DELETE           = xql.DELETE;
+const EXCEPT           = xql.EXCEPT;
+const EXCEPT_ALL       = xql.EXCEPT_ALL;
+const UNION            = xql.UNION;
+const UNION_ALL        = xql.UNION_ALL;
+const INTERSECT        = xql.INTERSECT;
+const INTERSECT_ALL    = xql.INTERSECT_ALL;
 
 // Query building.
-var COL              = uql.COL;
-var VAL              = uql.VAL;
-var ARRAY_VAL        = uql.ARRAY_VAL;
-var JSON_VAL         = uql.JSON_VAL;
+const COL              = xql.COL;
+const VAL              = xql.VAL;
+const ARRAY_VAL        = xql.ARRAY_VAL;
+const JSON_VAL         = xql.JSON_VAL;
 
 // Operators/Functions
-var AND              = uql.AND;
-var OR               = uql.OR;
-var OP               = uql.OP;
-var MIN              = uql.MIN;
-var MAX              = uql.MAX;
+const AND              = xql.AND;
+const OR               = xql.OR;
+const OP               = xql.OP;
+const MIN              = xql.MIN;
+const MAX              = xql.MAX;
 
 // Helpers.
-var escapeIdentifier = uql.escapeIdentifier;
-var escapeValue      = uql.escapeValue;
-var substitute       = uql.substitute;
+var ctx = xql.createContext({ dialect: "pgsql" });
 
 function simplify(s) {
   return s.trim().replace(/\s+/g, " ");
@@ -40,10 +38,10 @@ function simplify(s) {
 
 function shouldMatch(a, b) {
   // Compile `a` and/or `b` if needed.
-  if (a instanceof uql.core.Node) a = a.compileNode();
-  if (b instanceof uql.core.Node) b = b.compileNode();
+  if (a instanceof xql.node.Node) a = a.compileNode(ctx);
+  if (b instanceof xql.node.Node) b = b.compileNode(ctx);
 
-  // Simplify, basically removes redundant spaces.
+  // Simplify (removes redundant spaces).
   a = simplify(a);
   b = simplify(b);
 
@@ -67,117 +65,117 @@ function shouldThrow(fn) {
   } catch(ex) { /* Success. */ }
 }
 
-describe("uql", function() {
+describe("xql", function() {
   // Escape.
   it("should escape identifier.", function() {
     // Proper identifiers.
-    shouldMatch(escapeIdentifier("")           , '');
-    shouldMatch(escapeIdentifier("a")          , '"a"');
-    shouldMatch(escapeIdentifier("a.b")        , '"a"."b"');
-    shouldMatch(escapeIdentifier("a", "b")     , '"a"."b"');
-    shouldMatch(escapeIdentifier("a", "b", "c"), '"a"."b"."c"');
-    shouldMatch(escapeIdentifier("a.b", "c")   , '"a"."b"."c"');
-    shouldMatch(escapeIdentifier("a", "b.c")   , '"a"."b"."c"');
+    shouldMatch(ctx.escapeIdentifier("")           , '');
+    shouldMatch(ctx.escapeIdentifier("a")          , '"a"');
+    shouldMatch(ctx.escapeIdentifier("a.b")        , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier("a", "b")     , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier("a", "b", "c"), '"a"."b"."c"');
+    shouldMatch(ctx.escapeIdentifier("a.b", "c")   , '"a"."b"."c"');
+    shouldMatch(ctx.escapeIdentifier("a", "b.c")   , '"a"."b"."c"');
 
     // Buggy input (gaps).
-    shouldMatch(escapeIdentifier("", "", "")   , '');
+    shouldMatch(ctx.escapeIdentifier("", "", "")   , '');
 
-    shouldMatch(escapeIdentifier("a", "", "")  , '"a"');
-    shouldMatch(escapeIdentifier("", "a", "")  , '"a"');
-    shouldMatch(escapeIdentifier("", "", "a")  , '"a"');
+    shouldMatch(ctx.escapeIdentifier("a", "", "")  , '"a"');
+    shouldMatch(ctx.escapeIdentifier("", "a", "")  , '"a"');
+    shouldMatch(ctx.escapeIdentifier("", "", "a")  , '"a"');
 
-    shouldMatch(escapeIdentifier("", "a", "b") , '"a"."b"');
-    shouldMatch(escapeIdentifier("a", "", "b") , '"a"."b"');
-    shouldMatch(escapeIdentifier("a", "b", "") , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier("", "a", "b") , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier("a", "", "b") , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier("a", "b", "") , '"a"."b"');
 
     // Keywords in input.
-    shouldMatch(escapeIdentifier("*")          , '*');
-    shouldMatch(escapeIdentifier("a.*")        , '"a".*');
-    shouldMatch(escapeIdentifier("a", "*")     , '"a".*');
-    shouldMatch(escapeIdentifier("*", "a")     , '*."a"');
+    shouldMatch(ctx.escapeIdentifier("*")          , '*');
+    shouldMatch(ctx.escapeIdentifier("a.*")        , '"a".*');
+    shouldMatch(ctx.escapeIdentifier("a", "*")     , '"a".*');
+    shouldMatch(ctx.escapeIdentifier("*", "a")     , '*."a"');
 
     // Null characters are not allowed.
-    shouldThrow(function() { shouldMatch(escapeIdentifier("\0")); });
+    shouldThrow(function() { shouldMatch(ctx.escapeIdentifier("\0")); });
   });
 
   it("should escape value.", function() {
-    shouldMatch(escapeValue(undefined)     , "NULL");
-    shouldMatch(escapeValue(null)          , "NULL");
+    shouldMatch(ctx.escapeValue(undefined)     , "NULL");
+    shouldMatch(ctx.escapeValue(null)          , "NULL");
 
-    shouldMatch(escapeValue(true)          , "TRUE");
-    shouldMatch(escapeValue(false)         , "FALSE");
+    shouldMatch(ctx.escapeValue(true)          , "TRUE");
+    shouldMatch(ctx.escapeValue(false)         , "FALSE");
 
-    shouldMatch(escapeValue(0)             , "0");
-    shouldMatch(escapeValue(1)             , "1");
-    shouldMatch(escapeValue(-1)            , "-1");
-    shouldMatch(escapeValue(0.5)           , "0.5");
-    shouldMatch(escapeValue(NaN)           , "'NaN'");
-    shouldMatch(escapeValue(Infinity)      , "'Infinity'");
-    shouldMatch(escapeValue(-Infinity)     , "'-Infinity'");
+    shouldMatch(ctx.escapeValue(0)             , "0");
+    shouldMatch(ctx.escapeValue(1)             , "1");
+    shouldMatch(ctx.escapeValue(-1)            , "-1");
+    shouldMatch(ctx.escapeValue(0.5)           , "0.5");
+    shouldMatch(ctx.escapeValue(NaN)           , "'NaN'");
+    shouldMatch(ctx.escapeValue(Infinity)      , "'Infinity'");
+    shouldMatch(ctx.escapeValue(-Infinity)     , "'-Infinity'");
 
-    shouldMatch(escapeValue("")            , "''");
-    shouldMatch(escapeValue("text")        , "'text'");
-    shouldMatch(escapeValue("'text'")      , "E'\\'text\\''");
-    shouldMatch(escapeValue('"text"')      , "'\"text\"'");
-    shouldMatch(escapeValue('\b')          , "E'\\b'");
-    shouldMatch(escapeValue('\f')          , "E'\\f'");
-    shouldMatch(escapeValue('\n')          , "E'\\n'");
-    shouldMatch(escapeValue('\r')          , "E'\\r'");
-    shouldMatch(escapeValue('\t')          , "E'\\t'");
-    shouldMatch(escapeValue('\\')          , "E'\\\\'");
-    shouldMatch(escapeValue('\'')          , "E'\\''");
+    shouldMatch(ctx.escapeValue("")            , "''");
+    shouldMatch(ctx.escapeValue("text")        , "'text'");
+    shouldMatch(ctx.escapeValue("'text'")      , "E'\\'text\\''");
+    shouldMatch(ctx.escapeValue('"text"')      , "'\"text\"'");
+    shouldMatch(ctx.escapeValue('\b')          , "E'\\b'");
+    shouldMatch(ctx.escapeValue('\f')          , "E'\\f'");
+    shouldMatch(ctx.escapeValue('\n')          , "E'\\n'");
+    shouldMatch(ctx.escapeValue('\r')          , "E'\\r'");
+    shouldMatch(ctx.escapeValue('\t')          , "E'\\t'");
+    shouldMatch(ctx.escapeValue('\\')          , "E'\\\\'");
+    shouldMatch(ctx.escapeValue('\'')          , "E'\\''");
 
     // [] defaults to ARRAY[].
-    shouldMatch(escapeValue([])            , "'{}'");
-    shouldMatch(escapeValue([0, 1])        , "ARRAY[0, 1]");
-    shouldMatch(escapeValue([[0, 1]])      , "ARRAY[[0, 1]]");
-    shouldMatch(escapeValue([[0], [1]])    , "ARRAY[[0], [1]]");
-    shouldMatch(escapeValue(["a", "b"])    , "ARRAY['a', 'b']");
-    shouldMatch(escapeValue([["a", "b"]])  , "ARRAY[['a', 'b']]");
-    shouldMatch(escapeValue([["a"], ["b"]]), "ARRAY[['a'], ['b']]");
+    shouldMatch(ctx.escapeValue([])            , "'{}'");
+    shouldMatch(ctx.escapeValue([0, 1])        , "ARRAY[0, 1]");
+    shouldMatch(ctx.escapeValue([[0, 1]])      , "ARRAY[[0, 1]]");
+    shouldMatch(ctx.escapeValue([[0], [1]])    , "ARRAY[[0], [1]]");
+    shouldMatch(ctx.escapeValue(["a", "b"])    , "ARRAY['a', 'b']");
+    shouldMatch(ctx.escapeValue([["a", "b"]])  , "ARRAY[['a', 'b']]");
+    shouldMatch(ctx.escapeValue([["a"], ["b"]]), "ARRAY[['a'], ['b']]");
 
     // {} defaults to JSON.
-    shouldMatch(escapeValue({})            , "'{}'");
-    shouldMatch(escapeValue({a:1})         , "'{\"a\":1}'");
-    shouldMatch(escapeValue({a:1,b:2})     , "'{\"a\":1,\"b\":2}'");
-    shouldMatch(escapeValue({a:"a",b:"b"}) , "'{\"a\":\"a\",\"b\":\"b\"}'");
-    shouldMatch(escapeValue({a:["a","b"]}) , "'{\"a\":[\"a\",\"b\"]}'");
+    shouldMatch(ctx.escapeValue({})            , "'{}'");
+    shouldMatch(ctx.escapeValue({a:1})         , "'{\"a\":1}'");
+    shouldMatch(ctx.escapeValue({a:1,b:2})     , "'{\"a\":1,\"b\":2}'");
+    shouldMatch(ctx.escapeValue({a:"a",b:"b"}) , "'{\"a\":\"a\",\"b\":\"b\"}'");
+    shouldMatch(ctx.escapeValue({a:["a","b"]}) , "'{\"a\":[\"a\",\"b\"]}'");
 
-    shouldThrow(function() { escapeValue('\0'); });
+    shouldThrow(function() { ctx.escapeValue('\0'); });
   });
 
   // Substitute.
   it("should substitute expression.", function() {
     shouldMatch(
-      substitute("a = ?, b = '', c = ?", [1, 2]),
+      ctx.substitute("a = ?, b = '', c = ?", [1, 2]),
       "a = 1, b = '', c = 2");
 
     shouldMatch(
-      substitute("a = $1, b = '', c = $2", [1, 2]),
+      ctx.substitute("a = $1, b = '', c = $2", [1, 2]),
       "a = 1, b = '', c = 2");
 
     shouldMatch(
-      substitute("a = ?, b = '?', c = ?", [1, 2]),
+      ctx.substitute("a = ?, b = '?', c = ?", [1, 2]),
       "a = 1, b = '?', c = 2");
 
     shouldMatch(
-      substitute("a = $1, b = '$1', c = $2", [1, 2]),
+      ctx.substitute("a = $1, b = '$1', c = $2", [1, 2]),
       "a = 1, b = '$1', c = 2");
 
     shouldMatch(
-      substitute("a = ?, b = '?''?', c = ?", [1, 2]),
+      ctx.substitute("a = ?, b = '?''?', c = ?", [1, 2]),
       "a = 1, b = '?''?', c = 2");
 
     shouldMatch(
-      substitute("a = $1, b = '$1''$1', c = $2", [1, 2]),
+      ctx.substitute("a = $1, b = '$1''$1', c = $2", [1, 2]),
       "a = 1, b = '$1''$1', c = 2");
 
     shouldMatch(
-      substitute("\"a?\" = ?, b = E'?\\'?', c = ?", [1, 2]),
+      ctx.substitute("\"a?\" = ?, b = E'?\\'?', c = ?", [1, 2]),
       "\"a?\" = 1, b = E'?\\'?', c = 2");
 
     shouldMatch(
-      substitute("\"a$1\" = $1, b = E'$1\\'?', c = $2", [1, 2]),
+      ctx.substitute("\"a$1\" = $1, b = E'$1\\'?', c = $2", [1, 2]),
       "\"a$1\" = 1, b = E'$1\\'?', c = 2");
   });
 
@@ -219,7 +217,7 @@ describe("uql", function() {
       'SELECT "a", "b", "c" FROM "x"');
   });
 
-  it("should test SELECT ... FROM ... WHERE ... .", function() {
+  it("should test SELECT ... FROM ... WHERE ...", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").WHERE("a", 42),
       'SELECT "a", "b", "c" FROM "x" WHERE "a" = 42');
@@ -241,7 +239,7 @@ describe("uql", function() {
       'SELECT "a", "b", "c" FROM "x" WHERE "a" = 1 AND "b" = 2 AND "c" = 3');
   });
 
-  it("should test SELECT DISTINCT ... FROM ... WHERE ... .", function() {
+  it("should test SELECT DISTINCT ... FROM ... WHERE ...", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE("a", "<=", 42),
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
@@ -259,13 +257,13 @@ describe("uql", function() {
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
   });
 
-  it("should test SELECT ... FROM ... GROUP BY ... .", function() {
+  it("should test SELECT ... FROM ... GROUP BY ...", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a")),
       'SELECT "a", "b", "c" FROM "x" GROUP BY "a"');
   });
 
-  it("should test SELECT ... FROM ... GROUP BY ... HAVING ....", function() {
+  it("should test SELECT ... FROM ... GROUP BY ... HAVING ...", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).FROM("x").GROUP_BY(COL("a"))
         .HAVING("a", "<", 3)

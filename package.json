@@ -1,6 +1,6 @@
 {
-  "name": "uql",
-  "version": "1.1.0",
+  "name": "xql",
+  "version": "1.0.0",
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
@@ -21,9 +21,9 @@
     "wrapper"
   ],
 
-  "homepage": "https://github.com/exjs/uql",
+  "homepage": "https://github.com/exjs/xql",
   "bugs": {
-    "url": "https://github.com/exjs/uql/issues"
+    "url": "https://github.com/exjs/xql/issues"
   },
 
   "contributors": [{
@@ -34,11 +34,7 @@
 
   "license": "Unlicense",
 
-  "main": "uql.js",
-
-  "dependencies": {
-    "exclass": "*"
-  },
+  "main": "xql.js",
 
   "devDependencies": {
     "mocha": "*"
@@ -46,10 +42,10 @@
 
   "repository" : {
     "type": "git",
-    "url": "https://github.com/exjs/uql.git"
+    "url": "https://github.com/exjs/xql.git"
   },
 
   "scripts": {
-    "test": "mocha uql-spec.js"
+    "test": "mocha xql-spec.js"
   }
 }
