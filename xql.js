@@ -2,21 +2,20 @@
 (function(_xql) {
 "use strict";
 
+/**
+ * Root namespace.
+ *
+ * @namespace
+ * @alias xql
+ */
 const xql = _xql;
 
-// \namespace node
-//
-// Namespace that contains expression tree nodes.
-const xql$node = xql.node = {};
-
-// \namespace utils
-//
-// Utility functions.
-const xql$utils = xql.utils = {};
-
-// \namespace misc
-//
-// Miscellaneous namespace.
+/**
+ * Miscellaneous namespace.
+ *
+ * @namespace
+ * @alias xql.misc
+ */
 const xql$misc = xql.misc = {};
 
 // xql.misc.VERSION
@@ -28,45 +27,25 @@ const xql$misc = xql.misc = {};
 // root namespace.
 xql$misc.VERSION = "1.0.0";
 
-// \internal
-// \{
-
 // Always returns false, used internally for browser support.
 function returnFalse() { return false; }
 
-// Get whether an object is `Array`.
-//
-// Link to `Array.isArray`.
-const isArray = Array.isArray;
-
-// Get whether an object is `Buffer`.
-//
-// Returns false if a running environment doesn't support `Buffer` type.
+// Global shorthands.
+const isArray  = Array.isArray;
 const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
-
-// Link to `Array.prototype.slice`.
-const slice = Array.prototype.slice;
-
-// Link to `Object.prototype.hasOwnProperty`.
-const hasOwnProperty = Object.prototype.hasOwnProperty;
-
-// Checks if a string is a well formatted integer with optional '-' sign.
-const reInt = /^-?\d+$/;
-
-// Checks if a string is a well formatted integer or floating point number, also
-// accepts scientific notation "E[+-]?xxx".
-const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
-
-// Checks if a string is UPPERCASE_ONLY, underscores are accepted.
-const reUpperCase = /^[A-Z_][A-Z_0-9]*$/;
-
-// Checks for new line characters.
-const reNewLine = /\n/g;
+const slice    = Array.prototype.slice;
+const hasOwn   = Object.prototype.hasOwnProperty;
 
 // Empty object used as an replacement for value of object with no properties.
 const EmptyObject = {};
 
-// \}
+// Global regular expressions.
+const reNewLine   = /\n/g;                // Check for new line characters.
+const reInt       = /^-?\d+$/;            // Check for a well-formatted int with optional '-' sign.
+const reUpperCase = /^[A-Z_][A-Z_0-9]*$/; // Check for an UPPERCASE_ONLY string.
+// Checks if a string is a well formatted integer or floating point number, also
+// accepts scientific notation "E[+-]?xxx".
+const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
 
 // Map of identifiers that are not escaped.
 const IdentifierMap = {
@@ -419,12 +398,22 @@ const aggregatesList = [
 ];
 
 // ============================================================================
-// [xql.?Error]
+// [xql.error]
 // ============================================================================
 
-// \class ValueError
-//
-// Error thrown if data is wrong.
+/**
+ * Error classes namespace.
+ *
+ * @namespace
+ * @alias xql.error
+ */
+const xql$error = xql.error = {};
+
+/**
+ * Error thrown if data is wrong.
+ * @param message Error mesasge.
+ * @class xql.error.ValueError
+ */
 class ValueError extends Error {
   constructor(message) {
     super(message);
@@ -432,40 +421,40 @@ class ValueError extends Error {
     this.message = message;
   }
 }
+xql$error.ValueError = ValueError;
 
-// \class CompileError
-//
-// Error thrown if query is wrong.
+/**
+ * Error thrown if query is wrong.
+ * @param message Error mesasge.
+ * @class xql.error.CompileError
+ */
 class CompileError extends Error {
   constructor(message) {
     super(message);
-    this.name = "ValueError";
+    this.name = "CompileError";
     this.message = message;
   }
 }
+xql$error.CompileError = CompileError;
 
-function throwTypeError(message) {
-  throw new TypeError(message);
-}
-
-function throwValueError(message) {
-  throw new ValueError(message);
-}
-
-function throwCompileError(message) {
-  throw new CompileError(message);
-}
+function throwTypeError(message) { throw new TypeError(message); }
+function throwValueError(message) { throw new ValueError(message); }
+function throwCompileError(message) { throw new CompileError(message); }
 
 // ============================================================================
-// [xql.utils]
+// [xql.misc]
 // ============================================================================
 
-// \function utils.typeOf(value)
-//
-// Get type of `value` as a string. This function extends standard `typeof`
-// operator with "array", "buffer", "null" and "undefined". The `typeOf` is
-// actually used for debugging and error handling to make error messages more
-// informative.
+/**
+ * Get a type of the `value` as a string. This function extends a javascript
+ * `typeof` operator with "array", "buffer", "null" and "undefined". It's used
+ * for debugging and error handling purposes to enhance error messages.
+ *
+ * @param {*} value
+ * @return {string}
+ *
+ * @function xql.misc.typeOf
+ */
 function typeOf(value) {
   if (value == null)
     return value === null ? "null" : "undefined";
@@ -484,11 +473,16 @@ function typeOf(value) {
 
   return "object";
 }
-xql$utils.typeOf = typeOf;
+xql$misc.typeOf = typeOf;
 
-// \function utils.toCamelCase(s)
-//
-// Convert a given string `s` into a camelCase representation.
+/**
+ * Convert a given string `s` into a camelCase representation.
+ *
+ * @param {string} s
+ * @return {string}
+ *
+ * @function xql.misc.toCamelCase(s)
+ */
 const toCamelCase = (function() {
   const re = /_[a-z]/g;
 
@@ -502,71 +496,108 @@ const toCamelCase = (function() {
 
   return toCamelCase;
 })();
-xql$utils.toCamelCase = toCamelCase;
+xql$misc.toCamelCase = toCamelCase;
 
 function indent(s, indentation) {
   return (s && indentation) ? indentation + s.replace(reNewLine, "\n" + indentation) : s;
 }
-xql$utils.indent = indent;
+xql$misc.indent = indent;
 
-function alias(obj, dst, src) {
-  obj[dst] = obj[src];
+function alias(classobj, spec) {
+  var p = classobj.prototype;
+  for (var member in spec) {
+    var from = spec[member];
+    p[member] = p[from];
+  }
+  return classobj;
 }
 
 // ============================================================================
-// [xql.registry]
+// [xql.dialect]
 // ============================================================================
 
-const xql$registry$map = {};
+/**
+ * Database dialects namespace.
+ *
+ * @namespace
+ * @alias xql.dialect
+ */
+const xql$dialect = xql.dialect = {};
 
-// \object registry
-//
-// Database dialects registry.
-const xql$registry = new class Registry {
-  add(dialect, ContextClass) {
-    xql$registry$map[dialect] = ContextClass;
-  }
+/**
+ * Hash table that maps a dialect string into a `Context` class.
+ *
+ * @private
+ */
+const xql$dialect$map = {};
 
-  has(dialect) {
-    return hasOwnProperty.call(xql$registry$map, dialect);
-  }
-
-  create(options) {
-    if (typeof options !== "object" || options === null)
-      throwTypeError("xql.registry.create() - Options must be Object");
-
-    var dialect = options.dialect;
-    if (typeof dialect !== "string")
-      throwTypeError("xql.registry.create() - Options must have dialect");
-
-    if (!hasOwnProperty.call(xql$registry$map, dialect))
-      throwTypeError("xql.registry.create() - Unknown dialect '" + dialect + "'");
-
-    var ContextClass = xql$registry$map[dialect];
-    return new ContextClass(options);
-  }
-};
-xql.registry = xql$registry;
-
-function createContext(options) {
-  return xql$registry.create(options);
+/**
+ * Checks whether the `dialect` exists in the global registry.
+ *
+ * @param {string} dialect A name of the dialect (always lowercase).
+ * @return {boolean}
+ *
+ * @function xql.dialect.get
+ */
+function xql$dialect$has(dialect) {
+  return hasOwnProperty.call(xql$dialect$map, dialect);
 }
-xql.createContext = createContext;
+xql$dialect.has = xql$dialect$has;
 
-// ============================================================================
-// [xql.BaseContext]
-// ============================================================================
+/**
+ * Adds a new dialect to the global registry.
+ *
+ * @param {string} dialect A name of the dialect (always lowercase).
+ * @param {function} classobj A `Context` class object (non-instantiated).
+ *
+ * @function xql.dialect.add
+ */
+function xql$dialect$add(dialect, classobj) {
+  xql$dialect$map[dialect] = classobj;
+}
+xql$dialect.add = xql$dialect$add;
 
-// \class Context
-//
-// Base context interface.
-class BaseContext {
+/**
+ * Constructs a new `Context` for a given options.
+ *
+ * @param {object} options Context options.
+ * @param {string} options.dialect Database dialect (must be registered).
+ * @return {Context} Instantiated `Context`.
+ *
+ * @function xql.dialect.newContext
+ */
+function $xql$dialect$newContext(options) {
+  if (typeof options !== "object" || options === null)
+    throwTypeError("xql.dialect.newContext() - Options must be Object");
+
+  var dialect = options.dialect;
+  if (typeof dialect !== "string")
+    throwTypeError("xql.dialect.newContext() - Options must have a dialect key");
+
+  if (!hasOwnProperty.call(xql$dialect$map, dialect))
+    throwTypeError("xql.dialect.newContext() - Unknown dialect '" + dialect + "'");
+
+  var classobj = xql$dialect$map[dialect];
+  return new classobj(options);
+}
+xql$dialect.newContext = $xql$dialect$newContext;
+
+/**
+ * Database dialect context that implements a dialect-specific functionality.
+ *
+ * @param {string} dialect Database dialect the context is using.
+ * @param {object} options Context options.
+ *
+ * @class
+ * @alias xql.dialect.Context
+ */
+class Context {
   constructor(dialect, options) {
     this.dialect = dialect;
     this.pretty = options.pretty ? true : false;
     this.indentation = options.indentation || 2;
 
-    this.space = "";     // Space character, either " " or "\n" (pretty).
+    this.spaceOrNL = ""; // Space character, either " " or "\n" (pretty).
     this.commaStr = "";  // Comma separator, either ", " or ",\n" (pretty).
     this.indentStr = ""; // Indentation string.
     this.concatStr = ""; // Concatenation string, equals to `space + indentStr`.
@@ -577,73 +608,160 @@ class BaseContext {
     this._update();
   }
 
-  // \function xql.Context.escapeIdentifier(...)
-  //
-  // Escape SQL identifier.
+  /**
+   * Escapes a single or multiple SQL identifier(s).
+   *
+   * @param {...string} args A single or multiple SQL identifiers to escape.
+   * @return {string} Escaped identifier(s).
+   *
+   * @abstract
+   */
   escapeIdentifier() {
     throwTypeError("Abstract method called");
   }
 
-  // \function xql.Context.escapeValue(value, explicitType?:String)
-  //
-  // Escape `value` so it can be inserted into a SQL query.
-  //
-  // The `value` can be any JS type that can be implicitly or explicitly
-  // converted to SQL. The `explicitType` parameter can be used to force
-  // the type explicitly in case of ambiguity.
+  /**
+   * Escapes `value` so it can be inserted into a SQL query.
+   *
+   * The `value` can be any JS type that can be implicitly or explicitly
+   * converted to SQL. The `explicitType` parameter can be used to force
+   * the type explicitly in case of ambiguity.
+   *
+   * @param {*} value A value to escape.
+   * @param {string=} explicitType SQL type override
+   * @return {string} Escaped `value` as string.
+   *
+   * @abstract
+   */
   escapeValue(value, explicitType) {
     throwTypeError("Abstract method called");
   }
 
-  // \function xql.Context.escapeValueExplicit(value, explicitType:String)
-  escapeValueExplicit(value, explicitType) {
-    throwTypeError("Abstract method called");
-  }
-
-  // \function xql.Context.escapeNumber(value)
+  /**
+   * Escapes a number `value` into a SQL number.
+   *
+   * @param {number} value A numeric value to escape.
+   * @return {string} Escaped `value` as string.
+   *
+   * @abstract
+   */
   escapeNumber(value) {
     throwTypeError("Abstract method called");
   }
 
-  // \function xql.Context.escapeString(value)
-  //
-  // Escape a given `value` of type string so it can be used in SQL query.
+  /**
+   * Escapes a number `value` into a SQL string.
+   *
+   * @param {string} value A string to escape.
+   * @return {string} Escaped `value` as string.
+   *
+   * @abstract
+   */
   escapeString(value) {
     throwTypeError("Abstract method called");
   }
 
-  // \function xql.Context.escapeBuffer(value)
+  /**
+   * Escapes a buffer/blob `value` into a SQL buffer representation.
+   *
+   * @param {Buffer} value A buffer to escape.
+   * @return {string} Escaped `value` as buffer.
+   *
+   * @abstract
+   */
   escapeBuffer(value) {
     throwTypeError("Abstract method called");
   }
 
-  // \function xql.Context.escapeValues(value)
+  /**
+   * Escapes an array into SQL `VALUES` representation.
+   *
+   * @param {array} value An array to escape.
+   * @return {string} Escaped `value` as SQL `VALUES`.
+   *
+   * @abstract
+   */
   escapeValues(value) {
     throwTypeError("Abstract method called");
   }
 
-  // \function xql.Context.escapeArray(value, isNested)
+  /**
+   * Escapes an array into SQL-ARRAY representation.
+   *
+   * @param {array} value An array to escape.
+   * @param {boolean} isNested Whether the array is nested in another array.
+   *   Some dialects (like pgsql) need this information to properly escape the
+   *   array.
+   * @return {string} Escaped `value` as SQL-ARRAY.
+   *
+   * @abstract
+   */
   escapeArray(value, isNested) {
     throwTypeError("Abstract method called");
   }
 
-  // \function xql.Context.escapeJson(value)
+  /**
+   * Escapes a value into SQL-JSON representation.
+   *
+   * @param {*} value A value to escape.
+   * @return {string} Escaped `value` as SQL-JSON.
+   *
+   * @abstract
+   */
   escapeJson(value) {
     throwTypeError("Abstract method called");
   }
 
-  _update() {
-    var pretty = this.pretty;
-
-    this.space = pretty ? "\n" : " ";
-    this.commaStr = pretty ? ",\n" : ", ";
-    this.indentStr = " ".repeat(this.indentation);
-    this.concatStr = this.space + this.indentStr;
-
-    this.indent = pretty ? this._indent$pretty : this._indent$none;
-    this.concat = pretty ? this._concat$pretty : this._concat$none;
+  /**
+   * Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
+   * string with `bindings` and returns a new string. The function automatically
+   * detects the format of `query` string and checks if it's consistent (i.e. it
+   * throws if `?` is used together with `$1`).
+   *
+   * This function knows how to recognize escaped identifiers and strings in the
+   * query and skips content of these. For example for a given string `'?' ?`
+   * only the second `?` would be considered and substituted.
+   *
+   * NOTE: Although the function understands SQL syntax, the function expects
+   * well formed SQL query. The purpose is to substitute query parameters and
+   * not performing expensive validation (that will be done by the server anyway).
+   *
+   * @param {string} query Query string to substitute (template).
+   * @param {array=} bindings Array of values to bind to `query`.
+   * @return {string}
+   *
+   * @abstract
+   */
+  substitute(query, bindings) {
+    throwTypeError("Abstract method called");
   }
 
+  /**
+   * Called whenever some property is changed to update all computed properties.
+   *
+   * @private
+   */
+  _update() {
+    var compact = !this.pretty;
+
+    this.spaceOrNL = compact ? " "  : "\n";
+    this.commaStr  = compact ? ", " : ",\n";
+    this.indentStr = compact ? ""   : " ".repeat(this.indentation);
+    this.concatStr = compact ? " "  : this.spaceOrNL + this.indentStr;
+
+    this.indent    = compact ? this._indent$none : this._indent$pretty;
+    this.concat    = compact ? this._concat$none : this._concat$pretty;
+  }
+
+  /**
+   * Indents a given string `s` by the Context's indentation settings if pretty
+   * print is enabled, otherwise does nothing.
+   *
+   * @param {string} s String to indent.
+   * @return {string} Indented string if indentation is enabled or unchanged `s`.
+   *
+   * @function indent
+   */
   _indent$none(s) {
     return s;
   }
@@ -653,6 +771,18 @@ class BaseContext {
     return indentStr + s.replace(reNewLine, "\n" + indentStr);
   }
 
+  /**
+   * Called before a string `s` is concatenated into a SQL expression in a way
+   * that may require a new line if pretty printing is enabled. It returns the
+   * original string prefixed with a space or a line break and possibly indented.
+   *
+   * @param {string} s Input string to process.
+   * @return {string} Possibly modified string.
+   *
+   * @function concat
+   *
+   * TODO: Change the name
+   */
   _concat$none(s) {
     return " " + s;
   }
@@ -662,7 +792,7 @@ class BaseContext {
     return concatStr + s.replace(reNewLine, concatStr);
   }
 }
-xql.BaseContext = BaseContext;
+xql$dialect.Context = Context;
 
 // ============================================================================
 // [xql.pgsql]
@@ -693,12 +823,12 @@ function fnEscapeString(s) {
 // \class PGSQLContext
 //
 // PostgreSQL context.
-class PGSQLContext extends BaseContext {
+class PGSQLContext extends Context {
   constructor(options) {
     super("pgsql", options);
   }
 
-  // \reimplement
+  /** @override */
   escapeIdentifier() {
     var output = "";
 
@@ -728,7 +858,7 @@ class PGSQLContext extends BaseContext {
             throwCompileError("Identifier can't contain NULL character");
         }
 
-        if (hasOwnProperty.call(IdentifierMap, p))
+        if (hasOwn.call(IdentifierMap, p))
           output += p;
         else
           output += '"' + p + '"';
@@ -743,7 +873,7 @@ class PGSQLContext extends BaseContext {
     return output;
   }
 
-  // \reimplement
+  /** @override */
   escapeValue(value, explicitType) {
     // Explicitly Defined Type (`explicitType` is set)
     // -----------------------------------------------
@@ -764,7 +894,7 @@ class PGSQLContext extends BaseContext {
           if (typeof value === "boolean")
             return value ? "TRUE" : "FALSE";
 
-          if (typeof value === "string" && hasOwnProperty.call(BoolMap, value))
+          if (typeof value === "string" && hasOwn.call(BoolMap, value))
             return BoolMap[value];
 
           if (typeof value === "number") {
@@ -905,7 +1035,7 @@ class PGSQLContext extends BaseContext {
     return this.escapeString(JSON.stringify(value));
   }
 
-  // \reimplement
+  /** @override */
   escapeNumber(value) {
     if (!isFinite(value)) {
       if (value === Infinity)
@@ -919,7 +1049,7 @@ class PGSQLContext extends BaseContext {
     return value.toString();
   }
 
-  // \reimplement
+  /** @override */
   escapeString(value) {
     var oldLength = value.length;
     value = value.replace(reEscapeString, fnEscapeString);
@@ -934,12 +1064,12 @@ class PGSQLContext extends BaseContext {
     return "'" + value + "'";
   }
 
-  // \reimplement
+  /** @override */
   escapeBuffer(value) {
     return "E'\\x" + value.toString("hex") + "'";
   }
 
-  // \reimplement
+  /** @override */
   escapeValues(value) {
     var out = "";
 
@@ -956,7 +1086,7 @@ class PGSQLContext extends BaseContext {
     return "(" + out + ")";
   }
 
-  // \reimplement
+  /** @override */
   escapeArray(value, isNested) {
     var out = "";
     var i = 0, len = value.length;
@@ -980,25 +1110,12 @@ class PGSQLContext extends BaseContext {
       return "ARRAY[" + out + "]";
   }
 
-  // \reimplement
+  /** @override */
   escapeJson(value) {
     return this.escapeString(JSON.stringify(value));
   }
 
-  // \function substitute(query, bindings)
-  //
-  // Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
-  // string with `bindings` and returns a new string. The function automatically
-  // detects the format of `query` string and checks if it's consistent (i.e. it
-  // throws if `?` is used together with `$1`).
-  //
-  // This function knows how to recognize escaped identifiers and strings in the
-  // query and skips content of these. For example for a given string `'?' ?` only
-  // the second `?` is considered and substituted.
-  //
-  // NOTE: Although the function understands SQL syntax, the function expects
-  // well formed SQL query. The purpose is to replace query parameters and not
-  // to perform expensive validation (that will be done by the server anyway).
+  /** @override */
   substitute(query, bindings) {
     var input = "";
     var output = "";
@@ -1229,7 +1346,7 @@ class PGSQLContext extends BaseContext {
     return output;
   }
 }
-xql$registry.add("pgsql", PGSQLContext);
+xql$dialect.add("pgsql", PGSQLContext);
 
 })();
 
@@ -1237,14 +1354,28 @@ xql$registry.add("pgsql", PGSQLContext);
 // [xql.node]
 // ============================================================================
 
-// \class node.Node
-//
-// Base class for all `Node`s related to query building.
-//
-// `Node` doesn't have any functionality and basically only initializes `_type`,
-// `_flags` and `_as` members. Classes that inherit `Node` can omit calling
-// `Node`s constructor for performance reasons, but if you do so, please
-// always initialize members in the correct order [_type, _flags, _as].
+/**
+ * SQL nodes namespace.
+ *
+ * @namespace
+ * @alias xql.node
+ */
+const xql$node = xql.node = {};
+
+/**
+ * SQL node - basic building block that implements the SQL's expression tree.
+ *
+ * `Node` doesn't have any functionality and basically only initializes `_type`,
+ * `_flags` and `_as` members. Classes that inherit `Node` can omit calling
+ * `Node`'s constructor for performance reasons, but if you do so, please
+ * always initialize members in a `[_type, _flags, _as]` order.
+ *
+ * @param {string} type Type of the node.
+ * @param {as} as Node alias as specified by SQL's `AS` keyword.
+ *
+ * @class
+ * @alias xql.node.Node
+ */
 class Node {
   constructor(type, as) {
     this._type = type || "";
@@ -1252,79 +1383,155 @@ class Node {
     this._as = as || "";
   }
 
-  // \function Node.shouldWrap()
-  //
-  // Get whether the not should be wrapped in parentheses.
-  shouldWrap(ctx) {
+  /**
+   * Returns whether the returned expression must be wrapped in parentheses if
+   * not alone.
+   *
+   * @param {Context} ctx Context.
+   * @return {boolean} Whether the expression must be wrapped.
+   */
+  mustWrap(ctx) {
     throwTypeError("Abstract method called");
   }
 
-  // \function Query.compileQuery()
-  //
-  // Compile the whole by using `compileNode()` and add a semicolon ';' at the
-  // end.
-  //
-  // \note This function is `null` by default and only added by nodes which can
-  // be executed. Use `Node.canExecute()` method to check whether the node can
-  // actually be executed, i.e. compiles into an executable SQL.
-  compileQuery(ctx) {
-    throwTypeError("Abstract method called");
-  }
-
-  // \function Node.compileNode()
-  //
-  // Compile the node.
-  compileNode(ctx) {
-    throwTypeError("Abstract method called");
-  }
-
-  // \function Node.canExecute()
-  //
-  // Get whether the compiled node can be executed, i.e. the node implements
-  // `compileQuery()`, which returns the query combined with a semicolon ";".
-  //
-  // \note There is not a base class for nodes which can execute, this getter
-  // uses reflection; it dynamically checks for presence of `compileQuery` and
-  // returns `true` if found.
+  /**
+   * Returns whether the compiled node can be executed, i.e. the `Node` provides
+   * `compileQuery()`, which returns a valid SQL statement containing semicolon.
+   *
+   * @note There is not a base class for nodes which can execute, this getter
+   * uses reflection and dynamically checks if `compileQuery` is provided and
+   * returns `true` on success.
+   *
+   * @return {boolean} Whether the result of `compileQuery()` query can be executed.
+   */
   canExecute() {
     return this.compileQuery !== Node.prototype.compileQuery;
   }
 
+  /**
+   * Compiles the whole by using `compileNode()` and adds a semicolon ';' at the
+   * end.
+   *
+   * @note This function is abstract by default and only added by nodes which can
+   * be executed. Use `Node.canExecute()` method to check whether the node can
+   * actually be executed, i.e. compiles into a valid SQL that can be executed.
+   *
+   * @param {Context} ctx Context.
+   * @return {string} SQL query.
+   */
+  compileQuery(ctx) {
+    throwTypeError("Abstract method called");
+  }
+
+  /**
+   * Compiles the node into a valid SQL string.
+   *
+   * @note This function is reimplemented by each `Node` and provides a foundation
+   * to compile building blocks of the query independently. The string returned
+   * doesn't have to be functional alone, however, it will function if combined
+   * with the rest of the expression tree.
+   *
+   * @param {Context} ctx Context.
+   * @return {string} SQL string.
+   */
+  compileNode(ctx) {
+    throwTypeError("Abstract method called");
+  }
+
+  /**
+   * Gets the type of the node.
+   *
+   * @return {string} Type of the node.
+   */
   getType() {
     return this._type;
   }
 
+  /**
+   * Sets the type of the node.
+   *
+   * @note The type of the node should be always set when the Node is created.
+   * This setter is provided for some edge use-cases, use at your own risk.
+   *
+   * @param {string} type Type of the node.
+   * @return {this}.
+   */
   setType(type) {
     this._type = type;
     return this;
   }
 
+  /**
+   * Gets whether the node contains the given `flag`.
+   *
+   * @return {boolean} Whether the flag is enabled or disabled.
+   */
   getFlag(flag) {
     return (this._flags & flag) !== 0;
   }
 
-  setFlag(flag, value) {
-    var flags = this._flags;
-
-    if (value || value === undefined)
-      flags |= flag;
-    else
-      flags &= ~flag;
-
-    this._flags = flags;
+  /**
+   * Sets a node `flag`.
+   *
+   * @param {number} flag Flag to set.
+   * @return {this}
+   */
+  setFlag(flag) {
+    this._flags |= flag;
     return this;
   }
 
+  /**
+   * Clears a node `flag`.
+   *
+   * @param {number} flag Flag to clear.
+   * @return {this}
+   */
+  clearFlag(flag) {
+    this._flags &= ~flag;
+    return this;
+  }
+
+  /**
+   * Replaces the `flagToClear` flag with `flagToSet` flag.
+   *
+   * @param {number} flagToClear Flag to clear.
+   * @param {number} flagToSet Flag to set.
+   * @return {this}
+   */
+  replaceFlag(flagToClear, flagToSet) {
+    this._flags = (this._flags & ~flagToClear) | flagToSet;
+    return this;
+  }
+
+  /**
+   * Gets the alias of the node or expression, which compiles as `AS ...`.
+   *
+   * @return {string} SQL alias.
+   */
   getAlias() {
     return this._as;
   }
 
+  /**
+   * Sets the alias of the node or expression, which compiles as `AS ...`.
+   *
+   * @note Not all SQL nodes support aliases. It's mostly for SELECT columns.
+   *
+   * @param {string} as SQL alias.
+   * @return {this}
+   */
   setAlias(as) {
     this._as = as;
     return this;
   }
 
-  // \function Node.AS(as:String)
+  /**
+   * The same as calling `setAlias(as)`.
+   *
+   * @param {string} as SQL alias.
+   * @return {this}
+   */
   AS(as) {
     this._as = as;
     return this;
@@ -1382,9 +1589,15 @@ class Node {
 }
 xql$node.Node = Node;
 
-// \class node.Raw
-//
-// Raw SQL expression.
+/**
+ * SQL RAW expression.
+ *
+ * @param {string} expression Expression string.
+ * @param {array=} bindings Bindings array used by the expression.
+ *
+ * @class
+ * @alias xql.node.Raw
+ */
 class Raw extends Node {
   constructor(expression, bindings) {
     super("RAW", "");
@@ -1392,14 +1605,17 @@ class Raw extends Node {
     this._bindings = bindings || null;
   }
 
-  shouldWrap(ctx) {
+  /** @override */
+  mustWrap(ctx) {
     return false;
   }
 
+  /** @override */
   compileQuery(ctx) {
     return this.compileNode(ctx) + ";";
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = this._value;
 
@@ -1414,19 +1630,41 @@ class Raw extends Node {
     return out;
   }
 
+  /**
+   * Gets the raw expression.
+   *
+   * @return {string}.
+   */
   getExpression() {
     return this._value;
   }
 
+  /**
+   * Sets the raw expression to `expression`.
+   *
+   * @param {string} expression Raw expression.
+   * @return {this}.
+   */
   setExpression(expression) {
     this._value = expression;
     return this;
   }
 
+  /**
+   * Gets the raw expression's bindings or `null` if no bindings were provided.
+   *
+   * @return {?array}
+   */
   getBindings() {
     return this._bindings;
   }
 
+  /**
+   * Sets the raw expression's bindings.
+   *
+   * @param {?array} bindings The raw expression's bindings, `null` to disable.
+   * @return {this}
+   */
   setBindings(bindings) {
     this._bindings = bindings || null;
     return this;
@@ -1434,17 +1672,24 @@ class Raw extends Node {
 }
 xql$node.Raw = Raw;
 
-// \class node.Unary
+/**
+ * SQL unary expression.
+ *
+ * @class
+ * @alias xql.node.Unary
+ */
 class Unary extends Node {
   constructor(type, value) {
     super(type, "");
     this._value = value;
   }
 
-  shouldWrap(ctx) {
+  /** @override */
+  mustWrap(ctx) {
     return false;
   }
 
+  /** @override */
   compileNode(ctx) {
     var type = this._type;
     var out = ctx.escapeValue(this._value);
@@ -1471,10 +1716,21 @@ class Unary extends Node {
     return out;
   }
 
+  /**
+   * Gets the unary (child) value.
+   *
+   * @return {*}
+   */
   getValue() {
     return this._value;
   }
 
+  /**
+   * Sets the unary (child) value to `value`.
+   *
+   * @param {*} value A new (child) value.
+   * @return {this}
+   */
   setValue(value) {
     this._value = value;
     return this;
@@ -1482,7 +1738,12 @@ class Unary extends Node {
 }
 xql$node.Unary = Unary;
 
-// \class node.Binary
+/**
+ * SQL binary expression.
+ *
+ * @class
+ * @alias xql.node.Binary
+ */
 class Binary extends Node {
   constructor(left, type, right, as) {
     super(type, as);
@@ -1490,10 +1751,21 @@ class Binary extends Node {
     this._right = right;
   }
 
+  /**
+   * Gets the left node or value.
+   *
+   * @return {*}
+   */
   getLeft() {
     return this._left;
   }
 
+  /**
+   * Sets the left node or value.
+   *
+   * @param {*} value Left node or value.
+   * @return {this}
+   */
   setLeft(value) {
     this._left = value;
     return this;
@@ -1508,10 +1780,21 @@ class Binary extends Node {
     return this;
   }
 
+  /**
+   * Gets the right node or value.
+   *
+   * @return {*}
+   */
   getRight() {
     return this._right;
   }
 
+  /**
+   * Sets the right node or value.
+   *
+   * @param {*} value Right node or value.
+   * @return {this}
+   */
   setRight(right) {
     this._right = right;
     return this;
@@ -1528,16 +1811,23 @@ class Binary extends Node {
 }
 xql$node.Binary = Binary;
 
-// \class node.Operator
+/**
+ * SQL operator.
+ *
+ * @class
+ * @alias xql.node.Operator
+ */
 class Operator extends Binary {
   constructor(left, type, right, as) {
     super(left, type, right, as);
   }
 
-  shouldWrap(ctx) {
+  /** @override */
+  mustWrap(ctx) {
     return false;
   }
 
+  /** @override */
   compileNode(ctx) {
     var type = this._type;
     var out = "";
@@ -1553,7 +1843,7 @@ class Operator extends Binary {
     if (!type)
       throwCompileError("Operator.compileNode() - No operator specified");
 
-    if (hasOwnProperty.call(OperatorDefs, type)) {
+    if (hasOwn.call(OperatorDefs, type)) {
       var op = OperatorDefs[type];
       var flags = op.flags;
 
@@ -1598,13 +1888,26 @@ class Operator extends Binary {
 }
 xql$node.Operator = Operator;
 
-// \class node.Group
-class Group extends Node {
+/**
+ * A node that can have children (base for `Logical` and `Func`).
+ *
+ * @class
+ * @alias xql.node.NodeArray
+ */
+class NodeArray extends Node {
   constructor(type, values) {
     super(type, "");
     this._values = values || [];
   }
 
+  /**
+   * Append nodes or other data to the node.
+   *
+   * @note Behaves same as `Array.push()`.
+   *
+   * @param {...*} va Variable arguments.
+   * @return {this}
+   */
   push() {
     var values = this._values;
     for (var i = 0, len = arguments.length; i < len; i++)
@@ -1619,14 +1922,20 @@ class Group extends Node {
     return this;
   }
 }
-xql$node.Group = Group;
+xql$node.NodeArray = NodeArray;
 
-// \class node.Logical
-class Logical extends Group {
-  shouldWrap(ctx) {
+/**
+ * SQL logical expression.
+ *
+ * @class
+ * @alias xql.node.Logical
+ */
+class Logical extends NodeArray {
+  mustWrap(ctx) {
     return this._values.length > 1;
   }
 
+  /** @override */
   compileNode(ctx) {
     var type = this._type;
     var out = "";
@@ -1641,7 +1950,7 @@ class Logical extends Group {
       if (out)
         out += separator;
 
-      if (value.shouldWrap(ctx))
+      if (value.mustWrap(ctx))
         out += "(" + escaped + ")";
       else
         out += escaped;
@@ -1662,10 +1971,12 @@ class ObjectOp extends Unary {
     this._value = value;
   }
 
-  shouldWrap(ctx) {
+  /** @override */
+  mustWrap(ctx) {
     return false;
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "";
 
@@ -1685,7 +1996,7 @@ class ObjectOp extends Unary {
       else
         out += " = ";
 
-      if (value instanceof Node && value.shouldWrap())
+      if (value instanceof Node && value.mustWrap())
         out += "(" + compiled + ")";
       else
         out += compiled;
@@ -1696,16 +2007,24 @@ class ObjectOp extends Unary {
 }
 xql$node.ObjectOp = ObjectOp;
 
+/**
+ * SQL identifier.
+ *
+ * @class
+ * @alias xql.node.Identifier
+ */
 class Identifier extends Node {
   constructor(value, as) {
     super("IDENTIFIER", as);
     this._value = value;
   }
 
-  shouldWrap() {
+  /** @override */
+  mustWrap() {
     return false;
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = ctx.escapeIdentifier(this._value);
     var as = this._as;
@@ -1716,28 +2035,49 @@ class Identifier extends Node {
     return out;
   }
 
-  getValue() {
+  /**
+   * Gets the name of the identifier.
+   *
+   * @note The identifier itself is stored in the node as `_value`, which makes
+   * the interface similar to all other nodes.
+   *
+   * @return {string} Identifier's name.
+   */
+  getName() {
     return this._value;
   }
 
-  setValue(value) {
-    this._value = value;
+  /**
+   * Sets the name of the identifier.
+   *
+   * @param {string} name The new name of the identifier.
+   * @return {this}
+   */
+  setName(name) {
+    this._value = name;
     return this;
   }
 }
 xql$node.Identifier = Identifier;
 
-// \class node.Join
+/**
+ * SQL join expression.
+ *
+ * @class
+ * @alias xql.node.Join
+ */
 class Join extends Binary {
   constructor(left, type, right, condition) {
     super(left, type, right, "");
     this._condition = condition;
   }
 
-  shouldWrap(ctx) {
+  /** @override */
+  mustWrap(ctx) {
     return false;
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "";
 
@@ -1798,10 +2138,22 @@ class Join extends Binary {
     return out;
   }
 
+  /**
+   * Gets the join condition.
+   *
+   * @return {Node|array}
+   */
   getCondition() {
     return this._condition;
   }
 
+  /**
+   * Sets the join condition.
+   *
+   * @param {Node|array} condition A single node or array of nodes that form the
+   *   condition.
+   * @return {this}
+   */
   setCondition(condition) {
     this._condition = condition;
     return this;
@@ -1809,17 +2161,20 @@ class Join extends Binary {
 }
 xql$node.Join = Join;
 
-// \class node.Sort
-//
-// Sort expression that comes after `ORDER BY`.
+/**
+ * SQL sort expression.
+ *
+ * @class
+ * @alias xql.node.Sort
+ */
 class Sort extends Identifier {
-  constructor(column, direction, nulls) {
+  constructor(column, order, nulls) {
     var flags = 0;
 
-    if (direction && hasOwnProperty.call(SortDirection, direction))
-      flags |= SortDirection[direction];
+    if (order && hasOwn.call(SortDirection, order))
+      flags |= SortDirection[order];
 
-    if (nulls && hasOwnProperty.call(SortNulls, nulls))
+    if (nulls && hasOwn.call(SortNulls, nulls))
       flags |= SortNulls[nulls];
 
     // Doesn't call `Identifier` constructor.
@@ -1828,6 +2183,7 @@ class Sort extends Identifier {
     this._value = column;
   }
 
+  /** @override */
   compileNode(ctx) {
     var value = this._value;
     var flags = this._flags;
@@ -1860,7 +2216,12 @@ class Sort extends Identifier {
     return s;
   }
 
-  getDirection() {
+  /**
+   * Gets the sorting order.
+   *
+   * @return {string} Either an empty string (if not set) or "ASC" or "DESC".
+   */
+  getSortOrder() {
     var flags = this._flags;
     if (flags & NodeFlags.kDescending)
       return "DESC";
@@ -1870,23 +2231,28 @@ class Sort extends Identifier {
       return "";
   }
 
-  setDirection(direction) {
+  /**
+   * Sets the sorting order.
+   *
+   * @param {string} order Sorting order, must be "", "ASC", or "DESC".
+   * @return {this}
+   * @throws {CompileError} If `order` contains an invalid value.
+   */
+  setSortOrder(order) {
     var flags = this._flags & ~(NodeFlags.kAscending | NodeFlags.kDescending);
-    if (hasOwnProperty.call(SortDirection, direction))
-      this._flags = flags | SortDirection[direction];
+    if (hasOwn.call(SortDirection, order))
+      this._flags = flags | SortDirection[order];
     else
-      throwCompileError("Sort.setDirection() - Invalid argument '" + direction + "'");
+      throwCompileError("Sort.setSortOrder() - Invalid argument '" + order + "'");
     return this;
   }
 
-  hasAscending() {
-    return (this._flags & NodeFlags.kAscending) !== 0;
-  }
-
-  hasDescending() {
-    return (this._flags & NodeFlags.kDescending) !== 0;
-  }
-
+  /**
+   * Gets the sorting nulls option.
+   *
+   * @return {string} Either an empty string (if not set) or "NULLS FIRST" or
+   *   "NULLS LAST".
+   */
   getNullsOrder() {
     var flags = this._flags;
     if (flags & NodeFlags.kNullsFirst)
@@ -1897,68 +2263,128 @@ class Sort extends Identifier {
       return "";
   }
 
-  setNullsOrder(nulls) {
+  /**
+   * Sets the sorting nulls option.
+   *
+   * @param {string} order Sorting nulls option, must be "", "NULLS FIRST", or
+   *   "NULLS LAST".
+   * @return {this}
+   * @throws {CompileError} If `order` contains an invalid value.
+   */
+  setNullsOrder(order) {
     var flags = this._flags & ~(NodeFlags.kNullsFirst | NodeFlags.kNullsLast);
-    if (hasOwnProperty.call(SortNulls, nulls))
-      this._flags = flags | SortNulls[nulls];
+    if (hasOwn.call(SortNulls, order))
+      this._flags = flags | SortNulls[order];
     else
-      throwCompileError("Sort.setDirection() - Invalid argument '" + nulls + "'");
+      throwCompileError("Sort.setSortOrder() - Invalid argument '" + order + "'");
     return this;
   }
 
+  /**
+   * Returns whether the sorting order is set to "ASC".
+   *
+   * @return {boolean} Whether the sorting order is "ASC". Returns false if the
+   *   order has not been set (xql distinguish between not set, ASC, and DESC).
+   */
+  isAscending() {
+    return (this._flags & NodeFlags.kAscending) !== 0;
+  }
+
+  /**
+   * Returns whether the sorting order is set to "DESC".
+   *
+   * @return {boolean} Whether the sorting order is "DESC". Returns false if the
+   *   order has not been set (xql distinguish between not set, ASC, and DESC).
+   */
+  isDescending() {
+    return (this._flags & NodeFlags.kDescending) !== 0;
+  }
+
+  /**
+   * Returns whether the sorting nulls option is set to "NULLS FIRST".
+   *
+   * @return {boolean} Whether the sorting nulls is "NULLS FIRST". Returns
+   *   false if the sorting nulls option is not "NULLS FIRST" or is not set.
+   */
   hasNullsFirst() {
     return (this._flags & NodeFlags.kNullsFirst) !== 0;
   }
 
+  /**
+   * Returns whether the sorting nulls option is set to "NULLS LAST".
+   *
+   * @return {boolean} Whether the sorting nulls is "NULLS LAST". Returns
+   *   false if the sorting nulls option is not "NULLS LAST" or is not set.
+   */
   hasNullsLast() {
     return (this._flags & NodeFlags.kNullsLast) !== 0;
   }
 
-  // \function Sort.ASC()
-  //
-  // Set sorting mode to ascending (`ASC`).
+  /**
+   * Sets the sorting order to ascending (ASC).
+   *
+   * The same as calling `setSortOrder("ASC")`.
+   *
+   * @return {this}
+   */
   ASC() {
-    this._flags = (this._flags & ~NodeFlags.kDescending) | NodeFlags.kAscending;
-    return this;
+    return this.replaceFlag(NodeFlags.kDescending, NodeFlags.kAscending);
   }
 
-  // \function Sort.DESC()
-  //
-  // Set sorting mode to descending (`DESC`).
+  /**
+   * Sets the sorting order to descending (DESC).
+   *
+   * The same as calling `setSortOrder("DESC")`.
+   *
+   * @return {this}
+   */
   DESC() {
-    this._flags = (this._flags & ~NodeFlags.kAscending) | NodeFlags.kDescending;
-    return this;
+    return this.replaceFlag(NodeFlags.kAscending, NodeFlags.kDescending);
   }
 
-  // \function Sort.NULLS_FIRST()
-  //
-  // Set sorting nulls first (`NULLS FIRST`).
+  /**
+   * Specify `NULLS FIRST` clause.
+   *
+   * The same as calling `setNullsOrder("NULLS FIRST")`.
+   *
+   * @return {this}
+   */
   NULLS_FIRST() {
-    this._flags = (this._flags & ~NodeFlags.kNullsLast) | NodeFlags.kNullsFirst;
-    return this;
+    return this.replaceFlag(NodeFlags.kNullsLast, NodeFlags.kNullsFirst);
   }
 
-  // \function Sort.NULLS_LAST()
-  //
-  // Set sorting nulls last (`NULLS LAST`).
+  /**
+   * Specify `NULLS LAST` clause.
+   *
+   * The same as calling `setNullsOrder("NULLS LAST")`.
+   *
+   * @return {this}
+   */
   NULLS_LAST() {
-    this._flags = (this._flags & ~NodeFlags.kNullsFirst) | NodeFlags.kNullsLast;
-    return this;
+    return this.replaceFlag(NodeFlags.kNullsFirst, NodeFlags.kNullsLast);
   }
 }
 xql$node.Sort = Sort;
 
-// \class node.Func
-class Func extends Group {
+/**
+ * SQL function expression.
+ *
+ * @class
+ * @alias xql.node.Func
+ */
+class Func extends NodeArray {
   constructor(type, values) {
     super(type, "");
+    this._flags |= NodeFlags.kAll;
     this._values = values || [];
   }
 
-  shouldWrap() {
+  /** @override */
+  mustWrap() {
     return false;
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "";
 
@@ -1974,15 +2400,11 @@ class Func extends Group {
       out += escaped;
     }
 
-    // Add `ALL` or `DISTINCT` (support for aggregate functions).
-    if (flags & NodeFlags.kAllOrDistinct) {
-      var keyword = flags & NodeFlags.kAll ? "ALL" : "DISTINCT";
-      if (!out)
-        out = keyword;
-      else
-        out = keyword + " " + out;
-    }
+    // Add `DISTINCT` if specified.
+    if (flags & NodeFlags.kDistinct)
+      out = out ? "DISTINCT " + out : "DISTINCT";
 
+    // Form `FUNCTION([DISTINCT] [parameters...])`.
     out = this._type + "(" + out + ")";
 
     var as = this._as;
@@ -2003,42 +2425,66 @@ class Func extends Group {
 }
 xql$node.Func = Func;
 
-// \class node.Aggregate
+/**
+ * SQL aggregate function.
+ *
+ * @class
+ * @alias xql.node.Aggregate
+ */
 class Aggregate extends Func {
-  ALL(value) {
-    return this.setFlag(NodeFlags.kAll, value);
+  /**
+   * Sets the `ALL` option of the aggregate (and clears the `DISTINCT` option).
+   *
+   * @return {this}
+   */
+  ALL() {
+    return this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
   }
 
-  DISTINCT(value) {
-    return this.setFlag(NodeFlags.kDistinct, value);
+  /**
+   * Sets the `DISTINCT` option of the aggregate (and clears the `ALL` option).
+   *
+   * @return {this}
+   */
+  DISTINCT() {
+    return this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
   }
 }
 xql$node.Aggregate = Aggregate;
 
-// \class node.Value
-//
-// Wrapper class that contains `data` and `type`.
-//
-// Used in cases where it's difficult to automatically determine how the value
-// should be escaped (which can result in invalid query if determined wrong).
-//
-// `Value` shouldn't be in general used for all types, only types where the
-// mapping is ambiguous and can't be automatically deduced. For example
-// PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `xql`
-// has no knowledge which format to use and will choose ARRAY over JSON.
-//
-// Value is an alternative to schema. If schema is provided it's unnecessary
-// to wrap values to `Value`.
+/**
+ * SQL value.
+ *
+ * Used in cases where it's difficult to automatically determine how the value
+ * should be escaped (which can result in invalid query if determined wrong).
+ *
+ * `Value` node shouldn't be in general used for all types, only types where
+ * the mapping is ambiguous and can't be automatically deduced. For example
+ * PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `xql`
+ * has no knowledge which format to use and will choose ARRAY over JSON.
+ *
+ * Value is an alternative to schema. If schema is provided it's unnecessary
+ * to wrap values to `Value` nodes.
+ *
+ * @param {string}  type  Type of the value.
+ * @param {*}       value Data of the value.
+ * @param {string=} as    SQL's AS clause, if given.
+ *
+ * @class
+ * @alias xql.node.Value
+ */
 class Value extends Node {
   constructor(type, value, as) {
     super(type, as);
     this._value = value;
   }
 
-  shouldWrap() {
+  /** @override */
+  mustWrap() {
     return false;
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = ctx.escapeValue(this._value, this._type);
     var as = this._as;
@@ -2049,10 +2495,21 @@ class Value extends Node {
     return out;
   }
 
+  /**
+   * Gets the associated value.
+   *
+   * @return {*}
+   */
   getValue() {
     return this._value;
   }
 
+  /**
+   * Sets the associated value.
+   *
+   * @param {*} value A new value to associate with.
+   * @return {this}
+   */
   setValue(value) {
     this._value = value;
     return this;
@@ -2060,76 +2517,26 @@ class Value extends Node {
 }
 xql$node.Value = Value;
 
-// \class node.PrimitiveValue
-//
-// Wraps a primitive data.
-class PrimitiveValue extends Value {
-  constructor(value, as) {
-    super("", value, as);
-  }
-}
-xql$node.PrimitiveValue = PrimitiveValue;
-
-// \class node.ArrayValue
-//
-// Wraps ARRAY data.
-class ArrayValue extends Value {
-  constructor(value, as) {
-    super("ARRAY", value, as);
-  }
-
-  compileNode(ctx) {
-    var out = ctx.escapeArray(this._value, false);
-    var as = this._as;
-
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
-
-    return out;
-  }
-}
-xql$node.ArrayValue = ArrayValue;
-
-// \class node.JsonValue
-//
-// Wraps JSON data.
-class JsonValue extends Value {
-  constructor(value, as) {
-    super("JSON", value, as);
-  }
-
-  compileNode(ctx) {
-    var out = ctx.escapeJson(this._value);
-    var as = this._as;
-
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
-
-    return out;
-  }
-}
-xql$node.JsonValue = JsonValue;
-
-// \class node.Query
-//
-// Query implements a generic interface used by:
-//
-//   - `SELECT` - See `SelectQuery`.
-//   - `INSERT` - See `InsertQuery`.
-//   - `UPDATE` - See `UpdateQuery`.
-//   - `DELETE` - See `DeleteQuery`.
-//   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombinedQuery`.
-//
-// The following features are implemented by `Query` itself:
-//
-//   - `TABLE`- Specifies a single table name, used by `INSERT`, `UPDATE`
-//      and `DELETE`.
-//
-//   - `SELECT/RETURNING`- Specifies select expression or returning expression,
-//      used by `SELECT` (as `SELECT` expression) and also by `INSERT`, `UPDATE`
-//      and `DELETE` (as `RETURNING` expression).
-//
-//   - `WHERE` - Specifies `WHERE` clause, used by `SELECT`, `UPDATE` and `DELETE`.
+/**
+ * SQL query.
+ *
+ * Query is a base class that provides basic blocks for implementing:
+ *   - `SELECT` - See `SelectQuery`.
+ *   - `INSERT` - See `InsertQuery`.
+ *   - `UPDATE` - See `UpdateQuery`.
+ *   - `DELETE` - See `DeleteQuery`.
+ *   - `EXCEPT`, `INTERSECT`, and `UNION` - See `CombiningQuery`.
+ *
+ * The following features are implemented by the `Query`:
+ *   - `TABLE`- Specifies a single database table.
+ *   - `SELECT` or `RETURNING`- Specifies select or returning expression columns.
+ *   - `WHERE` - Specifies `WHERE` clause.
+ *
+ * @param {string} type Type of the query.
+ *
+ * @class
+ * @alias xql.node.Query
+ */
 class Query extends Node {
   constructor(type) {
     super(type, "");
@@ -2169,7 +2576,7 @@ class Query extends Node {
 
     // Used by:
     //   - `SELECT`
-    //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombinedQuery`.
+    //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombiningQuery`.
     this._orderBy = null;
 
     // Used by:
@@ -2192,10 +2599,12 @@ class Query extends Node {
     this._typeMapping = null;
   }
 
-  shouldWrap() {
+  /** @override */
+  mustWrap() {
     return true;
   }
 
+  /** @override */
   compileQuery(ctx) {
     return this.compileNode(ctx) + ";";
   }
@@ -2331,7 +2740,7 @@ class Query extends Node {
       }
       else {
         var compiled = column.compileNode(ctx);
-        if (column.shouldWrap())
+        if (column.mustWrap())
           out += this._wrapQuery(ctx, compiled);
         else
           out += compiled;
@@ -2341,7 +2750,6 @@ class Query extends Node {
     return out;
   }
 
-  // \function Query._addFromOrUsing(...)
   _addFromOrUsing(args) {
     var len = args.length;
     if (len < 1) return this;
@@ -2450,7 +2858,7 @@ class Query extends Node {
       if (out)
         out += " " + condition._type + " ";
 
-      if (expression.shouldWrap())
+      if (expression.mustWrap())
         out += "(" + compiled + ")";
       else
         out += compiled;
@@ -2466,7 +2874,7 @@ class Query extends Node {
       out += "OFFSET" + ctx.concatStr + offset;
 
     if (limit) {
-      if (out) out += ctx.space;
+      if (out) out += ctx.spaceOrNL;
       out += "LIMIT" + ctx.concatStr + limit;
     }
 
@@ -2480,7 +2888,12 @@ class Query extends Node {
       return "(" + str + ")";
   }
 
-  // \function Query.VALUES(data)
+  /**
+   * Add values to the query.
+   *
+   * @param {object|object[]} data Values as object or an array of objects.
+   * @return {this}
+   */
   VALUES(data) {
     var values = this._values;
     var columns = this._columns;
@@ -2516,37 +2929,60 @@ class Query extends Node {
     return this;
   }
 
-  // \function Query.WHERE(...)
-  //
-  // Add `WHERE` expression to the query.
-  //
-  // This function has multiple overloads:
-  //
-  // 1. `where(node:Node)`
-  //   Node that contains an expression.
-  //
-  // 2. `where(keys:Object)`
-  //   Object that contain key/value pairs that will be checked for equality,
-  //   implicit `AND` will be added to the query between all keys specified.
-  //   Objects without keys are ignored.
-  //
-  // 3. `where(a:String, op:String, b:Variant)`
-  //   Adds one `WHERE` clause in the form `a op b`.
+  /**
+   * Adds a `WHERE` expression to the query (implicit `AND`).
+   *
+   * This function has multiple overloads:
+   *
+   * 1. `where(node:xql.Node)`
+   *   Node that contains an expression.
+   *
+   * 2. `where(keys:object)`
+   *   Object that contain key/value pairs that will be checked for equality,
+   *   implicit `AND` will be added to the query between all keys specified.
+   *   Objects without keys are ignored.
+   *
+   * 3. `where(a:string, b:*)`
+   *   Adds one `WHERE` clause in the form `a = b`.
+   *
+   * 4. `where(a:string, op:string, b:*)`
+   *   Adds one `WHERE` clause in the form `a op b`.
+   *
+   * @param {...*} va Variable arguments.
+   * @return {this}
+   */
   WHERE(a, op, b) {
     return this._addWhere("AND", a, op, b, arguments.length);
   }
 
-  // \function Query.OR_WHERE(...)
-  //
-  // Add top-level `OR` to the query.
-  //
-  // This function accepts the same arguments and behaves identically as `WHERE`.
+  /**
+   * Adds a `WHERE` expression to the query (implicit `OR`).
+   *
+   * This function is similar to `WHERE`, however, instead of forming a logical
+   * `AND` it forms a logical `OR`. See {@link WHERE} for more details.
+   *
+   * @param {...*} va Variable arguments.
+   * @return {this}
+   */
   OR_WHERE(a, op, b) {
     return this._addWhere("OR", a, op, b, arguments.length);
   }
 
-  // \function Query.ORDER_BY(...)
-  ORDER_BY(column, direction, nulls) {
+  /**
+   * Adds an `ORDER BY` clause to the query.
+   *
+   * The first parameter `column` can specify a single column or multiple
+   * columns: `ORDER_BY(["name"])` and `ORDER_BY("name")` are equivalent.
+   *
+   * @param {array|string|Identifier} column A single column or an array of
+   *   columns.
+   * @param {string=} order Sorting order.
+   *   Can contain either "" (default), "ASC", or "DESC".
+   * @param {string=} nulls Sorting nulls option.
+   *   Can contain either "" (default), "NULLS FIRST", or "NULLS LAST".
+   * @return {this}
+   */
+  ORDER_BY(column, order, nulls) {
     var orderBy = this._orderBy;
 
     if (orderBy === null)
@@ -2561,23 +2997,33 @@ class Query extends Node {
 
       for (var i = 0; i < len; i++) {
         column = columns[i];
-        orderBy.push(new Sort(column, direction, nulls));
+        orderBy.push(new Sort(column, order, nulls));
       }
     }
     else {
-      orderBy.push(new Sort(column, direction, nulls));
+      orderBy.push(new Sort(column, order, nulls));
     }
 
     return this;
   }
 
-  // \function Query.OFFSET(offset)
+  /**
+   * Sets the `OFFSET` clause.
+   *
+   * @param {?number} offset SQL query offset.
+   * @return {this}
+   */
   OFFSET(offset) {
     this._offset = offset;
     return this;
   }
 
-  // \function Query.LIMIT(limit)
+  /**
+   * Sets the `LIMIT` clause.
+   *
+   * @param {?number} offset SQL query limit.
+   * @return {this}
+   */
   LIMIT(limit) {
     this._limit = limit;
     return this;
@@ -2585,10 +3031,17 @@ class Query extends Node {
 }
 xql$node.Query = Query;
 
-// \class node.SelectQuery
+/**
+ * SQL select.
+ *
+ * @class
+ * @alias xql.node.SelectQuery
+ */
 class SelectQuery extends Query {
   constructor() {
     super("SELECT");
+
+    this._flags |= NodeFlags.kAll;
 
     // `GROUP BY` clause.
     this._groupBy = null;
@@ -2597,16 +3050,17 @@ class SelectQuery extends Query {
     this._having = null;
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "SELECT";
-    var space = ctx.space;
+    var space = ctx.spaceOrNL;
     var flags = this._flags;
 
     // Compile `SELECT [ALL|DISTINCT]`
     //
     // Use `*` if  fields are not used.
-    if (flags & NodeFlags.kAllOrDistinct)
-      out += (flags & NodeFlags.kAll) ? " ALL" : " DISTINCT";
+    if (flags & NodeFlags.kDistinct)
+      out += " DISTINCT";
 
     // Compile `[*|fields]`
     //
@@ -2699,23 +3153,55 @@ class SelectQuery extends Query {
     return this;
   }
 
-  // \function SelectQuery.DISTINCT(...)
-  //
-  // Adds `DISTINCT` clause to the query. It accepts the same arguments as
-  // `SELECT()` so it can be used in a similar way. The following expressions
-  // are equivalent:
-  //
-  //   - `SELECT(["a", "b", "c"]).DISTINCT()`
-  //   - `SELECT().DISTINCT(["a", "b", "c"])`
-  //   - `SELECT().DISTINCT().FIELD(["a", "b", "c"])`
-  DISTINCT(/* ... */) {
-    this._flags |= NodeFlags.kDistinct;
+  /**
+   * Sets the `ALL` option and optionally add fields to the query.
+   *
+   * It accepts the same arguments as `SELECT()` so it can be used in a similar
+   * way.
+   *
+   * @param {...*} va Variable arguments.
+   * @return {this}
+   */
+  ALL() {
+    this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
     if (arguments.length)
       this.FIELD.apply(this, arguments);
     return this;
   }
 
-  // \function SelectQuery.FROM(...)
+  /**
+   * Sets the `DISTINCT` option and optionally add fields to the query.
+   *
+   * It accepts the same arguments as `SELECT()` so it can be used in a similar
+   * way. The following expressions are equivalent:
+   *
+   *   - `SELECT(["a", "b", "c"]).DISTINCT()`
+   *   - `SELECT().DISTINCT(["a", "b", "c"])`
+   *   - `SELECT().DISTINCT().FIELD(["a", "b", "c"])`
+   *
+   * @param {...*} va Variable arguments.
+   * @return {this}
+   */
+  DISTINCT() {
+    this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
+    if (arguments.length)
+      this.FIELD.apply(this, arguments);
+    return this;
+  }
+
+  /**
+   * Specifies the `FROM` table (or list of tables).
+   *
+   * The function has the following signatures:
+   *
+   *   1. `FROM(table:string)` - Specifies a single table.
+   *   2. `FROM(table1, table2, ...)` - Specifies multiply tables that forms
+   *      an implicit CROSS JOIN.
+   *   3. `FROM([array])` - Like the second form, but the tables are specified
+   *      by the array passed in the first argument.
+   *
+   * @param {...*} va Variable arguments
+   */
   FROM() {
     var arg;
     if (arguments.length === 1 && isArray((arg = arguments[0])))
@@ -2724,27 +3210,57 @@ class SelectQuery extends Query {
       return this._addFromOrUsing(slice.call(arguments, 0));
   }
 
-  // \function SelectQuery.CROSS_JOIN(...)
+  /**
+   * Adds a `CROSS JOIN` expression to the query.
+   *
+   * @param {string} with_ Specifies the table to join with.
+   * @param {*} condition Specifies join condition.
+   * @return {this}
+   */
   CROSS_JOIN(with_, condition) {
     return this._join("CROSS", with_, condition);
   }
 
-  // \function SelectQuery.INNER_JOIN(...)
+  /**
+   * Adds an `INNER JOIN` expression to the query.
+   *
+   * @param {string} with_ Specifies the table to join with.
+   * @param {*} condition Specifies join condition.
+   * @return {this}
+   */
   INNER_JOIN(with_, condition) {
     return this._join("INNER", with_, condition);
   }
 
-  // \function SelectQuery.LEFT_JOIN(...)
+  /**
+   * Adds a `LEFT OUTER JOIN` expression to the query.
+   *
+   * @param {string} with_ Specifies the table to join with.
+   * @param {*} condition Specifies join condition.
+   * @return {this}
+   */
   LEFT_JOIN(with_, condition) {
     return this._join("LEFT", with_, condition);
   }
 
-  // \function SelectQuery.RIGHT_JOIN(...)
+  /**
+   * Adds a `RIGHT OUTER` join expression to the query.
+   *
+   * @param {string} with_ Specifies the table to join with.
+   * @param {*} condition Specifies join condition.
+   * @return {this}
+   */
   RIGHT_JOIN(with_, condition) {
     return this._join("RIGHT", with_, condition);
   }
 
-  // \function SelectQuery.FULL_JOIN(...)
+  /**
+   * Adds a `FULL OUTER JOIN` expression to the query.
+   *
+   * @param {string} with_ Specifies the table to join with.
+   * @param {*} condition Specifies join condition.
+   * @return {this}
+   */
   FULL_JOIN(with_, condition) {
     return this._join("FULL", with_, condition);
   }
@@ -2795,20 +3311,27 @@ class SelectQuery extends Query {
     return this._addHaving("OR", a, op, b, arguments.length);
   }
 }
-alias(SelectQuery.prototype, "FIELD", "_addFieldsOrReturning");
-xql$node.SelectQuery = SelectQuery;
+xql$node.SelectQuery = alias(SelectQuery, {
+  FIELD: "_addFieldsOrReturning"
+});
 
-// \class node.InsertQuery
+/**
+ * SQL insert.
+ *
+ * @class
+ * @alias xql.node.InsertQuery
+ */
 class InsertQuery extends Query {
   constructor() {
     super("INSERT");
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "";
 
     var t = "";
-    var space = ctx.space;
+    var space = ctx.spaceOrNL;
 
     var k;
     var i, len;
@@ -2844,7 +3367,7 @@ class InsertQuery extends Query {
       t = "";
       for (k in columns) {
         if (t) t += ", ";
-        if (hasOwnProperty.call(object, k))
+        if (hasOwn.call(object, k))
           t += ctx.escapeValue(object[k], typeMapping[k]);
         else
           t += "DEFAULT";
@@ -2876,20 +3399,27 @@ class InsertQuery extends Query {
 
   // \function InsertQuery.RETURNING(...)
 }
-alias(InsertQuery.prototype, "RETURNING", "_addFieldsOrReturning");
-xql$node.InsertQuery = InsertQuery;
+xql$node.InsertQuery = alias(InsertQuery, {
+  RETURNING: "_addFieldsOrReturning"
+});
 
-// \class node.UpdateQuery
+/**
+ * SQL update.
+ *
+ * @class
+ * @alias xql.node.UpdateQuery
+ */
 class UpdateQuery extends Query {
   constructor() {
     super("UPDATE");
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "";
 
     var t = "";
-    var space = ctx.space;
+    var space = ctx.spaceOrNL;
     var commaStr = ctx.commaStr;
 
     // Compile `UPDATE ...`
@@ -2967,20 +3497,27 @@ class UpdateQuery extends Query {
 
   // \function UpdateQuery.RETURNING(...)
 }
-alias(UpdateQuery.prototype, "RETURNING", "_addFieldsOrReturning");
-xql$node.UpdateQuery = UpdateQuery;
+xql$node.UpdateQuery = alias(UpdateQuery, {
+  RETURNING: "_addFieldsOrReturning"
+});
 
-// \class node.DeleteQuery
+/**
+ * SQL delete.
+ *
+ * @class
+ * @alias xql.node.DeleteQuery
+ */
 class DeleteQuery extends Query {
   constructor() {
     super("DELETE");
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "";
 
     var t = "";
-    var space = ctx.space;
+    var space = ctx.spaceOrNL;
 
     // Compile `DELETE FROM ...`
     var table = this._table;
@@ -3036,31 +3573,41 @@ class DeleteQuery extends Query {
       return this._addFromOrUsing(slice.call(arguments, 0));
   }
 }
-alias(DeleteQuery.prototype, "FROM", "_setFromOrIntoTable");
-alias(DeleteQuery.prototype, "TABLE", "_setFromOrIntoTable");
-alias(DeleteQuery.prototype, "RETURNING", "_addFieldsOrReturning");
-xql$node.DeleteQuery = DeleteQuery;
+xql$node.DeleteQuery = alias(DeleteQuery, {
+  FROM     : "_setFromOrIntoTable",
+  TABLE    : "_setFromOrIntoTable",
+  RETURNING: "_addFieldsOrReturning"
+});
 
-// \class node.CombinedQuery
-class CombinedQuery extends Query {
+/**
+ * SQL combining query/operator (UNION, INTERSECT, EXCEPT).
+ *
+ * @class
+ * @alias xql.node.CombiningQuery
+ */
+class CombiningQuery extends Query {
   constructor(type, values) {
     super(type);
+
+    this._flags |= NodeFlags.kDistinct;
     this._values = values || [];
   }
 
-  shouldWrap(ctx) {
+  /** @override */
+  mustWrap(ctx) {
     return true;
   }
 
+  /** @override */
   compileNode(ctx) {
     var out = "";
-    var space = ctx.space;
+    var space = ctx.spaceOrNL;
 
     var flags = this._flags;
     var combineOp = this._type;
 
-    if (flags & NodeFlags.kAllOrDistinct)
-      combineOp += (flags & NodeFlags.kDistinct) ? " DISTINCT" : " ALL";
+    if (flags & NodeFlags.kAll)
+      combineOp += " ALL";
 
     var values = this._values;
     var separator = space + combineOp + space;
@@ -3073,7 +3620,7 @@ class CombinedQuery extends Query {
         out += separator;
 
       // TODO: This is not nice, introduce something better than this.
-      var mustWrap = !(value instanceof Query) || (value instanceof CombinedQuery);
+      var mustWrap = !(value instanceof Query) || (value instanceof CombiningQuery);
       if (mustWrap)
         compiled = this._wrapQuery(ctx, compiled);
 
@@ -3095,12 +3642,22 @@ class CombinedQuery extends Query {
     return out;
   }
 
-  ALL(value) {
-    return this.setFlag(NodeFlags.kAll, value);
+  /**
+   * Sets the `ALL` option of the query (and clears the `DISTINCT` option).
+   *
+   * @return {this}
+   */
+  ALL() {
+    return this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
   }
 
-  DISTINCT(value) {
-    return this.setFlag(NodeFlags.kDistinct, value);
+  /**
+   * Sets the `DISTINCT` option of the query (and clears the `ALL` option).
+   *
+   * @return {this}
+   */
+  DISTINCT() {
+    return this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
   }
 
   push() {
@@ -3116,19 +3673,35 @@ class CombinedQuery extends Query {
     return this;
   }
 }
-xql$node.CombinedQuery = CombinedQuery;
+xql$node.CombiningQuery = CombiningQuery;
 
 // ============================================================================
 // [xql.SQL]
 // ============================================================================
 
-// \function RAW(string:String, bindings:Array?)
-function RAW(string, bindings) {
-  return new Raw(string, bindings);
+/**
+ * Constructs a RAW query node.
+ *
+ * @param {string} raw Raw query string (won't be escaped).
+ * @param {array=} bindings Data that will be sustituted in `raw`.
+ * @return {Raw}
+ *
+ * @alias xql.RAW
+ */
+function RAW(raw, bindings) {
+  return new Raw(raw, bindings);
 }
 xql.RAW = RAW;
 
-// \function SELECT(...)
+/**
+ * Constructs a SELECT query.
+ *
+ * @param {...*} fields Fields can be specified in several ways. This parameter
+ *   is passed as is into `SelectQuery.FIELDS()` function.
+ * @return {SelectQuery}
+ *
+ * @alias xql.SELECT
+ */
 function SELECT(/* ... */) {
   var q = new SelectQuery();
   if (arguments.length)
@@ -3137,7 +3710,14 @@ function SELECT(/* ... */) {
 }
 xql.SELECT = SELECT;
 
-// \function INSERT(...)
+/**
+ * Constructs an INSERT query.
+ *
+ * @param {...*} args
+ * @return {InsertQuery}
+ *
+ * @alias xql.INSERT
+ */
 function INSERT(/* ... */) {
   var q = new InsertQuery();
 
@@ -3163,7 +3743,14 @@ function INSERT(/* ... */) {
 }
 xql.INSERT = INSERT;
 
-// \function UPDATE(...)
+/**
+ * Constructs an UPDATE query.
+ *
+ * @param {...*} args
+ * @return {UpdateQuery}
+ *
+ * @alias xql.UPDATE
+ */
 function UPDATE(/* ... */) {
   var q = new UpdateQuery();
 
@@ -3185,11 +3772,20 @@ function UPDATE(/* ... */) {
     q.VALUES(arg);
   }
 
+  // TODO: What if more arguments are passed.
+
   return q;
 }
 xql.UPDATE = UPDATE;
 
-// \function DELETE(...)
+/**
+ * Constructs a DELETE query.
+ *
+ * @param {string=} from SQL table where to delete records.
+ * @return {DeleteQuery}
+ *
+ * @alias xql.DELETE
+ */
 function DELETE(from) {
   var q = new DeleteQuery();
   if (from)
@@ -3198,63 +3794,141 @@ function DELETE(from) {
 }
 xql.DELETE = DELETE;
 
-// \function AND(...)
+/**
+ * Constructs a logical AND expression.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ *   Arguments must be SQL conditions that form the AND expression.
+ * @return {Logical}
+ *
+ * @alias xql.AND
+ */
 function AND(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("AND", values);
 }
 xql.AND = AND;
 
-// \function OR(...)
+/**
+ * Constructs a logical OR expression.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ *   Arguments must be SQL conditions that form the OR expression.
+ * @return {Logical}
+ *
+ * @alias xql.OR
+ */
 function OR(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
   return new Logical("OR", values);
 }
 xql.OR = OR;
 
-// \function EXCEPT(...)
+/**
+ * Constructs an `EXCEPT` expression.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ *   Arguments must be SQL queries that form the EXCEPT expression.
+ * @return {CombiningQuery}
+ *
+ * @alias xql.EXCEPT
+ */
 function EXCEPT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombinedQuery("EXCEPT", values);
+  return new CombiningQuery("EXCEPT", values);
 }
 xql.EXCEPT = EXCEPT;
 
-// \function EXCEPT_ALL(...)
+/**
+ * Shorthand for `EXCEPT(...args).ALL()`.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ * @return {CombiningQuery}
+ *
+ * @see EXCEPT
+ * @see CombiningQuery.prototype.ALL
+ *
+ * @alias xql.EXCEPT_ALL
+ */
 function EXCEPT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombinedQuery("EXCEPT", values).ALL();
+  return new CombiningQuery("EXCEPT", values).ALL();
 }
 xql.EXCEPT_ALL = EXCEPT_ALL;
 
-// \function INTERSECT(...)
+/**
+ * Constructs an `INTERSECT` expression.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ *   Arguments must be SQL queries that form the INTERSECT expression.
+ * @return {CombiningQuery}
+ *
+ * @alias xql.INTERSECT
+ */
 function INTERSECT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombinedQuery("INTERSECT", values);
+  return new CombiningQuery("INTERSECT", values);
 }
 xql.INTERSECT = INTERSECT;
 
-// \function INTERSECT_ALL(...)
+/**
+ * Shorthand for `INTERSECT(...args).ALL()`.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ * @return {CombiningQuery}
+ *
+ * @see INTERSECT
+ * @see CombiningQuery.prototype.ALL
+ *
+ * @alias xql.INTERSECT_ALL
+ */
 function INTERSECT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombinedQuery("INTERSECT", values).ALL();
+  return new CombiningQuery("INTERSECT", values).ALL();
 }
 xql.INTERSECT_ALL = INTERSECT_ALL;
 
-// \function UNION(...)
+/**
+ * Constructs a `UNION` expression.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ *   Arguments must be SQL queries that form the UNION expression.
+ * @return {CombiningQuery}
+ *
+ * @alias xql.UNION
+ */
 function UNION(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombinedQuery("UNION", values);
+  return new CombiningQuery("UNION", values);
 }
 xql.UNION = UNION;
 
-// \function UNION_ALL(...)
+/**
+ * Shorthand for `UNION(...args).ALL()`.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ * @return {CombiningQuery}
+ *
+ * @see UNION
+ * @see CombiningQuery.prototype.ALL
+ *
+ * @alias xql.UNION_ALL
+ */
 function UNION_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombinedQuery("UNION", values).ALL();
+  return new CombiningQuery("UNION", values).ALL();
 }
 xql.UNION_ALL = UNION_ALL;
 
-// \function COL(value, as)
+/**
+ * Constructs a column's identifier.
+ *
+ * @param {string} column Column's name.
+ * @param {string=} as SQL alias.
+ * @return {Identifier}
+ *
+ * @alias xql.COL
+ */
 function COL(column, as) {
   // High-performane version of:
   //   `new Identifier(column, as)`
@@ -3268,12 +3942,20 @@ function COL(column, as) {
 }
 xql.COL = COL;
 
-// \function VAL(value, as)
+/**
+ * Constructs a wrapped value.
+ *
+ * @param {*} value The value to wrap (any type).
+ * @param {string=} as SQL alias.
+ * @return {Value}
+ *
+ * @alias xql.VAL
+ */
 function VAL(value, as) {
   // High-performane version of:
-  //   `new PrimitiveValue(value, as)`
+  //   `new Value(value, as)`
   return {
-    __proto__: PrimitiveValue.prototype,
+    __proto__: Value.prototype,
     _type    : "",
     _flags   : 0,
     _as      : as || "",
@@ -3282,15 +3964,31 @@ function VAL(value, as) {
 }
 xql.VAL = VAL;
 
-// \function ARRAY_VAL(value, as)
+/**
+ * Constructs a wrapped ARRAY value.
+ *
+ * @param {array} value The value to wrap.
+ * @param {string=} as SQL alias.
+ * @return {Value}
+ *
+ * @alias xql.ARRAY_VAL
+ */
 function ARRAY_VAL(value, as) {
-  return new ArrayValue(value, as);
+  return new Value("ARRAY", value, as);
 }
 xql.ARRAY_VAL = ARRAY_VAL;
 
-// \function JSON_VAL(value, as)
+/**
+ * Constructs a wrapped JSON value.
+ *
+ * @param {*} value The value to wrap.
+ * @param {string=} as SQL alias.
+ * @return {Value}
+ *
+ * @alias xql.JSON_VAL
+ */
 function JSON_VAL(value, as) {
-  return new ArrayValue(value, as);
+  return new Value("JSON", value, as);
 }
 xql.JSON_VAL = JSON_VAL;
 

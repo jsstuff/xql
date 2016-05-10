@@ -30,7 +30,7 @@ const MIN              = xql.MIN;
 const MAX              = xql.MAX;
 
 // Helpers.
-var ctx = xql.createContext({ dialect: "pgsql" });
+var ctx = xql.dialect.newContext({ dialect: "pgsql" });
 
 function simplify(s) {
   return s.trim().replace(/\s+/g, " ");
