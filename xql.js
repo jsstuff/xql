@@ -10,22 +10,11 @@
  */
 const xql = _xql;
 
-/**
- * Miscellaneous namespace.
- *
- * @namespace
- * @alias xql.misc
- */
-const xql$misc = xql.misc = {};
+const VERSION = "1.0.0";
 
-// xql.misc.VERSION
-//
-// Version information in a "major.minor.patch" form.
-//
-// Note: Version information has been put into the `xql.misc` namespace to
-// prevent a possible clashing with SQL builder's interface exported in the
-// root namespace.
-xql$misc.VERSION = "1.0.0";
+// ============================================================================
+// [internal]
+// ============================================================================
 
 // Always returns false, used internally for browser support.
 function returnFalse() { return false; }
@@ -40,9 +29,13 @@ const hasOwn   = Object.prototype.hasOwnProperty;
 const EmptyObject = {};
 
 // Global regular expressions.
-const reNewLine   = /\n/g;                // Check for new line characters.
-const reInt       = /^-?\d+$/;            // Check for a well-formatted int with optional '-' sign.
-const reUpperCase = /^[A-Z_][A-Z_0-9]*$/; // Check for an UPPERCASE_ONLY string.
+const reNewLine      = /\n/g;                // Check for new line characters.
+const reGraveQuotes  = /`/g;                 // Check for grave (`) quotes.
+const reDoubleQuotes = /\"/g;                // Check for double (") quotes.
+const reBrackets     = /\[\]/g;              // Check for [] brackets.
+const reDotNull      = /[\.\x00]/g;          // Check for '.' or '\0' characters.
+const reInt          = /^-?\d+$/;            // Check for a well-formatted int with optional '-' sign.
+const reUpperCase    = /^[A-Z_][A-Z_0-9]*$/; // Check for an UPPERCASE_ONLY string.
 // Checks if a string is a well formatted integer or floating point number, also
 // accepts scientific notation "E[+-]?xxx".
 const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
@@ -220,6 +213,16 @@ const OperatorDefs = (function() {
   return defs;
 })();
 
+// Identifier quote styles.
+const QuoteStyle = {
+  /** Double quotes, for example "identifier". */
+  kDouble       : 0,
+  /** Grave quotes, for example `identifier`. */
+  kGrave        : 1,
+  /** Brackets, for example [identifier]. */
+  kBrackets     : 2
+};
+
 // Node flags.
 const NodeFlags = {
   kImmutable    : 0x00000001,
@@ -227,12 +230,12 @@ const NodeFlags = {
 
   kAscending    : 0x00000010,
   kDescending   : 0x00000020,
+
   kNullsFirst   : 0x00000040,
   kNullsLast    : 0x00000080,
 
   kAll          : 0x00000100,
-  kDistinct     : 0x00000200,
-  kAllOrDistinct: 0x00000300
+  kDistinct     : 0x00000200
 };
 xql.NodeFlags = NodeFlags;
 
@@ -446,6 +449,25 @@ function throwCompileError(message) { throw new CompileError(message); }
 // ============================================================================
 
 /**
+ * Miscellaneous namespace.
+ *
+ * @namespace
+ * @alias xql.misc
+ */
+const xql$misc = xql.misc = {};
+
+/**
+ * Version information in a "major.minor.patch" form.
+ *
+ * Note: Version information has been put into the `xql.misc` namespace to
+ * prevent a possible clashing with SQL builder's interface exported in the
+ * root namespace.
+ *
+ * @alias xql.misc.VERSION
+ */
+xql$misc.VERSION = VERSION;
+
+/**
  * Get a type of the `value` as a string. This function extends a javascript
  * `typeof` operator with "array", "buffer", "null" and "undefined". It's used
  * for debugging and error handling purposes to enhance error messages.
@@ -497,6 +519,38 @@ const toCamelCase = (function() {
   return toCamelCase;
 })();
 xql$misc.toCamelCase = toCamelCase;
+
+function parseVersion(s) {
+  var parts = s.split(".");
+  var re = /^[0-9]+$/g;
+
+  var major = 0;
+  var minor = 0;
+  var patch = 0;
+
+  for (var i = 0, len = Math.min(parts.length, 3); i < len; i++) {
+    var part = parts[i];
+    if (!re.test(part))
+      break;
+
+    var n = parseInt(part);
+    switch (i) {
+      case 0: major = n; break;
+      case 1: minor = n; break;
+      case 2: patch = n; break;
+    }
+  }
+
+  return {
+    major: major,
+    minor: minor,
+    patch: patch
+  }
+}
+
+function blobToHex(blob) {
+  return blob.toString("hex");
+}
 
 function indent(s, indentation) {
   return (s && indentation) ? indentation + s.replace(reNewLine, "\n" + indentation) : s;
@@ -582,8 +636,22 @@ function $xql$dialect$newContext(options) {
 }
 xql$dialect.newContext = $xql$dialect$newContext;
 
+// ============================================================================
+// [xql.dialect.Context]
+// ============================================================================
+
+function fnBrackets(s) {
+  return s.charCodeAt(0) === 91 ? "[[" : "]]";
+}
+
 /**
- * Database dialect context that implements a dialect-specific functionality.
+ * Database dialect context that provides an interface that query builders can
+ * use to build a dialect-specific queries. The context itself provides some
+ * dialect-agnostic functionality that is shared between multiple dialect
+ * implementations.
+ *
+ * It's essential to call `_update()` in your own constructor when extending
+ * `Context` to implement your own database dialect.
  *
  * @param {string} dialect Database dialect the context is using.
  * @param {object} options Context options.
@@ -594,30 +662,170 @@ xql$dialect.newContext = $xql$dialect$newContext;
 class Context {
   constructor(dialect, options) {
     this.dialect = dialect;
+
+    // Context configuration.
     this.pretty = options.pretty ? true : false;
     this.indentation = options.indentation || 2;
 
-    this.spaceOrNL = ""; // Space character, either " " or "\n" (pretty).
-    this.commaStr = "";  // Comma separator, either ", " or ",\n" (pretty).
-    this.indentStr = ""; // Indentation string.
-    this.concatStr = ""; // Concatenation string, equals to `space + indentStr`.
+    // Dialect version (no version specified is the default).
+    this.version = {
+      major: 0,
+      minor: 0,
+      patch: 0
+    };
 
+    // Dialect features (these are modified by a dialect-specific `Context`).
+    this.features = {
+      nativeArrays  : false,              // No native array types by default.
+      specialNumbers: false,              // No special numbers by default.
+      quoteStyle    : QuoteStyle.kDouble  // The default SQL quotes are "".
+    };
+
+    // Functions that depend on `this.pretty` option.
     this.indent = null;
     this.concat = null;
 
+    // Computed properties based on configuration and dialect features. These
+    // require `_update()` to be called after one or more property is changed.
+    this._DB_POS_INF     = "";   // Positive infinity value or keyword.
+    this._DB_NEG_INF     = "";   // Negative infinity value or keyword.
+    this._DB_NAN         = "";   // NaN value or keyword
+
+    this._SPACE_OR_NL    = "";   // Space character, either " " or "\n" (pretty).
+    this._COMMA_STR      = "";   // Comma separator, either ", " or ",\n" (pretty).
+    this._INDENT_STR     = "";   // Indentation string.
+    this._CONCAT_STR     = "";   // Concatenation string, equals to `space + _INDENT_STR`.
+
+    this._IDENT_BEFORE   = "";   // Escape character inserted before identifiers.
+    this._IDENT_AFTER    = "";   // Escape character inserted after identifiers.
+    this._IDENT_CHECK    = null; // Regular expression that checks if the identifier
+                                 // needs escaping or contains or contains ill chars.
+
+    if (options.version)
+      this.version = parseVersion(options.version);
+  }
+
+  /**
+   * Set the dialect version to `version`.
+   *
+   * @param {string} version Version string as "major.minor.patch". The string
+   * can omit any version part if not used, gratefully accepting "major.minor"
+   * and/or "major" only. If any version part that is omitted will be set to 0.
+   *
+   * @return {this}
+   */
+  setVersion(version) {
+    this.version = parseVersion(version);
     this._update();
+
+    return this;
   }
 
   /**
    * Escapes a single or multiple SQL identifier(s).
    *
-   * @param {...string} args A single or multiple SQL identifiers to escape.
+   * @param {string|string[]} ident Idenfifier or array of identifiers to escape.
    * @return {string} Escaped identifier(s).
-   *
-   * @abstract
    */
-  escapeIdentifier() {
-    throwTypeError("Abstract method called");
+  escapeIdentifier(ident) {
+    var input = "";
+    var output = "";
+
+    var i = 0;
+    var len = 1;
+
+    if (isArray(ident)) {
+      len = ident.length;
+      if (len > 0)
+        input = ident[0];
+    }
+    else {
+      input = ident;
+    }
+
+    var re = this._IDENT_CHECK;
+    for (;;) {
+      // Apply escaping to all parts of the identifier (if any).
+      for (;;) {
+        // Ignore undefined/null parts of the input.
+        if (input == null) break;
+
+        var m = input.search(re);
+        var p = input;
+
+        // Multiple arguments are joined by using ".".
+        if (output) output += ".";
+
+        if (m !== -1) {
+          var c = input.charCodeAt(m);
+
+          // `.` === 46.
+          if (c === 46) {
+            // Dot separator, that's fine
+            p = input.substr(0, m);
+          }
+          else {
+            // NULL character in identifier is not allowed.
+            if (c === 0)
+              throwCompileError("Identifier can't contain NULL character");
+
+            // Character that needs escaping. In this case we repeat the
+            // search by using simpler regular expression and then pass
+            // the whole string to a function that will properly escape
+            // it (as this function is very generic and can handle all
+            // dialects easily).
+            m = input.search(reDotNull);
+            if (m !== -1) {
+              c = input.charCodeAt(m);
+              if (c === 46)
+                p = input.substr(0, m);
+              else
+                throwCompileError("Identifier can't contain NULL character");
+            }
+            p = this.escapeIdentifierImpl(p);
+          }
+        }
+
+        if (hasOwn.call(IdentifierMap, p))
+          output += p;
+        else
+          output += this._IDENT_BEFORE + p + this._IDENT_AFTER;
+
+        if (m === -1) break;
+        input = input.substr(m + 1);
+      }
+
+      if (++i >= len) break;
+      input = ident[i];
+    }
+
+    // Return an empty identifier (allowed) in case the output is an empty string.
+    return output ? output : this._IDENT_BEFORE + this._IDENT_AFTER;
+  }
+
+  /**
+   * Escapes a single identifier.
+   *
+   * Please do not use this function directly. It's called by `escapeIdentifier`
+   * to escape an identifier (or part of it) in a dialect-specific way.
+   *
+   * @param {string} ident Identifier to escape, which should be already
+   *   checked (for example it shouldn't contain NULL characters).
+   * @return {string} Escaped identifier.
+   */
+  escapeIdentifierImpl(ident) {
+    // NOTE: This function is only called when `ident` contains one or more
+    // characters to escape. It doesn't have to be super fast as it involes
+    // regexp search & replace anyway. This is the main reason it's generally
+    // not reimplemented by a dialect-specific implementation as it won't
+    // bring any performance gain.
+    var qs = this.features.quoteStyle;
+
+    if (qs == QuoteStyle.kDouble  ) return ident.replace(reDoubleQuotes, "\"\"");
+    if (qs == QuoteStyle.kGrave   ) return ident.replace(reGraveQuotes, "``");
+    if (qs == QuoteStyle.kBrackets) return ident.replace(reBrackets, fnBrackets);
+
+    throwCompileError("Cannot escape identifier: Invalid 'features.quoteStyle' set.");
   }
 
   /**
@@ -630,250 +838,7 @@ class Context {
    * @param {*} value A value to escape.
    * @param {string=} explicitType SQL type override
    * @return {string} Escaped `value` as string.
-   *
-   * @abstract
    */
-  escapeValue(value, explicitType) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Escapes a number `value` into a SQL number.
-   *
-   * @param {number} value A numeric value to escape.
-   * @return {string} Escaped `value` as string.
-   *
-   * @abstract
-   */
-  escapeNumber(value) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Escapes a number `value` into a SQL string.
-   *
-   * @param {string} value A string to escape.
-   * @return {string} Escaped `value` as string.
-   *
-   * @abstract
-   */
-  escapeString(value) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Escapes a buffer/blob `value` into a SQL buffer representation.
-   *
-   * @param {Buffer} value A buffer to escape.
-   * @return {string} Escaped `value` as buffer.
-   *
-   * @abstract
-   */
-  escapeBuffer(value) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Escapes an array into SQL `VALUES` representation.
-   *
-   * @param {array} value An array to escape.
-   * @return {string} Escaped `value` as SQL `VALUES`.
-   *
-   * @abstract
-   */
-  escapeValues(value) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Escapes an array into SQL-ARRAY representation.
-   *
-   * @param {array} value An array to escape.
-   * @param {boolean} isNested Whether the array is nested in another array.
-   *   Some dialects (like pgsql) need this information to properly escape the
-   *   array.
-   * @return {string} Escaped `value` as SQL-ARRAY.
-   *
-   * @abstract
-   */
-  escapeArray(value, isNested) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Escapes a value into SQL-JSON representation.
-   *
-   * @param {*} value A value to escape.
-   * @return {string} Escaped `value` as SQL-JSON.
-   *
-   * @abstract
-   */
-  escapeJson(value) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
-   * string with `bindings` and returns a new string. The function automatically
-   * detects the format of `query` string and checks if it's consistent (i.e. it
-   * throws if `?` is used together with `$1`).
-   *
-   * This function knows how to recognize escaped identifiers and strings in the
-   * query and skips content of these. For example for a given string `'?' ?`
-   * only the second `?` would be considered and substituted.
-   *
-   * NOTE: Although the function understands SQL syntax, the function expects
-   * well formed SQL query. The purpose is to substitute query parameters and
-   * not performing expensive validation (that will be done by the server anyway).
-   *
-   * @param {string} query Query string to substitute (template).
-   * @param {array=} bindings Array of values to bind to `query`.
-   * @return {string}
-   *
-   * @abstract
-   */
-  substitute(query, bindings) {
-    throwTypeError("Abstract method called");
-  }
-
-  /**
-   * Called whenever some property is changed to update all computed properties.
-   *
-   * @private
-   */
-  _update() {
-    var compact = !this.pretty;
-
-    this.spaceOrNL = compact ? " "  : "\n";
-    this.commaStr  = compact ? ", " : ",\n";
-    this.indentStr = compact ? ""   : " ".repeat(this.indentation);
-    this.concatStr = compact ? " "  : this.spaceOrNL + this.indentStr;
-
-    this.indent    = compact ? this._indent$none : this._indent$pretty;
-    this.concat    = compact ? this._concat$none : this._concat$pretty;
-  }
-
-  /**
-   * Indents a given string `s` by the Context's indentation settings if pretty
-   * print is enabled, otherwise does nothing.
-   *
-   * @param {string} s String to indent.
-   * @return {string} Indented string if indentation is enabled or unchanged `s`.
-   *
-   * @function indent
-   */
-  _indent$none(s) {
-    return s;
-  }
-
-  _indent$pretty(s) {
-    var indentStr = this.indentStr;
-    return indentStr + s.replace(reNewLine, "\n" + indentStr);
-  }
-
-  /**
-   * Called before a string `s` is concatenated into a SQL expression in a way
-   * that may require a new line if pretty printing is enabled. It returns the
-   * original string prefixed with a space or a line break and possibly indented.
-   *
-   * @param {string} s Input string to process.
-   * @return {string} Possibly modified string.
-   *
-   * @function concat
-   *
-   * TODO: Change the name
-   */
-  _concat$none(s) {
-    return " " + s;
-  }
-
-  _concat$pretty(s) {
-    var concatStr = this.concatStr;
-    return concatStr + s.replace(reNewLine, concatStr);
-  }
-}
-xql$dialect.Context = Context;
-
-// ============================================================================
-// [xql.pgsql]
-// ============================================================================
-
-(function() {
-
-const reEscapeIdent = /[\.\x00]/g;
-const reEscapeChars = /[\"\$\'\?]/g;
-
-const reEscapeString =  /[\0\b\f\n\r\t\\\']/g;
-const mpEscapeString = {
-  "\0": "\\x00",// Null character.
-  "\b": "\\b",  // Backspace.
-  "\f": "\\f",  // Form Feed.
-  "\n": "\\n",  // New Line.
-  "\r": "\\r",  // Carriage Return.
-  "\t": "\\t",  // Tag.
-  "\\": "\\\\", // Backslash.
-  "\'": "\\\'"  // Single Quote.
-};
-function fnEscapeString(s) {
-  if (s.charCodeAt(0) === 0)
-    throwCompileError("String can't contain NULL character");
-  return mpEscapeString[s];
-}
-
-// \class PGSQLContext
-//
-// PostgreSQL context.
-class PGSQLContext extends Context {
-  constructor(options) {
-    super("pgsql", options);
-  }
-
-  /** @override */
-  escapeIdentifier() {
-    var output = "";
-
-    for (var i = 0, len = arguments.length; i < len; i++) {
-      var a = arguments[i];
-
-      // Gaps are allowed.
-      if (!a)
-        continue;
-
-      // Apply escaping to all parts of an identifier (if any).
-      for (;;) {
-        var m = a.search(reEscapeIdent);
-        var p = a;
-
-        // Multiple arguments are joined by using ".".
-        if (output)
-          output += ".";
-
-        if (m !== -1) {
-          var c = a.charCodeAt(m);
-
-          // '.' ~= 46.
-          if (c === 46)
-            p = a.substr(0, m);
-          else // (c === 0)
-            throwCompileError("Identifier can't contain NULL character");
-        }
-
-        if (hasOwn.call(IdentifierMap, p))
-          output += p;
-        else
-          output += '"' + p + '"';
-
-        if (m === -1)
-          break;
-
-        a = a.substr(m + 1);
-      }
-    }
-
-    return output;
-  }
-
-  /** @override */
   escapeValue(value, explicitType) {
     // Explicitly Defined Type (`explicitType` is set)
     // -----------------------------------------------
@@ -1035,41 +1000,53 @@ class PGSQLContext extends Context {
     return this.escapeString(JSON.stringify(value));
   }
 
-  /** @override */
+  /**
+   * Escapes a number `value` into a SQL number.
+   *
+   * @param {number} value Number to escape.
+   * @return {string} Escaped `value` as string.
+   */
   escapeNumber(value) {
     if (!isFinite(value)) {
-      if (value === Infinity)
-        return "'Infinity'";
-      if (value === -Infinity)
-        return "'-Infinity'";
+      var out = (value ===  Infinity) ? this._DB_POS_INF :
+                (value === -Infinity) ? this._DB_NEG_INF : this._DB_NAN;
 
-      return "'NaN'";
+      if (out === "")
+        throwValueError("Couldn't process a special number (Infinity/NaN).");
+      return out;
     }
 
     return value.toString();
   }
 
-  /** @override */
+  /**
+   * Escapes a number `value` into a SQL string.
+   *
+   * @param {string} value A string to escape.
+   * @return {string} Escaped `value` as string.
+   *
+   * @abstract
+   */
   escapeString(value) {
-    var oldLength = value.length;
-    value = value.replace(reEscapeString, fnEscapeString);
-
-    // We have to tell Postgres explicitly that the string is escaped by
-    // a C-style escaping sequence(s).
-    if (value.length !== oldLength)
-      return "E'" + value + "'";
-
-    // String doesn't contain any character that has to be escaped. We can
-    // use simply '...'.
-    return "'" + value + "'";
+    throwTypeError("Abstract method called");
   }
 
-  /** @override */
+  /**
+   * Escapes a buffer/blob `value` into a SQL buffer representation.
+   *
+   * @param {Buffer} value Buffer to escape.
+   * @return {string} Escaped `value` as buffer.
+   */
   escapeBuffer(value) {
-    return "E'\\x" + value.toString("hex") + "'";
+    return "x'" + blobToHex(value) + "'";
   }
 
-  /** @override */
+  /**
+   * Escapes an array into SQL `VALUES` representation.
+   *
+   * @param {array} value Array to escape.
+   * @return {string} Escaped `value` as SQL `VALUES`.
+   */
   escapeValues(value) {
     var out = "";
 
@@ -1086,8 +1063,212 @@ class PGSQLContext extends Context {
     return "(" + out + ")";
   }
 
+  /**
+   * Escapes an array into a SQL ARRAY representation.
+   *
+   * By default it converts the array into a JSON-based string representation
+   * to ensure compatibility with engines that don't support arrays natively.
+   * However, some engines like PostgreSQL support arrays and will use proper
+   * ARRAY escaping.
+   *
+   * @param {array} value Array to escape.
+   * @param {boolean} nested Whether the array is nested in another array.
+   *   Some dialects (like pgsql) need this information to properly escape the
+   *   array.
+   * @return {string} Escaped `value` as SQL-ARRAY or compatible.
+   */
+  escapeArray(value, nested) {
+    return this.escapeString(JSON.stringify(value));
+  }
+
+  /**
+   * Escapes a value into a SQL JSON representation.
+   *
+   * By default it converts the array into a JSON-based string representation
+   * to ensure compatibility with engines that don't support JSON natively or
+   * that have support for JSON by using string literals like PostgreSQL does.
+   *
+   * @param {*} value Value to escape.
+   * @return {string} Escaped `value` as SQL-JSON.
+   */
+  escapeJson(value) {
+    return this.escapeString(JSON.stringify(value));
+  }
+
+  /**
+   * Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
+   * string with `bindings` and returns a new string. The function automatically
+   * detects the format of `query` string and checks if it's consistent (i.e. it
+   * throws if `?` is used together with `$1`).
+   *
+   * This function knows how to recognize escaped identifiers and strings in the
+   * query and skips content of these. For example for a given string `'?' ?`
+   * only the second `?` would be considered and substituted.
+   *
+   * NOTE: Although the function understands SQL syntax, the function expects
+   * well formed SQL query. The purpose is to substitute query parameters and
+   * not performing expensive validation (that will be done by the server anyway).
+   *
+   * @param {string} query Query string to substitute (template).
+   * @param {array=} bindings Array of values to bind to `query`.
+   * @return {string}
+   *
+   * @abstract
+   */
+  substitute(query, bindings) {
+    throwTypeError("Abstract method called");
+  }
+
+  /**
+   * Called whenever some property is changed to update all computed properties.
+   *
+   * @private
+   */
+  _update() {
+    var compact = !this.pretty;
+
+    this._SPACE_OR_NL = compact ? " "  : "\n";
+    this._COMMA_STR   = compact ? ", " : ",\n";
+    this._INDENT_STR  = compact ? ""   : " ".repeat(this.indentation);
+    this._CONCAT_STR  = compact ? " "  : this._SPACE_OR_NL + this._INDENT_STR;
+
+    this.indent    = compact ? this._indent$none : this._indent$pretty;
+    this.concat    = compact ? this._concat$none : this._concat$pretty;
+
+    var qs = this.features.quoteStyle;
+
+    if (qs === QuoteStyle.kDouble) {
+      this._IDENT_CHECK  = /[\.\"\x00]/g;
+      this._IDENT_BEFORE = "\"";
+      this._IDENT_AFTER  = "\"";
+    }
+
+    if (qs === QuoteStyle.kGrave) {
+      this._IDENT_CHECK  = /[\.\`\x00]/g;
+      this._IDENT_BEFORE = "`";
+      this._IDENT_AFTER  = "`";
+    }
+
+    if (qs === QuoteStyle.kBrackets) {
+      this._IDENT_CHECK  = /[\.\[\]\x00]/g;
+      this._IDENT_BEFORE = "[";
+      this._IDENT_AFTER  = "]";
+    }
+  }
+
+  /**
+   * Indents a given string `s` by the Context's indentation settings if pretty
+   * print is enabled, otherwise does nothing.
+   *
+   * @param {string} s String to indent.
+   * @return {string} Indented string if indentation is enabled or unchanged `s`.
+   *
+   * @function
+   * @alias xql.dialect.Context.prototype.indent
+   */
+  _indent$none(s) {
+    return s;
+  }
+
+  _indent$pretty(s) {
+    var _INDENT_STR = this._INDENT_STR;
+    return _INDENT_STR + s.replace(reNewLine, "\n" + _INDENT_STR);
+  }
+
+  /**
+   * TODO: Change the name
+   * 
+   * Called before a string `s` is concatenated into a SQL expression in a way
+   * that may require a new line if pretty printing is enabled. It returns the
+   * original string prefixed with a space or a line break and possibly indented.
+   *
+   * @param {string} s Input string to process.
+   * @return {string} Possibly modified string.
+   *
+   * @function
+   * @alias xql.dialect.Context.prototype.concat
+   */
+  _concat$none(s) {
+    return " " + s;
+  }
+
+  _concat$pretty(s) {
+    var _CONCAT_STR = this._CONCAT_STR;
+    return _CONCAT_STR + s.replace(reNewLine, _CONCAT_STR);
+  }
+}
+xql$dialect.Context = Context;
+
+// ============================================================================
+// [xql.dialect.pgsql]
+// ============================================================================
+
+(function() {
+
+const reEscapeChars = /[\x00-\x1F\'\\]/g;
+const reSubstituteChars = /[\"\$\'\?]/g;
+
+function fnEscapeString(s) {
+  var c = s.charCodeAt(0);
+  switch (c) {
+    case  0: throwCompileError("String can't contain NULL character");
+    case  8: return "\\b";
+    case  9: return "\\t";
+    case 10: return "\\n";
+    case 12: return "\\f";
+    case 13: return "\\r";
+    case 39: return "\\'";
+    case 92: return "\\\\";
+    default: return "\\x" + (c >> 4).toString(16) + (c & 15).toString(16);
+  }
+}
+
+/**
+ * PostgreSQL context.
+ *
+ * @private
+ */
+class PGSQLContext extends Context {
+  constructor(options) {
+    super("pgsql", options);
+
+    // Setup Postgres features.
+    this.features.nativeArrays = true;
+    this.features.specialNumbers = true;
+
+    // Setup Postgres specific.
+    this._DB_POS_INF = "'Infinity'";
+    this._DB_NEG_INF = "'-Infinity'";
+    this._DB_NAN     = "'NaN'";
+
+
+    this._update();
+  }
+
   /** @override */
-  escapeArray(value, isNested) {
+  escapeString(value) {
+    var oldLength = value.length;
+    value = value.replace(reEscapeChars, fnEscapeString);
+
+    if (value.length !== oldLength) {
+      // We have to tell Postgres explicitly that the string is escaped by a
+      // C-style escaping sequence(s).
+      return "E'" + value + "'";
+    }
+    else {
+      // String doesn't contain any character that has to be escaped. We can
+      // use simply '...'.
+      return "'" + value + "'";
+    }
+  }
+
+  /** @override */
+  escapeBuffer(value) {
+    return "E'\\x" + blobToHex(value) + "'";
+  }
+
+  /** @override */
+  escapeArray(value, nested) {
     var out = "";
     var i = 0, len = value.length;
 
@@ -1104,15 +1285,10 @@ class PGSQLContext extends Context {
         out += this.escapeValue(element);
     } while (++i < len);
 
-    if (isNested)
+    if (nested)
       return "[" + out + "]";
     else
       return "ARRAY[" + out + "]";
-  }
-
-  /** @override */
-  escapeJson(value) {
-    return this.escapeString(JSON.stringify(value));
   }
 
   /** @override */
@@ -1127,9 +1303,7 @@ class PGSQLContext extends Context {
     else
       input = query.toString();
 
-    // These are hints for javascript runtime. We really want this rountine
-    // as fast as possible.
-    var i = input.search(reEscapeChars);
+    var i = input.search(reSubstituteChars);
     if (i === -1)
       return input;
 
@@ -1208,7 +1382,7 @@ class PGSQLContext extends Context {
           if (i >= 2 && (input.charCodeAt(i - 2) & ~32) === 69) {
             // TODO: Add support for binary in form `E'\x`
 
-            // a) String is c-like escaped.
+            // a) String is escaped by using C-like (vendor-specific) escaping.
             for (;;) {
               // Stop at the end of the string.
               if (i >= len)
@@ -1234,7 +1408,7 @@ class PGSQLContext extends Context {
             }
           }
           else {
-            // b) String is SQL escaped.
+            // b) String is escaped by using plain SQL escaping.
             for (;;) {
               // Stop at the end of the string.
               if (i === len)
@@ -1308,7 +1482,7 @@ class PGSQLContext extends Context {
           iStart = i;
         }
       }
-      // Check if the character is question mark (63).
+      // Check if the character is a question mark (63).
       else if (c === 63) {
         // Basically a duplicate from `$`.
         if (mode !== c) {
@@ -1347,6 +1521,124 @@ class PGSQLContext extends Context {
   }
 }
 xql$dialect.add("pgsql", PGSQLContext);
+
+})();
+
+// ============================================================================
+// [xql.dialect.sqlite]
+// ============================================================================
+
+(function() {
+
+/**
+ * SQLite context.
+ *
+ * @private
+ */
+class SQLiteContext extends Context {
+  constructor(options) {
+    super("sqlite", options);
+
+    this._update();
+  }
+
+  /** @override */
+  escapeString(value) {
+    var out = "";
+
+    var i = 0;
+    var m = 0;
+    var len = value.length;
+
+    if (!len)
+      return "''";
+
+    var c = value.charCodeAt(0);
+    while (i < len) {
+      if (c < 32) {
+        // Blob part.
+        if (i === 0)
+          out += "''"; // Edge case, always form TEXT, not BLOB.
+        out += "||x'"
+
+        do {
+          out += (c >> 4).toString(16) + (c & 15).toString(16);
+          if (++i >= len)
+            break;
+          c = value.charCodeAt(i);
+        } while (c < 32);
+        out += "'";
+      }
+      else {
+        // Text part.
+        out += out ? "||'" : "'";
+        if (c === 39)
+          out += "'";
+        m = i;
+
+        for (;;) {
+          if (++i >= len)
+            break;
+
+          c = value.charCodeAt(i);
+          if (c > 39) continue;
+          if (c < 32) break;
+
+          if (c === 39) {
+            out += value.substring(m, i + 1);
+            m = i;
+          }
+        }
+
+        out += value.substring(m, i) + "'";
+      }
+    }
+  }
+}
+xql$dialect.add("sqlite", SQLiteContext);
+
+})();
+
+// ============================================================================
+// [xql.dialect.mysql]
+// ============================================================================
+
+(function() {
+
+const reEscapeChars = /[\x00\b\t\n\r\x1A\'\\]/g;
+
+function fnEscapeString(s) {
+  var c = s.charCodeAt(0);
+  switch (c) {
+    case  0: return "\\0";
+    case  8: return "\\b";
+    case  9: return "\\t";
+    case 10: return "\\n";
+    case 13: return "\\r";
+    case 26: return "\\Z";
+    case 39: return "''";
+    case 92: return "\\\\";
+  }
+}
+
+/**
+ * MySQL context.
+ *
+ * @private
+ */
+class MySQLContext extends Context {
+  constructor(options) {
+    super("mysql", options);
+
+    this._update();
+  }
+
+  /** @override */
+  escapeString(value) {
+    return "'" + value.replace(reEscapeChars, fnEscapeString) + "'";
+  }
+}
+xql$dialect.add("mysql", MySQLContext);
 
 })();
 
@@ -1620,7 +1912,7 @@ class Raw extends Node {
     var out = this._value;
 
     var bindings = this._bindings;
-    if (bindings && bindings.length)
+    if (bindings)
       out = ctx.substitute(out, bindings);
 
     var as = this._as;
@@ -1651,7 +1943,7 @@ class Raw extends Node {
   }
 
   /**
-   * Gets the raw expression's bindings or `null` if no bindings were provided.
+   * Gets the raw expression's bindings or `null` if no bindings are provided.
    *
    * @return {?array}
    */
@@ -2697,11 +2989,11 @@ class Query extends Node {
 
   _compileGroupBy(ctx, groupBy) {
     var out = "";
-    var commaStr = ctx.commaStr;
+    var _COMMA_STR = ctx._COMMA_STR;
 
     for (var i = 0, len = groupBy.length; i < len; i++) {
       var group = groupBy[i];
-      if (out) out += commaStr;
+      if (out) out += _COMMA_STR;
 
       // Group can be in a form of `string` or `Node`.
       if (typeof group === "string")
@@ -2715,11 +3007,11 @@ class Query extends Node {
 
   _compileOrderBy(ctx, orderBy) {
     var out = "";
-    var commaStr = ctx.commaStr;
+    var _COMMA_STR = ctx._COMMA_STR;
 
     for (var i = 0, len = orderBy.length; i < len; i++) {
       var sort = orderBy[i];
-      if (out) out += commaStr;
+      if (out) out += _COMMA_STR;
       out += sort.compileNode(ctx);
     }
 
@@ -2728,11 +3020,11 @@ class Query extends Node {
 
   _compileFieldsOrReturning(ctx, list) {
     var out = "";
-    var commaStr = ctx.commaStr;
+    var _COMMA_STR = ctx._COMMA_STR;
 
     for (var i = 0, len = list.length; i < len; i++) {
       var column = list[i];
-      if (out) out += commaStr;
+      if (out) out += _COMMA_STR;
 
       // Returning column can be in a form of `string` or `Node`.
       if (typeof column === "string") {
@@ -2871,11 +3163,11 @@ class Query extends Node {
     var out = "";
 
     if (offset)
-      out += "OFFSET" + ctx.concatStr + offset;
+      out += "OFFSET" + ctx._CONCAT_STR + offset;
 
     if (limit) {
-      if (out) out += ctx.spaceOrNL;
-      out += "LIMIT" + ctx.concatStr + limit;
+      if (out) out += ctx._SPACE_OR_NL;
+      out += "LIMIT" + ctx._CONCAT_STR + limit;
     }
 
     return out;
@@ -3053,7 +3345,7 @@ class SelectQuery extends Query {
   /** @override */
   compileNode(ctx) {
     var out = "SELECT";
-    var space = ctx.spaceOrNL;
+    var space = ctx._SPACE_OR_NL;
     var flags = this._flags;
 
     // Compile `SELECT [ALL|DISTINCT]`
@@ -3331,7 +3623,7 @@ class InsertQuery extends Query {
     var out = "";
 
     var t = "";
-    var space = ctx.spaceOrNL;
+    var space = ctx._SPACE_OR_NL;
 
     var k;
     var i, len;
@@ -3358,7 +3650,7 @@ class InsertQuery extends Query {
 
     // Compile `VALUES (...)[, (...)]`.
     var objects = this._values;
-    var prefix = (ctx.pretty ? ctx.concatStr : " ") + "(";
+    var prefix = (ctx.pretty ? ctx._CONCAT_STR : " ") + "(";
 
     out += space + "VALUES";
     for (i = 0, len = objects.length; i < len; i++) {
@@ -3419,8 +3711,8 @@ class UpdateQuery extends Query {
     var out = "";
 
     var t = "";
-    var space = ctx.spaceOrNL;
-    var commaStr = ctx.commaStr;
+    var space = ctx._SPACE_OR_NL;
+    var _COMMA_STR = ctx._COMMA_STR;
 
     // Compile `UPDATE ...`
     var table = this._table;
@@ -3455,7 +3747,7 @@ class UpdateQuery extends Query {
       else
         compiled = value.compileNode(ctx);
 
-      if (t) t += commaStr;
+      if (t) t += _COMMA_STR;
       t += ctx.escapeIdentifier(k) + " = " + compiled;
     }
     out += space + "SET" + ctx.concat(t);
@@ -3517,7 +3809,7 @@ class DeleteQuery extends Query {
     var out = "";
 
     var t = "";
-    var space = ctx.spaceOrNL;
+    var space = ctx._SPACE_OR_NL;
 
     // Compile `DELETE FROM ...`
     var table = this._table;
@@ -3601,7 +3893,7 @@ class CombiningQuery extends Query {
   /** @override */
   compileNode(ctx) {
     var out = "";
-    var space = ctx.spaceOrNL;
+    var space = ctx._SPACE_OR_NL;
 
     var flags = this._flags;
     var combineOp = this._type;

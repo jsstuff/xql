@@ -69,30 +69,40 @@ describe("xql", function() {
   // Escape.
   it("should escape identifier.", function() {
     // Proper identifiers.
-    shouldMatch(ctx.escapeIdentifier("")           , '');
-    shouldMatch(ctx.escapeIdentifier("a")          , '"a"');
-    shouldMatch(ctx.escapeIdentifier("a.b")        , '"a"."b"');
-    shouldMatch(ctx.escapeIdentifier("a", "b")     , '"a"."b"');
-    shouldMatch(ctx.escapeIdentifier("a", "b", "c"), '"a"."b"."c"');
-    shouldMatch(ctx.escapeIdentifier("a.b", "c")   , '"a"."b"."c"');
-    shouldMatch(ctx.escapeIdentifier("a", "b.c")   , '"a"."b"."c"');
+    shouldMatch(ctx.escapeIdentifier("")                , '""');
+    shouldMatch(ctx.escapeIdentifier("a")               , '"a"');
+    shouldMatch(ctx.escapeIdentifier("a.b")             , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier(["a", "b"])        , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier(["a", "b", "c"])   , '"a"."b"."c"');
+    shouldMatch(ctx.escapeIdentifier(["a.b", "c"])      , '"a"."b"."c"');
+    shouldMatch(ctx.escapeIdentifier(["a", "b.c"])      , '"a"."b"."c"');
 
-    // Buggy input (gaps).
-    shouldMatch(ctx.escapeIdentifier("", "", "")   , '');
+    // Buggy inputs (empty strings and nulls).
+    shouldMatch(ctx.escapeIdentifier([null, null, null]), '""');
 
-    shouldMatch(ctx.escapeIdentifier("a", "", "")  , '"a"');
-    shouldMatch(ctx.escapeIdentifier("", "a", "")  , '"a"');
-    shouldMatch(ctx.escapeIdentifier("", "", "a")  , '"a"');
+    shouldMatch(ctx.escapeIdentifier(["a", null, null]) , '"a"');
+    shouldMatch(ctx.escapeIdentifier([null, "a", null]) , '"a"');
+    shouldMatch(ctx.escapeIdentifier([null, null, "a"]) , '"a"');
 
-    shouldMatch(ctx.escapeIdentifier("", "a", "b") , '"a"."b"');
-    shouldMatch(ctx.escapeIdentifier("a", "", "b") , '"a"."b"');
-    shouldMatch(ctx.escapeIdentifier("a", "b", "") , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier([null, "a", "b"])  , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier(["a", null, "b"])  , '"a"."b"');
+    shouldMatch(ctx.escapeIdentifier(["a", "b", null])  , '"a"."b"');
+
+    shouldMatch(ctx.escapeIdentifier(["", "", ""])      , '""."".""');
+
+    shouldMatch(ctx.escapeIdentifier(["a", "", ""])     , '"a"."".""');
+    shouldMatch(ctx.escapeIdentifier(["", "a", ""])     , '""."a".""');
+    shouldMatch(ctx.escapeIdentifier(["", "", "a"])     , '"".""."a"');
+
+    shouldMatch(ctx.escapeIdentifier(["", "a", "b"])    , '""."a"."b"');
+    shouldMatch(ctx.escapeIdentifier(["a", "", "b"])    , '"a".""."b"');
+    shouldMatch(ctx.escapeIdentifier(["a", "b", ""])    , '"a"."b".""');
 
     // Keywords in input.
-    shouldMatch(ctx.escapeIdentifier("*")          , '*');
-    shouldMatch(ctx.escapeIdentifier("a.*")        , '"a".*');
-    shouldMatch(ctx.escapeIdentifier("a", "*")     , '"a".*');
-    shouldMatch(ctx.escapeIdentifier("*", "a")     , '*."a"');
+    shouldMatch(ctx.escapeIdentifier("*")               , '*');
+    shouldMatch(ctx.escapeIdentifier(["a.*"])           , '"a".*');
+    shouldMatch(ctx.escapeIdentifier(["a", "*"])        , '"a".*');
+    shouldMatch(ctx.escapeIdentifier(["*", "a"])        , '*."a"');
 
     // Null characters are not allowed.
     shouldThrow(function() { shouldMatch(ctx.escapeIdentifier("\0")); });

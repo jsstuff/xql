@@ -19,7 +19,7 @@ xql.js is a library designed to build SQL queries programmatically. It implement
 There are several reasons why xql.js has been developed:
 
   1. Full support and focus on PostgreSQL backend (at the moment)
-  2. High performance and low memory footprint
+  2. High performance and low memory footprint, see [exjs/xql-bench](https://github.com/exjs/xql-bench)
   3. Schema should be optional and not mandatory
   4. Control of SQL parameters and the way they are formatted / escaped
   5. Construction of SQL query doesn't require writing RAW expressions, but it should be easy to use RAW expressions in case they are needed
