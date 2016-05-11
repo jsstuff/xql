@@ -668,7 +668,7 @@ class Context {
     this.indentation = options.indentation || 2;
 
     // Dialect version (no version specified is the default).
-    this.version = {
+    this.version = options.version ? parseVersion(options.version) : {
       major: 0,
       minor: 0,
       patch: 0
@@ -689,7 +689,7 @@ class Context {
     // require `_update()` to be called after one or more property is changed.
     this._DB_POS_INF     = "";   // Positive infinity value or keyword.
     this._DB_NEG_INF     = "";   // Negative infinity value or keyword.
-    this._DB_NAN         = "";   // NaN value or keyword
+    this._DB_NAN         = "";   // NaN value or keyword.
 
     this._SPACE_OR_NL    = "";   // Space character, either " " or "\n" (pretty).
     this._COMMA_STR      = "";   // Comma separator, either ", " or ",\n" (pretty).
@@ -700,9 +700,6 @@ class Context {
     this._IDENT_AFTER    = "";   // Escape character inserted after identifiers.
     this._IDENT_CHECK    = null; // Regular expression that checks if the identifier
                                  // needs escaping or contains or contains ill chars.
-
-    if (options.version)
-      this.version = parseVersion(options.version);
   }
 
   /**
@@ -1177,7 +1174,7 @@ class Context {
 
   /**
    * TODO: Change the name
-   * 
+   *
    * Called before a string `s` is concatenated into a SQL expression in a way
    * that may require a new line if pretty printing is enabled. It returns the
    * original string prefixed with a space or a line break and possibly indented.
@@ -1630,6 +1627,7 @@ class MySQLContext extends Context {
   constructor(options) {
     super("mysql", options);
 
+    this.features.quoteStyle = QuoteStyle.kGrave;
     this._update();
   }
 

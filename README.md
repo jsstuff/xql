@@ -1,7 +1,7 @@
 xql.js
 ======
 
-SQL builder and utilities library designed to work with Node.js and PostgreSQL, [try it online](http://kobalicek.com/fiddle-xql.html).
+SQL builder and utilities library for node.js, [try it online](http://kobalicek.com/fiddle-xql.html).
 
   * [Official Repository (exjs/xql)](https://github.com/exjs/xql)
   * [Public Domain (unlicense.org)](https://unlicense.org)
@@ -9,46 +9,93 @@ SQL builder and utilities library designed to work with Node.js and PostgreSQL, 
 Disclaimer
 ----------
 
-This library is used in production, but it doesn't contain all possible features of all available DB engines (currently only PG). Be prepared for some minor API changes before the library reaches v1.0.
+This library is used in production, but it doesn't contain all possible features of all available DB engines (currently only PG). Be prepared for some minor API changes before the library stabilizes.
 
 Introduction
 ------------
 
-xql.js is a library designed to build SQL queries programmatically. It implements a SQL expression tree that is created by high level API calls which mimic SQL syntax. It's basically just a tool that helps to create the expression tree that is compiled into a single SQL string at the end of the building phase. The library has been designed primarily for DAO/DB layers, but use-cases are nearly unlimited.
+xql.js is a library designed to build SQL queries programmatically. It implements a SQL expression tree that is created by high level API calls which mimic SQL syntax. It's a tool that helps to create the SQL expression tree that can be compiled into a single query string at the end of the building phase. The library has been designed primarily for DAO/DB layers, but use-cases are nearly unlimited.
 
 There are several reasons why xql.js has been developed:
 
-  1. Full support and focus on PostgreSQL backend (at the moment)
-  2. High performance and low memory footprint, see [exjs/xql-bench](https://github.com/exjs/xql-bench)
-  3. Schema should be optional and not mandatory
-  4. Control of SQL parameters and the way they are formatted / escaped
-  5. Construction of SQL query doesn't require writing RAW expressions, but it should be easy to use RAW expressions in case they are needed
-  6. Ability to queue multiple queries in a single instance of a query builder
+  1. Full support and focus on PostgreSQL (PG is the primary engine, but xql is getting support for MySQL and SQLite3 as well).
+  2. High performance and low memory footprint, see [exjs/xql-bench](https://github.com/exjs/xql-bench) that compares with other engines.
+  3. Schemaless by design, but allows to specify type-mapping so the input data can be properly escaped.
+  4. Control of SQL parameters and the way they are formatted / escaped.
+  5. Construction of SQL query shouldn't require RAW expressions to be written, but it should be easy to use RAW expressions in case they are needed.
+  6. No more legacy JS (xml.js is based on ES6 classes), however, it doesn't dictate you how to write your own code.
 
-There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for xql.js was Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. However, xql.js is just a query builder that has a minimal support for schemas that can be used to describe column types for serialization, but they are not used to describe relations or anything else. There are no plans to add ORM support to xql.js in any future release.
+There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for xql.js was Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. However, xql.js is just a query builder that has a type-mapping feature, which is used describe column types for serialization, but they are not used to describe relations or anything else. There are no plans to add ORM support to xql.js in any future release.
 
-To simplify the library design and use cases, xql.js itself doesn't implement any functionality to talk to a real database - is just a query builder. There is another project in preparation that will bridge xql.js with node.js SQL drivers, but since there are so many libraries that can be used (including libraries for SQL connection pooling) there was no real work done to create another library for this purpose.
+To simplify the library design and use cases, xql.js itself doesn't implement any functionality to talk to a real database - is just a query builder. There is another project in preparation that will bridge xql.js with node.js SQL drivers, but since there are so many libraries that can be used (including libraries for SQL connection pooling) there was no real work done to create another library for this purpose yet.
 
-At the beginning, xql.js has been designed to work primarily with PostgreSQL, but the project will be extended to support also other database engines; it's planned.
+At the beginning, xql.js has been designed to work primarily with PostgreSQL, but other dialects are already in-progress and some code that brings initial support for MySQL and SQLite3 has landed.
 
-Overview
---------
+Basic Usage
+-----------
+
+To use xql.js in node.js add `"xql"` library to your `package.json` and then `require("xql")` it. You need to create a context before you compile your expressions:
+
+```js
+var xql = require("xql");
+
+// Create your context - context is used to hold database dialect and some
+// options. It doesn't hold any intermediate data. It's perfectly fine to
+// use one context for all your queries (and it's designed this way).
+var ctx = xql.dialect.newContext({ dialect: "pgsql" /* [more options]*/ });
+
+// Create some query.
+var query = xql.SELECT("*")
+  .FROM("cities")
+  .WHERE("population", ">=", 1000000) // 3 form WHERE.
+  .WHERE("capital", true)             // 2 form WHERE, implicit equality.
+
+// Use context to compile the query.
+console.log(query.compileQuery(ctx));
+// SELECT * FROM "cities" WHERE "population" >= 1000000 AND "capital" = TRUE;
+```
+
+If you plan to pretty-print your queries for debugging purposes, use `pretty` and optionally `indentation` (default 2) option:
+
+```js
+var xql = require("xql");
+var ctx = xql.dialect.newContext({
+  dialect: "pgsql"
+  pretty: true
+});
+
+var query = xql.SELECT("*")
+  .FROM("cities")
+  .WHERE("population", ">=", 1000000)
+  .WHERE("capital", true)
+
+console.log(query.compileQuery(ctx));
+// SELECT
+//   *
+// FROM
+//   "cities"
+// WHERE
+//   "population" >= 1000000 AND "capital" = TRUE;
+```
+
+API Overview
+------------
 
 xql.js library consists of several nested namespaces, however, they are rarely used outside of `xql` implementation:
 
 Namespace                  | Description
 :------------------------- | :------------------------------------
 `xql`                      | Main API and high-level SQL builder interface (both UPPERCASED and camelCased versions of the same APIs)
+`xql.error`                | Custom errors xql.js uses
+`xql.misc`                 | SQL utilities xql is using made public, contains also a `VERSION` key in a `"major.minor.patch"` form
 `xql.node`                 | Expression tree, contains `xql.node.Node` and all nodes that inherit from it
-`xql.utils`                | Some SQL utilities xql is using made public
-`xql.misc`                 | Contains `VERSION` key in a `"major.minor.patch"` form
 
 Error classes:
 
 Error                      | Description
 :------------------------- | :------------------------------------
-`xql.ValueError`           | Error thrown if data is wrong
-`xql.CompileError`         | Error thrown if query is wrong
+`xql.error.ValueError`     | Error thrown if data is wrong
+`xql.error.CompileError`   | Error thrown if query is wrong
 
 Expression tree:
 
