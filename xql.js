@@ -10,7 +10,7 @@
  */
 const xql = _xql;
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 
 // ============================================================================
 // [internal]
@@ -822,7 +822,7 @@ class Context {
     if (qs == QuoteStyle.kGrave   ) return ident.replace(reGraveQuotes, "``");
     if (qs == QuoteStyle.kBrackets) return ident.replace(reBrackets, fnBrackets);
 
-    throwCompileError("Cannot escape identifier: Invalid 'features.quoteStyle' set.");
+    throwCompileError("Cannot escape identifier: Invalid 'features.quoteStyle' set");
   }
 
   /**
@@ -1009,7 +1009,7 @@ class Context {
                 (value === -Infinity) ? this._DB_NEG_INF : this._DB_NAN;
 
       if (out === "")
-        throwValueError("Couldn't process a special number (Infinity/NaN).");
+        throwValueError("Couldn't process a special number (Infinity/NaN)");
       return out;
     }
 
@@ -1522,6 +1522,50 @@ xql$dialect.add("pgsql", PGSQLContext);
 })();
 
 // ============================================================================
+// [xql.dialect.mysql]
+// ============================================================================
+
+(function() {
+
+const reEscapeChars = /[\x00\b\t\n\r\x1A\'\\]/g;
+
+function fnEscapeString(s) {
+  var c = s.charCodeAt(0);
+  switch (c) {
+    case  0: return "\\0";
+    case  8: return "\\b";
+    case  9: return "\\t";
+    case 10: return "\\n";
+    case 13: return "\\r";
+    case 26: return "\\Z";
+    case 39: return "''";
+    case 92: return "\\\\";
+  }
+}
+
+/**
+ * MySQL/MariaDB context.
+ *
+ * @private
+ */
+class MySQLContext extends Context {
+  constructor(options) {
+    super("mysql", options);
+
+    this.features.quoteStyle = QuoteStyle.kGrave;
+    this._update();
+  }
+
+  /** @override */
+  escapeString(value) {
+    return "'" + value.replace(reEscapeChars, fnEscapeString) + "'";
+  }
+}
+xql$dialect.add("mysql", MySQLContext);
+
+})();
+
+// ============================================================================
 // [xql.dialect.sqlite]
 // ============================================================================
 
@@ -1593,50 +1637,6 @@ class SQLiteContext extends Context {
   }
 }
 xql$dialect.add("sqlite", SQLiteContext);
-
-})();
-
-// ============================================================================
-// [xql.dialect.mysql]
-// ============================================================================
-
-(function() {
-
-const reEscapeChars = /[\x00\b\t\n\r\x1A\'\\]/g;
-
-function fnEscapeString(s) {
-  var c = s.charCodeAt(0);
-  switch (c) {
-    case  0: return "\\0";
-    case  8: return "\\b";
-    case  9: return "\\t";
-    case 10: return "\\n";
-    case 13: return "\\r";
-    case 26: return "\\Z";
-    case 39: return "''";
-    case 92: return "\\\\";
-  }
-}
-
-/**
- * MySQL context.
- *
- * @private
- */
-class MySQLContext extends Context {
-  constructor(options) {
-    super("mysql", options);
-
-    this.features.quoteStyle = QuoteStyle.kGrave;
-    this._update();
-  }
-
-  /** @override */
-  escapeString(value) {
-    return "'" + value.replace(reEscapeChars, fnEscapeString) + "'";
-  }
-}
-xql$dialect.add("mysql", MySQLContext);
 
 })();
 
@@ -2061,10 +2061,16 @@ class Binary extends Node {
     return this;
   }
 
+  /**
+   * Adds a `value` to the left node, which must be array or compatible.
+   *
+   * @param {*} value Value to add.
+   * @return {this}
+   */
   addLeft(value) {
     var left = this._left;
-    if (!isArray(left))
-      throwCompileError("Binary.addLeft() - Left operand is not an Array");
+    if (!left || typeof left.push !== "function")
+      throwCompileError("Binary.addLeft() - Left operand is not array or compatible");
 
     left.push(value);
     return this;
@@ -2090,10 +2096,16 @@ class Binary extends Node {
     return this;
   }
 
+  /**
+   * Adds a `value` to the right node, which must be array or compatible.
+   *
+   * @param {*} value Value to add.
+   * @return {this}
+   */
   addRight(value) {
     var right = this._right;
-    if (!isArray(right))
-      throwCompileError("Binary.addRight() - Left operand is not an Array.");
+    if (!right || typeof right.push !== "function")
+      throwCompileError("Binary.addRight() - Right operand is not array or compatible");
 
     right.push(value);
     return this;
@@ -3570,7 +3582,7 @@ class SelectQuery extends Query {
       }
     }
     else if (isArray(arg)) {
-      // Optimization: If `_groupBy` is `null` the given array `f` is referenced.
+      // Optimization: If `_groupBy` is `null` the given array `arg` is referenced.
       if (groupBy === null) {
         this._groupBy = arg;
       }

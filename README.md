@@ -48,7 +48,7 @@ var ctx = xql.dialect.newContext({ dialect: "pgsql" /* [more options]*/ });
 var query = xql.SELECT("*")
   .FROM("cities")
   .WHERE("population", ">=", 1000000) // 3 form WHERE.
-  .WHERE("capital", true)             // 2 form WHERE, implicit equality.
+  .WHERE("capital", true);            // 2 form WHERE, implicit equality.
 
 // Use context to compile the query.
 console.log(query.compileQuery(ctx));
@@ -67,7 +67,7 @@ var ctx = xql.dialect.newContext({
 var query = xql.SELECT("*")
   .FROM("cities")
   .WHERE("population", ">=", 1000000)
-  .WHERE("capital", true)
+  .WHERE("capital", true);
 
 console.log(query.compileQuery(ctx));
 // SELECT
@@ -77,6 +77,8 @@ console.log(query.compileQuery(ctx));
 // WHERE
 //   "population" >= 1000000 AND "capital" = TRUE;
 ```
+
+If you ask yourself why all SQL constructs are UPPERCASED the explanation is very simple: in the past xql.js supported both conventions (UPPERCASED and camelCased), but it led to confusion and ambiguity. The new API follows a very simple rule: if any function creates a new SQL expression it's name is always UPPERCASED, otherwise it's camelCased. This way it's very simple to visually distinguish between SQL building blocks and other logic in the source code.
 
 API Overview
 ------------

@@ -1,6 +1,7 @@
 {
   "name": "xql",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "license": "Unlicense",
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
@@ -26,19 +27,14 @@
     "url": "https://github.com/exjs/xql/issues"
   },
 
-  "contributors": [{
-    "name": "Petr Kobalicek",
-    "email": "kobalicek.petr@gmail.com",
-    "url": "http://kobalicek.com"
-  }],
-
-  "license": "Unlicense",
+  "contributors": [
+    "Petr Kobalicek <kobalicek.petr@gmail.com> (kobalicek.com)"
+  ],
 
   "main": "xql.js",
 
-  "devDependencies": {
-    "mocha": "*"
-  },
+  "engines": { "node": ">=4" },
+  "devDependencies": { "mocha": "*" },
 
   "repository" : {
     "type": "git",
