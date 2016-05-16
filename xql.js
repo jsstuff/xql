@@ -10,7 +10,7 @@
  */
 const xql = _xql;
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 
 // ============================================================================
 // [internal]
@@ -703,7 +703,7 @@ class Context {
   }
 
   /**
-   * Set the dialect version to `version`.
+   * Set the version of the dialect to the given `version`.
    *
    * @param {string} version Version string as "major.minor.patch". The string
    * can omit any version part if not used, gratefully accepting "major.minor"
@@ -716,6 +716,25 @@ class Context {
     this._update();
 
     return this;
+  }
+
+  /**
+   * Compiles the given query `q`.
+   *
+   * @param {string|Node} q Query to compile, can be either string or `xql.Node`.
+   * @return {string} Compiled query string.
+   *
+   * @throws {TypeError} If the query `q` is an object that is not compatible
+   *   with `xql.Node`.
+   */
+  compile(q) {
+    if (typeof q === "string")
+      return q;
+
+    if (typeof q.compileQuery === "function")
+      return q.compileQuery(this);
+
+    throw new TypeError("xql.Context.compile() - Invalid argument");
   }
 
   /**
