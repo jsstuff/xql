@@ -361,7 +361,7 @@ describe("xql", function() {
       'SELECT * FROM "x" ORDER BY "a" ASC, "b" DESC');
   });
 
-  it("should test SELECT ... FROM ... OFFSET ... LIMIT ...", function() {
+  it("should test SELECT ... FROM ... LIMIT ... OFFSET ...", function() {
     shouldMatch(
       SELECT().FROM("x").OFFSET(1),
       'SELECT * FROM "x" OFFSET 1');
@@ -372,7 +372,7 @@ describe("xql", function() {
 
     shouldMatch(
       SELECT().FROM("x").OFFSET(10).LIMIT(20),
-      'SELECT * FROM "x" OFFSET 10 LIMIT 20');
+      'SELECT * FROM "x" LIMIT 20 OFFSET 10');
   });
 
   it("should test SELECT ... without using a table", function() {
@@ -480,10 +480,10 @@ describe("xql", function() {
   });
 
   // Combined query with ORDER BY and/or OFFSET/LIMIT.
-  it("should test ... UNION ... ORDER BY ... OFFSET ... LIMIT ...", function() {
+  it("should test ... UNION ... ORDER BY ... LIMIT ... OFFSET ...", function() {
     shouldMatch(
-      UNION(SELECT("a").FROM("x"), SELECT("a").FROM("y")).ORDER_BY("a").OFFSET(10).LIMIT(10),
-      'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" ORDER BY "a" OFFSET 10 LIMIT 10');
+      UNION(SELECT("a").FROM("x"), SELECT("a").FROM("y")).ORDER_BY("a").OFFSET(10).LIMIT(20),
+      'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" ORDER BY "a" LIMIT 20 OFFSET 10');
   });
 
   // Multiple combined queries in the same group.

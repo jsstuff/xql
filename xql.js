@@ -463,10 +463,12 @@ class Context {
     // Dialect features (these are modified by a dialect-specific `Context`).
     this.features = {
       quoteStyle       : QuoteStyle.kDouble, // The default SQL quotes are "".
-      nativeBoolean    : false,              // If native boolean is supported.
-      nativeArray      : false,              // If native array is supported.
-      returning        : false,              // If RETURNING or OUTPUT is supported.
-      returningAsOutput: false,              // Use OUTPUT to implement RETURNING.
+      nativeBoolean    : false,              // Supports `BOOLEAN`.
+      nativeArray      : false,              // Supports `ARRAY`.
+      nullsFirstLast   : false,              // Supports `NULLS FIRST` & `NULLS LAST`.
+      nullsSortBottom  : false,              // NULLs are sorted last by default.
+      returning        : false,              // If `RETURNING` or `OUTPUT` is supported.
+      returningAsOutput: false,              // Use `OUTPUT` instead of `RETURNING`.
       specialNumbers   : false               // No special numbers by default.
     };
 
@@ -1436,17 +1438,17 @@ class Context {
   }
 
   _compileSort(node) {
-    var value = node._value;
-    var flags = node._flags;
+    var out;
+
+    const value = node._value;
+    const flags = node._flags;
 
     // Value of type:
     //   - `number` - describes column order,
     //   - `string` - describes column name.
     //   - `Node`   - SQL expression/column.
-    var out;
-
     if (typeof value === "number")
-      out = "" + value;
+      out = this.escapeNumber(value);
     else if (typeof value === "string")
       out = this.escapeIdentifier(value);
     else if (value instanceof Node)
@@ -1454,26 +1456,42 @@ class Context {
     else
       throwCompileError("Sort.compileNode() - Invalid value type " + typeof value);
 
-    if (flags & NodeFlags.kAscending)
-      out += " ASC";
-    else if (flags & NodeFlags.kDescending)
-      out += " DESC";
+    const sortOrder = (flags & NodeFlags.kAscending ) ? " ASC"  :
+                      (flags & NodeFlags.kDescending) ? " DESC" : "";
 
-    if (flags & NodeFlags.kNullsFirst)
-      out += " NULLS FIRST";
-    else if (flags & NodeFlags.kNullsLast)
-      out += " NULLS LAST";
+    if ((flags & (NodeFlags.kNullsFirst | NodeFlags.kNullsLast)) === 0)
+      return out + sortOrder;
 
-    return out;
+    const features = this.features;
+    const nullsFirst = flags & NodeFlags.kNullsFirst ? true : false;
+
+    if (features.nullsFirstLast)
+      return out + sortOrder + (nullsFirst ? " NULLS FIRST" : " NULLS LAST");
+
+    // Unsupported `NULLS FIRST` and `NULLS LAST`. The best we can do is to omit
+    // it completely if the DB sorts the records the requested way by default.
+    const nullsFirstByDB = features.nullsSortBottom
+      ? (flags & NodeFlags.kDescending) !== 0
+      : (flags & NodeFlags.kDescending) === 0;
+
+    if (nullsFirst === nullsFirstByDB)
+      return out + sortOrder;
+
+    // Okay, we want the opposite of what DB does, one more expression
+    // that precedes the current one is needed: `<column> IS [NOT] NULL`.
+    if (nullsFirst)
+      return "(" + out + " IS NOT NULL)" + this._COMMA_STR + out + sortOrder;
+    else
+      return "(" + out + " IS NULL)"     + this._COMMA_STR + out + sortOrder;
   }
 
   _compileGroupBy(groupBy) {
     var out = "";
-    var _COMMA_STR = this._COMMA_STR;
+    var COMMA = this._COMMA_STR;
 
     for (var i = 0, len = groupBy.length; i < len; i++) {
       var group = groupBy[i];
-      if (out) out += _COMMA_STR;
+      if (out) out += COMMA;
 
       // Group can be in a form of `string` or `Node`.
       if (typeof group === "string")
@@ -1487,11 +1505,11 @@ class Context {
 
   _compileOrderBy(orderBy) {
     var out = "";
-    var _COMMA_STR = this._COMMA_STR;
+    var COMMA = this._COMMA_STR;
 
     for (var i = 0, len = orderBy.length; i < len; i++) {
       var sort = orderBy[i];
-      if (out) out += _COMMA_STR;
+      if (out) out += COMMA;
       out += sort.compileNode(this);
     }
 
@@ -1500,11 +1518,11 @@ class Context {
 
   _compileFields(list) {
     var out = "";
-    var _COMMA_STR = this._COMMA_STR;
+    var COMMA = this._COMMA_STR;
 
     for (var i = 0, len = list.length; i < len; i++) {
       var column = list[i];
-      if (out) out += _COMMA_STR;
+      if (out) out += COMMA;
 
       // Compile column identifier or expression.
       if (typeof column === "string") {
@@ -1561,12 +1579,12 @@ class Context {
   _compileOffsetLimit(offset, limit) {
     var out = "";
 
-    if (offset)
-      out += "OFFSET " + offset;
-
-    if (limit) {
-      if (out) out += " ";
+    if (limit)
       out += "LIMIT " + limit;
+
+    if (offset) {
+      if (out) out += " ";
+      out += "OFFSET " + offset;
     }
 
     return out;
@@ -1635,8 +1653,8 @@ class Context {
   }
 
   _indent$pretty(s) {
-    var _INDENT_STR = this._INDENT_STR;
-    return _INDENT_STR + s.replace(reNewLine, "\n" + _INDENT_STR);
+    var INDENT = this._INDENT_STR;
+    return INDENT + s.replace(reNewLine, "\n" + INDENT);
   }
 
   /**
@@ -1697,10 +1715,14 @@ class PGSQLContext extends Context {
     super("pgsql", options);
 
     // Setup Postgres features.
-    this.features.nativeBoolean  = true;
-    this.features.nativeArray    = true;
-    this.features.returning      = true;
-    this.features.specialNumbers = true;
+    Object.assign(this.features, {
+      nativeBoolean  : true,
+      nativeArray    : true,
+      nullsFirstLast : true,
+      nullsSortBottom: true,
+      returning      : true,
+      specialNumbers : true
+    });
 
     // Setup Postgres specific.
     this._DB_POS_INF = "'Infinity'";
@@ -2020,8 +2042,10 @@ class MySQLContext extends Context {
   constructor(options) {
     super("mysql", options);
 
-    this.features.quoteStyle = QuoteStyle.kGrave;
-    this.features.nativeBoolean = true;
+    Object.assign(this.features, {
+      quoteStyle    : QuoteStyle.kGrave,
+      nativeBoolean : true
+    });
 
     this._update();
   }
