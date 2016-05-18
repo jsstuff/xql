@@ -105,27 +105,24 @@ Node                       | Description
 :------------------------- | :------------------------------------
 `xql.node.Node`            | Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `xql.node.Node`
 `xql.node.Raw`             | Raw SQL expression
-`xql.node.Unary`           | Unary SQL node (can contain a single child)
-`xql.node.Binary`          | Binary SQL node (can contain two children, left and right)
-`xql.node.Operator`        | SQL operator, like `=`, `+`, `-`, etc...
-`xql.node.Group`           | Group of SQL nodes
-`xql.node.Logical`         | Logical operator (Group), like `AND`, `OR`, etc...
+`xql.node.Unary`           | SQL unary node (can contain a single child)
+`xql.node.UnaryOp`         | SQL unary operator, like `-`, `NOT`, etc...
+`xql.node.Binary`          | SQL binary node (can contain two children, left and right)
+`xql.node.BinaryOp`        | SQL binary operator, like `=`, `+`, `-`, etc...
+`xql.node.NodeArray`       | Contains array of nodes or values
+`xql.node.Logical`         | Logical operator like `AND` and `OR`, which is based on `NodeArray` and can contain more than two expressions
 `xql.node.ObjectOp`        | Special node that contains key/value interface that can be used to construct `WHERE` like expressions
 `xql.node.Identifier`      | SQL identifier, like table or column
 `xql.node.Join`            | SQL `JOIN` construct
 `xql.node.Sort`            | SQL `ORDER BY` construct
-`xql.node.Func`            | SQL function expression
-`xql.node.Aggregate`       | SQL aggregate expression
+`xql.node.Func`            | SQL function or aggregate expression
 `xql.node.Value`           | SQL value base class
-`xql.node.PrimitiveValue`  | Primitive value like `NULL`, boolean, number, or string
-`xql.node.ArrayValue`      | Array value (can serialize as JSON or ARRAY)
-`xql.node.JsonValue`       | JSON value (can serialize as JSON or STRING)
 `xql.node.Query`           | SQL query base class
 `xql.node.SelectQuery`     | SQL `SELECT` query
 `xql.node.InsertQuery`     | SQL `INSERT` query
 `xql.node.UpdateQuery`     | SQL `UPDATE` query
 `xql.node.DeleteQuery`     | SQL `DELETE` query
-`xql.node.CombinedQuery`   | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
+`xql.node.CompoundQuery`   | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
 
 High-level SQL builder concepts:
 
@@ -135,12 +132,12 @@ SQL-Builder API            | Description
 `xql.INSERT(...)`          | Create a `xql.node.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
 `xql.UPDATE(...)`          | Create a `xql.node.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
 `xql.DELETE(...)`          | Create a `xql.node.DeleteQuery` and use an optional first argument as a table name
-`xql.EXCEPT(...)`          | Create a `xql.node.CombinedQuery` describing `EXCEPT` expression
-`xql.EXCEPT_ALL(...)`      | Create a `xql.node.CombinedQuery` describing `EXCEPT ALL` query
-`xql.INTERSECT(...)`       | Create a `xql.node.CombinedQuery` describing `INTERSECT` query
-`xql.INTERSECT_ALL(...)`   | Create a `xql.node.CombinedQuery` describing `INTERSECT ALL` query
-`xql.UNION(...)`           | Create a `xql.node.CombinedQuery` describing `UNION` query
-`xql.UNION_ALL(...)`       | Create a `xql.node.CombinedQuery` describing `UNION ALL` query
+`xql.EXCEPT(...)`          | Create a `xql.node.CompoundQuery` describing `EXCEPT` expression
+`xql.EXCEPT_ALL(...)`      | Create a `xql.node.CompoundQuery` describing `EXCEPT ALL` query
+`xql.INTERSECT(...)`       | Create a `xql.node.CompoundQuery` describing `INTERSECT` query
+`xql.INTERSECT_ALL(...)`   | Create a `xql.node.CompoundQuery` describing `INTERSECT ALL` query
+`xql.UNION(...)`           | Create a `xql.node.CompoundQuery` describing `UNION` query
+`xql.UNION_ALL(...)`       | Create a `xql.node.CompoundQuery` describing `UNION ALL` query
 `xql.SORT(c, sort, nulls)` | Create a `xql.node.Sort` node wrapping an `ORDER BY` clause
 `xql.RAW(s, bindings)`     | Create a RAW query `xql.node.Raw` node based on query string `s` and optional `bindings`
 `xql.AND(...)`             | Create a `xql.node.Logical` expression describing `AND` expression

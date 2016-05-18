@@ -22,11 +22,12 @@ function returnFalse() { return false; }
 // Global shorthands.
 const isArray  = Array.isArray;
 const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
-const slice    = Array.prototype.slice;
 const hasOwn   = Object.prototype.hasOwnProperty;
+const slice    = Array.prototype.slice;
 
-// Empty object used as an replacement for value of object with no properties.
+// Empty object/array used as an replacement for null/undefined in some cases.
 const EmptyObject = {};
+const emptyArray = [];
 
 // Global regular expressions.
 const reNewLine      = /\n/g;                // Check for new line characters.
@@ -47,19 +48,19 @@ const IdentifierMap = {
 
 // Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
 const BoolMap = {
-  "0"       : "FALSE",
-  "f"       : "FALSE",
-  "false"   : "FALSE",
-  "n"       : "FALSE",
-  "no"      : "FALSE",
-  "off"     : "FALSE",
+  "0"       : false,
+  "f"       : false,
+  "false"   : false,
+  "n"       : false,
+  "no"      : false,
+  "off"     : false,
 
-  "1"       : "TRUE",
-  "t"       : "TRUE",
-  "true"    : "TRUE",
-  "y"       : "TRUE",
-  "yes"     : "TRUE",
-  "on"      : "TRUE"
+  "1"       : true,
+  "t"       : true,
+  "true"    : true,
+  "y"       : true,
+  "yes"     : true,
+  "on"      : true
 };
 Object.keys(BoolMap).forEach(function(key) {
   BoolMap[key.toUpperCase()] = BoolMap[key];
@@ -95,125 +96,73 @@ Object.keys(TypeMap).forEach(function(key) {
   TypeMap[key.toUpperCase()] = TypeMap[key];
 });
 
-// Operator flags.
-const OperatorFlags = {
+/**
+ * Operator and function flags.
+ *
+ * @alias xql.OpFlags
+ */
+const OpFlags = {
   kUnary       : 0x00000001, // Operator is unary (has one child node - `value`).
   kBinary      : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
-
-  kCond        : 0x00000010, // Operator is a conditional expression.
-  kData        : 0x00000020, // Operator processes data (has a result).
-
-  kInPlaceNot  : 0x00001000, // Operator allows in place NOT (a NOT OP b).
-  kLeftValues  : 0x00002000, // Operator expects left  values as (a, b[, ...]).
-  kRightValues : 0x00004000, // Operator expects right values as (a, b[, ...]).
-
-  kBoolean     : 0x00010000, // Operator allows boolean  operands.
-  kNumber      : 0x00020000, // Operator allows number   operands.
-  kString      : 0x00040000, // Operator allows string   operands.
-  kArray       : 0x00080000, // Operator allows array    operands.
-  kJson        : 0x00100000, // Operator allows json     operands.
-  kRange       : 0x00200000, // Operator allows range    operands.
-  kGeometry    : 0x00400000  // Operator allows geometry operands.
+  kFunction    : 0x00000004, // Operator is a function.
+  kAggregate   : 0x00000008, // Operator is an aggregation function.
+  kVoid        : 0x00000010, // Operator has no return value.
+  kInPlaceNot  : 0x00000020, // Operator allows in place NOT (a NOT OP b).
+  kLeftValues  : 0x00000040, // Operator expects left  values as (a, b[, ...]).
+  kRightValues : 0x00000080, // Operator expects right values as (a, b[, ...]).
 };
+xql.OpFlags = OpFlags;
 
-// Operator definitions.
-const OperatorDefs = (function() {
-  const kUnary        = OperatorFlags.kUnary;
-  const kBinary       = OperatorFlags.kBinary;
-
-  const kCond         = OperatorFlags.kCond;
-  const kData         = OperatorFlags.kData;
-
-  const kInPlaceNot   = OperatorFlags.kInPlaceNot;
-  const kLeftValues   = OperatorFlags.kLeftValues;
-  const kRightValues  = OperatorFlags.kRightValues;
-
-  const kBoolean      = OperatorFlags.kBoolean;
-  const kNumber       = OperatorFlags.kNumber;
-  const kString       = OperatorFlags.kString;
-  const kArray        = OperatorFlags.kArray;
-  const kJson         = OperatorFlags.kJson;
-  const kRange        = OperatorFlags.kRange;
-  const kGeometry     = OperatorFlags.kGeometry;
-
-  const kAnyType      = kBoolean  |
-                        kNumber   |
-                        kString   |
-                        kArray    |
-                        kJson     |
-                        kRange    |
-                        kGeometry ;
-
-  var defs = {};
-
-  function add(op, flags) {
-    var def = {
-      op    : op,
-      as    : " " + op + " ",
-      not   : null,
-      flags : flags
-    };
-    defs[op] = def;
+/**
+ * Operator and function information.
+ *
+ * @alias xml.OpInfo
+ */
+const OpInfo = new class OpInfo {
+  constructor() {
+    this._map = {};
+    this._dialects = {};
   }
 
-  // +---------+---------------------------+-----------------------------------+
-  // | Keyword | Operator Type             | Operator Flags                    |
-  // +---------+---------------------------+-----------------------------------+
-  add("="      , kBinary | kCond           | kNumber | kString                 );
-  add(">"      , kBinary | kCond           | kNumber | kString                 );
-  add(">="     , kBinary | kCond           | kNumber | kString                 );
-  add("<"      , kBinary | kCond           | kNumber | kString                 );
-  add("<="     , kBinary | kCond           | kNumber | kString                 );
-  add("<>"     , kBinary | kCond           | kNumber | kString                 );
-  add("@>"     , kBinary | kCond           | kArray  | kRange                  ); // Contains
-  add("<@"     , kBinary | kCond           | kArray  | kRange                  ); // Contained By.
-  add("&&"     , kBinary | kCond           | kRange                            ); // Overlap.
-  add("&<"     , kBinary | kCond           | kRange                            ); // Right Of.
-  add("&>"     , kBinary | kCond           | kRange                            ); // Left Of.
-  add("-|-"    , kBinary | kCond           | kRange                            ); // Adjacent To.
-  add("+"      , kBinary | kData           | kNumber | kArray | kRange         ); // Add/Union.
-  add("-"      , kBinary | kData           | kNumber | kArray | kRange         ); // Sub/Difference.
-  add("*"      , kBinary | kData           | kNumber | kArray | kRange         ); // Multiply/Intersect.
-  add("/"      , kBinary | kData           | kNumber                           ); // Divide.
-  add("%"      , kBinary | kData           | kNumber                           ); // Modulo.
-  add("^"      , kBinary | kData           | kNumber                           ); // Power.
-  add("&"      , kBinary | kData           | kNumber                           ); // Bit-And.
-  add("|"      , kBinary | kData           | kNumber                           ); // Bit-Or.
-  add("#"      , kBinary | kData           | kNumber                           ); // Bit-Xor.
-  add("~"      , kBinary | kCond | kData   | kNumber | kString                 ); // Bit-Not/Match.
-  add("<<"     , kBinary | kCond | kData   | kNumber | kRange                  ); // Shift-Left/LeftOf.
-  add(">>"     , kBinary | kCond | kData   | kNumber | kRange                  ); // Shift-Right/RightOf.
-  add("||"     , kBinary | kData           | kString                           ); // Concat.
-  add("~*"     , kBinary | kCond           | kString                           ); // Match (I).
-  add("!~"     , kBinary | kCond           | kString                           ); // Not Match.
-  add("!~*"    , kBinary | kCond           | kString                           ); // Not Match (I).
+  get(name) {
+    var map = this._map;
+    return hasOwn.call(map, name) ? map[name] : null;
+  }
 
-  add("IS"     , kBinary | kCond           | kAnyType     | kInPlaceNot        ); // IS.
-  add("AND"    , kBinary | kCond           | kBoolean     | kInPlaceNot        ); // Logical And.
-  add("OR"     , kBinary | kCond           | kBoolean     | kInPlaceNot        ); // Logical Or.
-  add("LIKE"   , kBinary | kCond           | kString      | kInPlaceNot        ); // Like.
-  add("ILIKE"  , kBinary | kCond           | kString      | kInPlaceNot        ); // Like (I).
-  add("IN"     , kBinary | kCond           | kRightValues | kInPlaceNot        ); // In.
+  add(func) {
+    this._map[func.name] = func;
+  }
 
-  // Aliases;
-  defs["!="] = defs["<>"];
+  alias(a, b) {
+    this._map[a] = this._map[b];
+  }
 
-  // Negations.
-  defs["="  ].not = defs["<>" ];
-  defs[">"  ].not = defs["<=" ];
-  defs[">=" ].not = defs["<"  ];
-  defs["<"  ].not = defs[">=" ];
-  defs["<=" ].not = defs[">"  ];
-  defs["<>" ].not = defs["="  ];
-  defs["~"  ].not = defs["!~" ];
-  defs["!~" ].not = defs["~"  ];
-  defs["~*" ].not = defs["!~*"];
-  defs["!~*"].not = defs["~*" ];
+  not(a, b) {
+    var aInfo = this._map[a];
+    var bInfo = this._map[b];
 
-  return defs;
-})();
+    aInfo.not = bInfo;
+    bInfo.not = aInfo;
+  }
 
-// Identifier quote styles.
+  all() {
+    return this._map;
+  }
+
+  forEach(cb, thisArg) {
+    var map = this._map;
+    for (var k in map) {
+      cb.call(thisArg, k, map[k]);
+    }
+  }
+};
+xql.OpInfo = OpInfo;
+
+/**
+ * Identifier's quote style.
+ *
+ * @alias xql.QuoteStyle
+ */
 const QuoteStyle = {
   /** Double quotes, for example "identifier". */
   kDouble       : 0,
@@ -222,18 +171,20 @@ const QuoteStyle = {
   /** Brackets, for example [identifier]. */
   kBrackets     : 2
 };
+xql.QuoteStyle = QuoteStyle;
 
-// Node flags.
+/**
+ * Node flags.
+ *
+ * @alias xql.NodeFlags
+ */
 const NodeFlags = {
   kImmutable    : 0x00000001,
   kNot          : 0x00000002,
-
   kAscending    : 0x00000010,
   kDescending   : 0x00000020,
-
   kNullsFirst   : 0x00000040,
   kNullsLast    : 0x00000080,
-
   kAll          : 0x00000100,
   kDistinct     : 0x00000200
 };
@@ -257,149 +208,6 @@ const SortNulls = {
   "NULLS LAST"  : NodeFlags.kNullsLast
 };
 
-// List of ordinary functions, which will become available in `xql` namespace.
-const functionsList = [
-  "ABS",
-  "ACOS",
-  "ARRAY_APPEND",
-  "ARRAY_CAT",
-  "ARRAY_DIMS",
-  "ARRAY_NDIMS",
-  "ARRAY_FILL",
-  "ARRAY_LENGTH",
-  "ARRAY_LOWER",
-  "ARRAY_PREPEND",
-  "ARRAY_REMOVE",
-  "ARRAY_REPLACE",
-  "ARRAY_TO_STRING",
-  "ARRAY_UPPER",
-  "ASCII",
-  "ASIN",
-  "ATAN",
-  "ATAN2",
-  "BIT_LENGTH",
-  "BTRIM",
-  "CBRT",
-  "CEIL",
-  "CEILING",
-  "CHAR_LENGTH",
-  "CHR",
-  "COALESCE",
-  "CONCAT",
-  "CONCAT_WS",
-  "CONVERT",
-  "CONVERT_FROM",
-  "CONVERT_TO",
-  "COS",
-  "COT",
-  "DECODE",
-  "DEGREES",
-  "DIV",
-  "ENCODE",
-  "EXISTS",
-  "EXP",
-  "FLOOR",
-  "FORMAT",
-  "GET_BIT",
-  "GET_BYTE",
-  "GREATEST",
-  "INITCAP",
-  "ISEMPTY",
-  "LEAST",
-  "LEFT",
-  "LENGTH",
-  "LN",
-  "LOG",
-  "LOWER",
-  "LOWER_INC",
-  "LOWER_INF",
-  "LPAD",
-  "LTRIM",
-  "MD5",
-  "MOD",
-  "NULLIF",
-  "OCTET_LENGTH",
-  "OVERLAY",
-  "PG_CLIENT_ENCODING",
-  "PI",
-  "POSITION",
-  "POWER",
-  "QUOTE_IDENT",
-  "QUOTE_LITERAL",
-  "QUOTE_NULLABLE",
-  "RADIANS",
-  "RANDOM",
-  "REGEXP_MATCHES",
-  "REGEXP_REPLACE",
-  "REGEXP_SPLIT_TO_ARRAY",
-  "REGEXP_SPLIT_TO_TABLE",
-  "REPEAT",
-  "REPLACE",
-  "REVERSE",
-  "RIGHT",
-  "ROUND",
-  "RPAD",
-  "RTRIM",
-  "SET_BIT",
-  "SET_BYTE",
-  "SETSEED",
-  "SIGN",
-  "SIN",
-  "SPLIT_PART",
-  "SQRT",
-  "STRING_TO_ARRAY",
-  "STRPOS",
-  "SUBSTR",
-  "SUBSTRING",
-  "TAN",
-  "TO_ASCII",
-  "TO_HEX",
-  "TRANSLATE",
-  "TRIM",
-  "TRUNC",
-  "UNNEST",
-  "UPPER",
-  "UPPER_INC",
-  "UPPER_INF",
-  "WIDTH_BUCKET"
-];
-
-// List of aggregate functions, which will become available in `xql` namespace.
-const aggregatesList = [
-  "ARRAY_AGG",
-  "AVG",
-  "BIT_AND",
-  "BIT_OR",
-  "BOOL_AND",
-  "BOOL_OR",
-  "CORR",
-  "COUNT",
-  "COVAR_POP",
-  "COVAR_SAMP",
-  "EVERY",
-  "JSON_AGG",
-  "MAX",
-  "MIN",
-  "REGR_AVGX",
-  "REGR_AVGY",
-  "REGR_COUNT",
-  "REGR_INTERCEPT",
-  "REGR_R2",
-  "REGR_SLOPE",
-  "REGR_SXX",
-  "REGR_SXY",
-  "REGR_SYY",
-  "STDDEV",
-  "STDDEV_POP",
-  "STDDEV_SAMP",
-  "STRING_AGG",
-  "SUM",
-  "VARIANCE",
-  "VAR_POP",
-  "VAR_SAMP",
-  "XMLAGG"
-];
-
 // ============================================================================
 // [xql.error]
 // ============================================================================
@@ -415,7 +223,8 @@ const xql$error = xql.error = {};
 /**
  * Error thrown if data is wrong.
  * @param message Error mesasge.
- * @class xql.error.ValueError
+ *
+ * @alias xql.error.ValueError
  */
 class ValueError extends Error {
   constructor(message) {
@@ -429,7 +238,8 @@ xql$error.ValueError = ValueError;
 /**
  * Error thrown if query is wrong.
  * @param message Error mesasge.
- * @class xql.error.CompileError
+ *
+ * @alias xql.error.CompileError
  */
 class CompileError extends Error {
   constructor(message) {
@@ -496,29 +306,6 @@ function typeOf(value) {
   return "object";
 }
 xql$misc.typeOf = typeOf;
-
-/**
- * Convert a given string `s` into a camelCase representation.
- *
- * @param {string} s
- * @return {string}
- *
- * @function xql.misc.toCamelCase(s)
- */
-const toCamelCase = (function() {
-  const re = /_[a-z]/g;
-
-  function fn(s) {
-    return s.charAt(1);
-  }
-
-  function toCamelCase(s) {
-    return s.toLowerCase().replace(re, fn);
-  }
-
-  return toCamelCase;
-})();
-xql$misc.toCamelCase = toCamelCase;
 
 function parseVersion(s) {
   var parts = s.split(".");
@@ -594,7 +381,7 @@ const xql$dialect$map = {};
  * @function xql.dialect.get
  */
 function xql$dialect$has(dialect) {
-  return hasOwnProperty.call(xql$dialect$map, dialect);
+  return hasOwn.call(xql$dialect$map, dialect);
 }
 xql$dialect.has = xql$dialect$has;
 
@@ -628,7 +415,7 @@ function $xql$dialect$newContext(options) {
   if (typeof dialect !== "string")
     throwTypeError("xql.dialect.newContext() - Options must have a dialect key");
 
-  if (!hasOwnProperty.call(xql$dialect$map, dialect))
+  if (!hasOwn.call(xql$dialect$map, dialect))
     throwTypeError("xql.dialect.newContext() - Unknown dialect '" + dialect + "'");
 
   var classobj = xql$dialect$map[dialect];
@@ -656,7 +443,6 @@ function fnBrackets(s) {
  * @param {string} dialect Database dialect the context is using.
  * @param {object} options Context options.
  *
- * @class
  * @alias xql.dialect.Context
  */
 class Context {
@@ -676,9 +462,12 @@ class Context {
 
     // Dialect features (these are modified by a dialect-specific `Context`).
     this.features = {
-      nativeArrays  : false,              // No native array types by default.
-      specialNumbers: false,              // No special numbers by default.
-      quoteStyle    : QuoteStyle.kDouble  // The default SQL quotes are "".
+      quoteStyle       : QuoteStyle.kDouble, // The default SQL quotes are "".
+      nativeBoolean    : false,              // If native boolean is supported.
+      nativeArray      : false,              // If native array is supported.
+      returning        : false,              // If RETURNING or OUTPUT is supported.
+      returningAsOutput: false,              // Use OUTPUT to implement RETURNING.
+      specialNumbers   : false               // No special numbers by default.
     };
 
     // Functions that depend on `this.pretty` option.
@@ -690,6 +479,9 @@ class Context {
     this._DB_POS_INF     = "";   // Positive infinity value or keyword.
     this._DB_NEG_INF     = "";   // Negative infinity value or keyword.
     this._DB_NAN         = "";   // NaN value or keyword.
+
+    this._DB_TRUE        = "";   // Dialect-specific TRUE value.
+    this._DB_FALSE       = "";   // Dialect-specific FALSE value.
 
     this._SPACE_OR_NL    = "";   // Space character, either " " or "\n" (pretty).
     this._COMMA_STR      = "";   // Comma separator, either ", " or ",\n" (pretty).
@@ -869,18 +661,17 @@ class Context {
 
       switch (type) {
         case "boolean":
-          if (value == null)
-            return "NULL";
+          if (value == null) return "NULL";
 
           if (typeof value === "boolean")
-            return value ? "TRUE" : "FALSE";
+            return value === true ? this._DB_TRUE : this._DB_FALSE;
 
           if (typeof value === "string" && hasOwn.call(BoolMap, value))
-            return BoolMap[value];
+            return BoolMap[value] === true ? this._DB_TRUE : this._DB_FALSE;
 
           if (typeof value === "number") {
-            if (value === 0) return "FALSE";
-            if (value === 1) return "TRUE";
+            if (value === 0) return this._DB_FALSE;
+            if (value === 1) return this._DB_TRUE;
             throwValueError("Couldn't convert 'number(" + value + ")' to 'boolean'");
           }
 
@@ -936,8 +727,7 @@ class Context {
           break;
 
         case "array":
-          if (value == null)
-            return "NULL";
+          if (value == null) return "NULL";
 
           if (Array.isArray(value))
             return this.escapeArray(value, false);
@@ -946,8 +736,7 @@ class Context {
           break;
 
         case "values":
-          if (value == null)
-            return "NULL";
+          if (value == null) return "NULL";
 
           if (Array.isArray(value))
             return this.escapeValues(value, false);
@@ -959,9 +748,7 @@ class Context {
           // `undefined` maps to native DB `NULL` type while `null` maps to
           // JSON `null` type. This is the only way to distinguish between
           // these. `undefined` is disallowed by JSON anyway.
-          if (value === undefined)
-            return "NULL";
-
+          if (value === undefined) return "NULL";
           return this.escapeJson(value);
 
         case "raw":
@@ -978,20 +765,14 @@ class Context {
     //
     // These types are expected in most cases so they are checked first. All
     // other types require more processing to escape them properly anyway.
-    if (typeof value === "string")
-      return this.escapeString(value);
-
-    if (typeof value === "number")
-      return this.escapeNumber(value);
-
-    if (typeof value === "boolean")
-      return value ? "TRUE" : "FALSE";
+    if (typeof value === "string") return this.escapeString(value);
+    if (typeof value === "number") return this.escapeNumber(value);
+    if (typeof value === "boolean") return value === true ? this._DB_TRUE : this._DB_FALSE;
 
     // Check - `undefined` and `null`.
     //
     // Undefined implicitly converts to `NULL`.
-    if (value == null)
-      return "NULL";
+    if (value == null) return "NULL";
 
     // Sanity.
     //
@@ -1112,6 +893,23 @@ class Context {
   }
 
   /**
+   * Escapes a value (or compiles it if it's an expression) and surrounds it
+   * with parentheses if it's an expression.
+   *
+   * The purpose of this function is to simplify generation of some expressions
+   * where omitting sparentheses could cause SQL error due to operator precedence
+   * or ambiguity.
+   */
+  escapeOrWrap(value) {
+    const out = this.escapeValue(value);
+
+    if (value instanceof Node && !(value instanceof Value) && !(value instanceof Identifier))
+      return "(" + out + ")";
+    else
+      return out;
+  }
+
+  /**
    * Substitutes `?` sequences or Postgres specific `$N` sequences in the `query`
    * string with `bindings` and returns a new string. The function automatically
    * detects the format of `query` string and checks if it's consistent (i.e. it
@@ -1135,13 +933,663 @@ class Context {
     throwTypeError("Abstract method called");
   }
 
+  _compileUnaryOp(node) {
+    var type = node._type;
+    var out = this.escapeValue(node._value);
+
+    switch (type) {
+      case "NOT":
+        out = "NOT (" + out + ")";
+        break;
+
+      case "-":
+        out = "-(" + out + ")";
+        break;
+
+      default:
+        if (type)
+          out = type + " " + out;
+        break;
+    }
+
+    var as = node._as;
+    if (as)
+      out += " AS " + this.escapeIdentifier(as);
+
+    return out;
+  }
+
+  _compileBinaryOp(node) {
+    var type = node._type;
+    var out = "";
+
+    var keyword = "";
+
+    var leftNode = node._left;
+    var rightNode = node._right;
+
+    var left = "";
+    var right = "";
+
+    if (!type)
+      throwCompileError("BinaryOp.compileNode() - No operator specified");
+
+    var opInfo = OpInfo.get(type);
+    if (opInfo) {
+      const flags = opInfo.flags;
+
+      if (flags & OpFlags.kLeftValues) left = this.escapeValues(leftNode);
+      if (flags & OpFlags.kRightValues) right = this.escapeValues(rightNode);
+
+      // Check if the right operand is `NULL` and convert the operator to `IS`
+      // or `IS NOT` if necessary to be more conforming with SQL standard.
+      if (right === "NULL") {
+        if (opInfo.name === "=")
+          opInfo = OpInfo.get("IS");
+      }
+
+      keyword = opInfo.nameFmt;
+    }
+    else {
+      keyword = " " + type + " ";
+    }
+
+
+    if (!left) left = this.escapeValue(leftNode);
+    if (!right) right = this.escapeValue(rightNode);
+
+    if (leftNode instanceof Binary) left = "(" + left + ")";
+    if (rightNode instanceof Binary) right = "(" + right + ")";
+
+    out = left + keyword + right;
+
+    var as = node._as;
+    if (as)
+      out += " AS " + this.escapeIdentifier(as);
+
+    return out;
+  }
+
+  /**
+   * Compiles a function (xql.node.Func).
+   *
+   * @param {xql.node.Func} node Function node.
+   * @return {string} Compiled function.
+   *
+   * @private
+   */
+  _compileFunc(node) {
+    var name = node._type;
+    var info = OpInfo.get(name);
+
+    // Check if the function is known and if it has specialized compiler.
+    if (info !== null && info.compile !== null)
+      return info.compile(this, node);
+    else
+      return this._compileFuncImpl(name, node._as, node._flags, node._values);
+  }
+
+  _compileFuncImpl(name, as, flags, args) {
+    var out = "";
+
+    for (var i = 0, len = args.length; i < len; i++) {
+      const value = args[i];
+      const escaped = this.escapeValue(value);
+
+      if (out)
+        out += ", ";
+      out += escaped;
+    }
+
+    // Compile `DISTINCT` if specified.
+    if (flags & NodeFlags.kDistinct)
+      out = "DISTINCT " + out;
+
+    // Form `FUNCTION([DISTINCT] [parameters...])`.
+    out = name + "(" + out + ")";
+    if (as)
+      out += " AS " + this.escapeIdentifier(as);
+    return out;
+  }
+
+  /**
+   * Compiles SELECT.
+   *
+   * @param {xql.node.SelectQuery} node Select node.
+   * @return {string} Compiled SELECT.
+   *
+   * @private
+   */
+  _compileSelect(node) {
+    var out = "SELECT";
+    var space = this._SPACE_OR_NL;
+    var flags = node._flags;
+
+    var offset = node._offset;
+    var limit = node._limit;
+    var hasLimit = offset !== 0 || limit !== 0;
+
+    // Compile `SELECT [ALL|DISTINCT]`
+    //
+    // Use `*` if  fields are not used.
+    if (flags & NodeFlags.kDistinct)
+      out += " DISTINCT";
+
+    // Compile `[*|fields]`
+    //
+    // Note, `*` is only used if there are no columns specified.
+    var cols = node._fieldsOrReturning;
+    out += this.concat(cols && cols.length ? this._compileFields(cols) : "*");
+
+    // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
+    var from = node._fromOrUsing;
+    if (from)
+      out += space + "FROM" + this.concat(this._compileFromOrUsing(from));
+
+    // Compile `WHERE ...`.
+    var where = node._where;
+    if (where && where._values.length)
+      out += space + "WHERE" + this.concat(this._compileWhereOrHaving(where));
+
+    // Compile `GROUP BY ...`.
+    var groupBy = node._groupBy;
+    if (groupBy && groupBy.length)
+      out += space + "GROUP BY" + this.concat(this._compileGroupBy(groupBy));
+
+    // Compile `HAVING ...`.
+    var having = node._having;
+    if (having && having._values.length)
+      out += space + "HAVING" + this.concat(this._compileWhereOrHaving(having));
+
+    // TODO: Compile `WINDOW ...`.
+
+    // Compile `ORDER BY ...`.
+    var orderBy = node._orderBy;
+    if (orderBy && orderBy.length)
+      out += space + "ORDER BY" + this.concat(this._compileOrderBy(orderBy));
+
+    // Compile `OFFSET ...` / `LIMIT ...`.
+    if (hasLimit)
+      out += space + this._compileOffsetLimit(offset, limit);
+
+    // TODO: Compile `FETCH ...`.
+    // TODO: Compile `FOR ...`.
+
+    return out;
+  }
+
+  /**
+   * Compiles INSERT.
+   *
+   * @param {xql.node.InsertQuery} node Insert node.
+   * @return {string} Compiled INSERT.
+   *
+   * @private
+   */
+  _compileInsert(node) {
+    var out = "";
+    var t = "";
+
+    var k;
+    var i, len;
+
+    const NL = this._SPACE_OR_NL;
+
+    const table = node._table;
+    const columns = node._columns;
+    const returning = node._fieldsOrReturning || emptyArray;
+    const typeMapping = node._typeMapping || EmptyObject;
+
+    const features = this.features;
+    const hasReturning = features.returning && returning.length !== 0;
+
+    // Compile `INSERT INTO table (...)`.
+    if (!table)
+      throwCompileError("InsertQuery.compileNode() - Table not defined");
+
+    if (typeof table === "string")
+      t = this.escapeIdentifier(table);
+    else
+      t = table.compileNode(this);
+
+    for (k in columns) {
+      if (out) out += ", ";
+      out += this.escapeIdentifier(k);
+    }
+    out = "INSERT INTO" + this.concat(t + " (" + out + ")");
+
+    // Compile `VALUES (...)[, (...)]`.
+    const objects = node._values;
+    const prefix = (this.pretty ? this._CONCAT_STR : " ") + "(";
+
+    out += NL + "VALUES";
+    for (i = 0, len = objects.length; i < len; i++) {
+      const object = objects[i];
+
+      t = "";
+      for (k in columns) {
+        if (t) t += ", ";
+        if (hasOwn.call(object, k))
+          t += this.escapeValue(object[k], typeMapping[k]);
+        else
+          t += "DEFAULT";
+      }
+
+      if (i !== 0) out += ",";
+      out += prefix + t + ")";
+    }
+
+    // Compile `RETURNING ...`.
+    if (hasReturning)
+      out += NL + "RETURNING" + this.concat(this._compileReturning(returning));
+
+    return out;
+  }
+
+  /**
+   * Compiles UPDATE.
+   *
+   * @param {xql.node.UpdateQuery} node Update node.
+   * @return {string} Compiled UPDATE.
+   *
+   * @private
+   */
+  _compileUpdate(node) {
+    var out = "";
+    var t = "";
+
+    const NL = this._SPACE_OR_NL;
+    const COMMA = this._COMMA_STR;
+
+    const table = node._table;
+    const returning = node._fieldsOrReturning || emptyArray;
+
+    const features = this.features;
+    const hasReturning = features.returning && returning.length !== 0;
+
+    // Compile `UPDATE ...`
+    if (!table)
+      throwCompileError("UpdateQuery.compileNode() - Table not defined");
+
+    if (typeof table === "string")
+      t = this.escapeIdentifier(table);
+    else
+      t = table.compileNode(this);
+    out = "UPDATE" + this.concat(t);
+
+    // Compile `SET ...`
+    const objects = node._values;
+
+    if (!objects)
+      throwCompileError("UpdateQuery.compileNode() - No data to update provided");
+
+    if (objects.length !== 1)
+      throwCompileError("UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided)");
+
+    const values = objects[0];
+    const typeMapping = node._typeMapping || EmptyObject;
+
+    t = "";
+    for (var k in values) {
+      var value = values[k];
+      var compiled;
+
+      if (!(value instanceof Node))
+        compiled = this.escapeValue(value, typeMapping[k]);
+      else
+        compiled = value.compileNode(this);
+
+      if (t) t += COMMA;
+      t += this.escapeIdentifier(k) + " = " + compiled;
+    }
+    out += NL + "SET" + this.concat(t);
+
+    // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
+    const from = node._fromOrUsing;
+    if (from)
+      out += NL + "FROM"  + this.concat(this._compileFromOrUsing(from));
+
+    // Compile `WHERE ...`.
+    const where = node._where;
+    if (where && where._values.length)
+      out += NL + "WHERE" + this.concat(this._compileWhereOrHaving(where));
+
+    // Compile `OFFSET ...` / `LIMIT ...`.
+    const offset = node._offset;
+    const limit = node._limit;
+
+    if (offset || limit)
+      out += NL + this._compileOffsetLimit(offset, limit);
+
+    // Compile `RETURNING ...`.
+    if (hasReturning)
+      out += NL + "RETURNING" + this.concat(this._compileReturning(returning));
+
+    return out;
+  }
+
+  /**
+   * Compiles DELETE.
+   *
+   * @param {xql.node.DeleteQuery} node Delete node.
+   * @return {string} Compiled DELETE.
+   *
+   * @private
+   */
+  _compileDelete(node) {
+    var out = "";
+    var t = "";
+
+    const NL = this._SPACE_OR_NL;
+
+    const table = node._table;
+    const returning = node._fieldsOrReturning || emptyArray;
+
+    const features = this.features;
+    const hasReturning = features.returning && returning.length !== 0;
+
+    // Compile `DELETE FROM ...`
+    if (!table)
+      throwCompileError("DeleteQuery.compileNode() - Table not defined");
+
+    if (typeof table === "string")
+      t = this.escapeIdentifier(table);
+    else
+      t = table.compileNode(this);
+
+    out += "DELETE FROM" + this.concat(t);
+
+    // Compile `USING table[, table[, ...]]` or `USING table JOIN table [, JOIN ...]`.
+    const using = node._fromOrUsing;
+    if (using)
+      out += NL + "USING" + this.concat(this._compileFromOrUsing(using));
+
+    // Compile `WHERE ...`
+    const where = node._where;
+    if (where && where._values.length)
+      out += NL + "WHERE" + this.concat(this._compileWhereOrHaving(where));
+
+    // Compile `OFFSET ...` / `LIMIT ...`.
+    const offset = node._offset;
+    const limit = node._limit;
+
+    if (offset || limit)
+      out += NL + this._compileOffsetLimit(offset, limit);
+
+    // Compile `RETURNING ...`.
+    if (hasReturning)
+      out += NL + "RETURNING" + this.concat(this._compileReturning(returning));
+
+    return out;
+  }
+
+  /**
+   * Compiles compound query (UNION, INTERSECT, EXCEPT).
+   *
+   * @param {xql.node.CompoundQuery} node Compound node.
+   * @return {string} Compiled compound query.
+   *
+   * @private
+   */
+  _compileCompound(node) {
+    var out = "";
+
+    const space = this._SPACE_OR_NL;
+
+    const flags = node._flags;
+    var combineOp = node._type;
+
+    if (flags & NodeFlags.kAll)
+      combineOp += " ALL";
+
+    const values = node._values;
+    const separator = space + combineOp + space;
+
+    for (var i = 0, len = values.length; i < len; i++) {
+      var value = values[i];
+      var compiled = this.escapeValue(value);
+
+      if (out)
+        out += separator;
+
+      // TODO: This is not nice, introduce something better than this.
+      const mustWrap = !(value instanceof Query) || (value instanceof CompoundQuery);
+      if (mustWrap)
+        compiled = this._wrapQuery(compiled);
+
+      out += compiled;
+    }
+
+    // Compile `ORDER BY ...`.
+    const orderBy = node._orderBy;
+    if (orderBy && orderBy.length)
+      out += space + "ORDER BY" + this.concat(this._compileOrderBy(orderBy));
+
+    // Compile `OFFSET ...` / `LIMIT ...`.
+    const offset = node._offset;
+    const limit = node._limit;
+
+    if (offset || limit)
+      out += space + this._compileOffsetLimit(offset, limit);
+
+    return out;
+  }
+
+  _compileJoin(node) {
+    var out = "";
+
+    var type = node._type;
+    var keyword = "";
+
+    switch (type) {
+      case ""     : // ... Fall through ...
+      case "CROSS": keyword = " CROSS JOIN "      ; break;
+      case "INNER": keyword = " INNER JOIN "      ; break;
+      case "LEFT" : keyword = " LEFT OUTER JOIN " ; break;
+      case "RIGHT": keyword = " RIGHT OUTER JOIN "; break;
+      case "FULL" : keyword = " FULL OUTER JOIN " ; break;
+
+      // In case that the `JOIN` is backend specific.
+      default:
+        keyword = " " + type + " JOIN ";
+        break;
+    }
+
+    var lo = node._left;
+    var ro = node._right;
+
+    var left = typeof lo === "string" ? this.escapeIdentifier(lo) : lo.compileNode(this);
+    var right = typeof ro === "string" ? this.escapeIdentifier(ro) : ro.compileNode(this);
+
+    out = left + keyword + right;
+
+    // Compile `USING (...)` clause.
+    var condition = node._condition;
+    if (isArray(condition)) {
+      var t = "";
+
+      for (var i = 0, len = condition.length; i < len; i++) {
+        var identifier = condition[i];
+
+        if (t)
+          t += ", ";
+
+        if (typeof identifier === "string")
+          t += this.escapeIdentifier(identifier);
+        else
+          t += identifier.compileNode(this);
+      }
+
+      if (t)
+        out += " USING (" + t + ")";
+    }
+    // Compile `ON ...` clause.
+    else if (condition instanceof Node) {
+      out += " ON " + condition.compileNode(this);
+    }
+
+    var as = node._as;
+    if (as)
+      out += " AS " + this.escapeIdentifier(as);
+
+    return out;
+  }
+
+  _compileSort(node) {
+    var value = node._value;
+    var flags = node._flags;
+
+    // Value of type:
+    //   - `number` - describes column order,
+    //   - `string` - describes column name.
+    //   - `Node`   - SQL expression/column.
+    var out;
+
+    if (typeof value === "number")
+      out = "" + value;
+    else if (typeof value === "string")
+      out = this.escapeIdentifier(value);
+    else if (value instanceof Node)
+      out = value.compileNode(this);
+    else
+      throwCompileError("Sort.compileNode() - Invalid value type " + typeof value);
+
+    if (flags & NodeFlags.kAscending)
+      out += " ASC";
+    else if (flags & NodeFlags.kDescending)
+      out += " DESC";
+
+    if (flags & NodeFlags.kNullsFirst)
+      out += " NULLS FIRST";
+    else if (flags & NodeFlags.kNullsLast)
+      out += " NULLS LAST";
+
+    return out;
+  }
+
+  _compileGroupBy(groupBy) {
+    var out = "";
+    var _COMMA_STR = this._COMMA_STR;
+
+    for (var i = 0, len = groupBy.length; i < len; i++) {
+      var group = groupBy[i];
+      if (out) out += _COMMA_STR;
+
+      // Group can be in a form of `string` or `Node`.
+      if (typeof group === "string")
+        out += this.escapeIdentifier(group);
+      else
+        out += group.compileNode(this);
+    }
+
+    return out;
+  }
+
+  _compileOrderBy(orderBy) {
+    var out = "";
+    var _COMMA_STR = this._COMMA_STR;
+
+    for (var i = 0, len = orderBy.length; i < len; i++) {
+      var sort = orderBy[i];
+      if (out) out += _COMMA_STR;
+      out += sort.compileNode(this);
+    }
+
+    return out;
+  }
+
+  _compileFields(list) {
+    var out = "";
+    var _COMMA_STR = this._COMMA_STR;
+
+    for (var i = 0, len = list.length; i < len; i++) {
+      var column = list[i];
+      if (out) out += _COMMA_STR;
+
+      // Compile column identifier or expression.
+      if (typeof column === "string") {
+        out += this.escapeIdentifier(column);
+      }
+      else {
+        var compiled = column.compileNode(this);
+        if (column.mustWrap())
+          out += this._wrapQuery(compiled);
+        else
+          out += compiled;
+      }
+    }
+
+    return out;
+  }
+
+  _compileReturning(list) {
+    return this._compileFields(list);
+  }
+
+  _compileFromOrUsing(node) {
+    if (typeof node === "string")
+      return this.escapeIdentifier(node);
+    else
+      return node.compileNode(this);
+  }
+
+  _compileWhereOrHaving(condition) {
+    var out = "";
+
+    var list = condition._values;
+    var i, len = list.length;
+
+    if (len === 1)
+      return list[0].compileNode(this);
+
+    for (i = 0; i < len; i++) {
+      var expression = list[i];
+      var compiled = expression.compileNode(this);
+
+      if (out)
+        out += " " + condition._type + " ";
+
+      if (expression.mustWrap())
+        out += "(" + compiled + ")";
+      else
+        out += compiled;
+    }
+
+    return out;
+  }
+
+  _compileOffsetLimit(offset, limit) {
+    var out = "";
+
+    if (offset)
+      out += "OFFSET " + offset;
+
+    if (limit) {
+      if (out) out += " ";
+      out += "LIMIT " + limit;
+    }
+
+    return out;
+  }
+
+  _wrapQuery(str) {
+    if (this.pretty)
+      return "(" + indent(str + ")", " ").substr(1);
+    else
+      return "(" + str + ")";
+  }
+
   /**
    * Called whenever some property is changed to update all computed properties.
    *
    * @private
    */
   _update() {
-    var compact = !this.pretty;
+    const compact = !this.pretty;
+    const features = this.features;
+
+    this._DB_TRUE     = features.nativeBoolean ? "TRUE"  : "1";
+    this._DB_FALSE    = features.nativeBoolean ? "FALSE" : "0";
 
     this._SPACE_OR_NL = compact ? " "  : "\n";
     this._COMMA_STR   = compact ? ", " : ",\n";
@@ -1240,7 +1688,7 @@ function fnEscapeString(s) {
 }
 
 /**
- * PostgreSQL context.
+ * PostgreSQL compiler.
  *
  * @private
  */
@@ -1249,14 +1697,15 @@ class PGSQLContext extends Context {
     super("pgsql", options);
 
     // Setup Postgres features.
-    this.features.nativeArrays = true;
+    this.features.nativeBoolean  = true;
+    this.features.nativeArray    = true;
+    this.features.returning      = true;
     this.features.specialNumbers = true;
 
     // Setup Postgres specific.
     this._DB_POS_INF = "'Infinity'";
     this._DB_NEG_INF = "'-Infinity'";
     this._DB_NAN     = "'NaN'";
-
 
     this._update();
   }
@@ -1563,7 +2012,7 @@ function fnEscapeString(s) {
 }
 
 /**
- * MySQL/MariaDB context.
+ * MySQL/MariaDB compiler.
  *
  * @private
  */
@@ -1572,12 +2021,24 @@ class MySQLContext extends Context {
     super("mysql", options);
 
     this.features.quoteStyle = QuoteStyle.kGrave;
+    this.features.nativeBoolean = true;
+
     this._update();
   }
 
   /** @override */
   escapeString(value) {
     return "'" + value.replace(reEscapeChars, fnEscapeString) + "'";
+  }
+
+  /** @override */
+  _compileOffsetLimit(offset, limit) {
+    // Compile either `LIMIT <limit>` or `LIMIT <offset>, <limit>`.
+    const limitStr = limit ? String(limit) : "18446744073709551615";
+    if (offset === 0)
+      return "LIMIT " + limitStr;
+    else
+      return "LIMIT " + offset + ", " + limitStr;
   }
 }
 xql$dialect.add("mysql", MySQLContext);
@@ -1591,7 +2052,7 @@ xql$dialect.add("mysql", MySQLContext);
 (function() {
 
 /**
- * SQLite context.
+ * SQLite compiler.
  *
  * @private
  */
@@ -1619,7 +2080,7 @@ class SQLiteContext extends Context {
         // Blob part.
         if (i === 0)
           out += "''"; // Edge case, always form TEXT, not BLOB.
-        out += "||x'"
+        out += "||x'";
 
         do {
           out += (c >> 4).toString(16) + (c & 15).toString(16);
@@ -1653,6 +2114,20 @@ class SQLiteContext extends Context {
         out += value.substring(m, i) + "'";
       }
     }
+
+    return out;
+  }
+
+  /** @override */
+  _compileOffsetLimit(offset, limit) {
+    // Compile `LIMIT <limit> OFFSET <offset>`.
+    const limitStr = limit ? String(limit) : "-1";
+    const offsetStr = String(offset);
+
+    if (offset === 0)
+      return "LIMIT " + limitStr;
+    else
+      return "LIMIT " + limitStr + " OFFSET " + offsetStr;
   }
 }
 xql$dialect.add("sqlite", SQLiteContext);
@@ -1682,7 +2157,6 @@ const xql$node = xql.node = {};
  * @param {string} type Type of the node.
  * @param {as} as Node alias as specified by SQL's `AS` keyword.
  *
- * @class
  * @alias xql.node.Node
  */
 class Node {
@@ -1846,42 +2320,16 @@ class Node {
     return this;
   }
 
-  // \function Node.EQ(b:{Var|Node})
-  EQ(b) {
-    return BINARY_OP(this, "=", b);
-  }
+  EQ(b) { return BINARY_OP(this, "=", b); }
+  NE(b) { return BINARY_OP(this, "<>", b); }
+  LT(b) { return BINARY_OP(this, "<", b); }
+  LE(b) { return BINARY_OP(this, "<=", b); }
+  GT(b) { return BINARY_OP(this, ">", b); }
+  GE(b) { return BINARY_OP(this, ">=", b); }
 
-  // \function Node.NE(b:{Var|Node})
-  NE(b) {
-    return BINARY_OP(this, "<>", b);
-  }
-
-  // \function Node.LT(b:{Var|Node})
-  LT(b) {
-    return BINARY_OP(this, "<", b);
-  }
-
-  // \function Node.LE(b:{Var|Node})
-  LE(b) {
-    return BINARY_OP(this, "<=", b);
-  }
-
-  // \function Node.GT(b:{Var|Node})
-  GT(b) {
-    return BINARY_OP(this, ">", b);
-  }
-
-  // \function Node.GE(b:{Var|Node})
-  GE(b) {
-    return BINARY_OP(this, ">=", b);
-  }
-
-  // \function Node.IN(b:{Var|Node})
-  //
   // Returns a new Node which contains `this IN b` expression.
   IN(b) {
-    var len = arguments.length;
-
+    const len = arguments.length;
     if (len > 1) {
       b = slice.call(arguments, 0);
     }
@@ -1895,6 +2343,11 @@ class Node {
 
     return BINARY_OP(this, "IN", b);
   }
+
+  // Returns a new Node which contains `this BETWEEN a AND b` expression
+  BETWEEN(a, b) {
+    return xql.BETWEEN(this, a, b);
+  }
 }
 xql$node.Node = Node;
 
@@ -1904,7 +2357,6 @@ xql$node.Node = Node;
  * @param {string} expression Expression string.
  * @param {array=} bindings Bindings array used by the expression.
  *
- * @class
  * @alias xql.node.Raw
  */
 class Raw extends Node {
@@ -1982,10 +2434,9 @@ class Raw extends Node {
 xql$node.Raw = Raw;
 
 /**
- * SQL unary expression.
+ * SQL unary node.
  *
- * @class
- * @alias xql.node.Unary
+ * @alias xql.node.UnaryOp
  */
 class Unary extends Node {
   constructor(type, value) {
@@ -1996,33 +2447,6 @@ class Unary extends Node {
   /** @override */
   mustWrap(ctx) {
     return false;
-  }
-
-  /** @override */
-  compileNode(ctx) {
-    var type = this._type;
-    var out = ctx.escapeValue(this._value);
-
-    switch (type) {
-      case "NOT":
-        out = "NOT " + out;
-        break;
-
-      case "-":
-        out = "-" + out;
-        break;
-
-      default:
-        if (type)
-          out = type + " " + out;
-        break;
-    }
-
-    var as = this._as;
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
-
-    return out;
   }
 
   /**
@@ -2048,9 +2472,21 @@ class Unary extends Node {
 xql$node.Unary = Unary;
 
 /**
- * SQL binary expression.
+ * SQL unary operator.
  *
- * @class
+ * @alias xql.node.UnaryOp
+ */
+class UnaryOp extends Unary {
+  /** @override */
+  compileNode(ctx) {
+    return ctx._compileUnaryOp(this);
+  }
+}
+xql$node.UnaryOp = UnaryOp;
+
+/**
+ * SQL binary node.
+ *
  * @alias xql.node.Binary
  */
 class Binary extends Node {
@@ -2133,12 +2569,11 @@ class Binary extends Node {
 xql$node.Binary = Binary;
 
 /**
- * SQL operator.
+ * SQL binary operator.
  *
- * @class
- * @alias xql.node.Operator
+ * @alias xql.node.BinaryOp
  */
-class Operator extends Binary {
+class BinaryOp extends Binary {
   constructor(left, type, right, as) {
     super(left, type, right, as);
   }
@@ -2150,69 +2585,14 @@ class Operator extends Binary {
 
   /** @override */
   compileNode(ctx) {
-    var type = this._type;
-    var out = "";
-
-    var keyword = "";
-
-    var leftNode = this._left;
-    var rightNode = this._right;
-
-    var left = "";
-    var right = "";
-
-    if (!type)
-      throwCompileError("Operator.compileNode() - No operator specified");
-
-    if (hasOwn.call(OperatorDefs, type)) {
-      var op = OperatorDefs[type];
-      var flags = op.flags;
-
-      if (flags & OperatorFlags.kLeftValues)
-        left = ctx.escapeValues(leftNode);
-
-      if (flags & OperatorFlags.kRightValues)
-        right = ctx.escapeValues(rightNode);
-
-      // Check if the right operand is `NULL` and convert the operator to `IS`
-      // or `IS NOT` if necessary to be more conforming with SQL standard.
-      if (right === "NULL") {
-        if (op.op === "=")
-          op = OperatorDefs["IS"];
-      }
-
-      keyword = op.as;
-    }
-    else {
-      keyword = " " + type + " ";
-    }
-
-
-    if (!left)
-      left = ctx.escapeValue(leftNode);
-    if (leftNode instanceof Binary)
-      left = "(" + left + ")";
-
-    if (!right)
-      right = ctx.escapeValue(rightNode);
-    if (rightNode instanceof Binary)
-      right = "(" + right + ")";
-
-    out = left + keyword + right;
-
-    var as = this._as;
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
-
-    return out;
+    return ctx._compileBinaryOp(this);
   }
 }
-xql$node.Operator = Operator;
+xql$node.BinaryOp = BinaryOp;
 
 /**
  * A node that can have children (base for `Logical` and `Func`).
  *
- * @class
  * @alias xql.node.NodeArray
  */
 class NodeArray extends Node {
@@ -2248,7 +2628,6 @@ xql$node.NodeArray = NodeArray;
 /**
  * SQL logical expression.
  *
- * @class
  * @alias xql.node.Logical
  */
 class Logical extends NodeArray {
@@ -2282,21 +2661,17 @@ class Logical extends NodeArray {
 }
 xql$node.Logical = Logical;
 
-// \class node.ObjectOp
-//
-// Condition defined as an object having multiple properties (key/value pairs).
-// Implicit `AND` operator is used to for the query.
-class ObjectOp extends Unary {
-  constructor(type, value) {
-    super(type, "");
-    this._value = value;
-  }
-
-  /** @override */
-  mustWrap(ctx) {
-    return false;
-  }
-
+/**
+ * Node that holds conditional expressions stored in a JS object, where each
+ * key represents table column and each value is the condition's expression.
+ *
+ * This node has been introduced as a low-overhead node that just holds the
+ * passed object. All expressions are implicitly joined by logical `AND` or
+ * `OR` operator.
+ *
+ * @alias xql.node.ConditionMap
+ */
+class ConditionMap extends Unary {
   /** @override */
   compileNode(ctx) {
     var out = "";
@@ -2326,12 +2701,11 @@ class ObjectOp extends Unary {
     return out;
   }
 }
-xql$node.ObjectOp = ObjectOp;
+xql$node.ConditionMap = ConditionMap;
 
 /**
  * SQL identifier.
  *
- * @class
  * @alias xql.node.Identifier
  */
 class Identifier extends Node {
@@ -2349,10 +2723,8 @@ class Identifier extends Node {
   compileNode(ctx) {
     var out = ctx.escapeIdentifier(this._value);
     var as = this._as;
-
     if (as)
       out += " AS " + ctx.escapeIdentifier(as);
-
     return out;
   }
 
@@ -2382,110 +2754,122 @@ class Identifier extends Node {
 xql$node.Identifier = Identifier;
 
 /**
- * SQL join expression.
+ * SQL function or aggregate expression.
  *
- * @class
- * @alias xql.node.Join
+ * @alias xql.node.Func
  */
-class Join extends Binary {
-  constructor(left, type, right, condition) {
-    super(left, type, right, "");
-    this._condition = condition;
+class Func extends NodeArray {
+  constructor(type, args) {
+    super(type, "");
+
+    this._flags |= NodeFlags.kAll;
+    this._values = args || [];
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap() {
     return false;
   }
 
   /** @override */
   compileNode(ctx) {
-    var out = "";
+    return ctx._compileFunc(this);
+  }
 
-    var type = this._type;
-    var keyword = "";
+  getArguments() {
+    return this._values;
+  }
 
-    switch (type) {
-      case ""     : // ... Fall through ...
-      case "CROSS": keyword = " CROSS JOIN "      ; break;
-      case "INNER": keyword = " INNER JOIN "      ; break;
-      case "LEFT" : keyword = " LEFT OUTER JOIN " ; break;
-      case "RIGHT": keyword = " RIGHT OUTER JOIN "; break;
-      case "FULL" : keyword = " FULL OUTER JOIN " ; break;
+  setArguments(args) {
+    this._values = args || [];
+    return this;
+  }
 
-      // In case that the `JOIN` is backend specific.
-      default:
-        keyword = " " + type + " JOIN ";
-        break;
-    }
+  /**
+   * Sets the `ALL` option of the aggregate (and clears the `DISTINCT` option).
+   *
+   * @return {this}
+   */
+  ALL() {
+    return this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
+  }
 
-    var lo = this._left;
-    var ro = this._right;
+  /**
+   * Sets the `DISTINCT` option of the aggregate (and clears the `ALL` option).
+   *
+   * @return {this}
+   */
+  DISTINCT() {
+    return this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
+  }
+}
+xql$node.Func = Func;
 
-    var left = typeof lo === "string" ? ctx.escapeIdentifier(lo) : lo.compileNode(ctx);
-    var right = typeof ro === "string" ? ctx.escapeIdentifier(ro) : ro.compileNode(ctx);
+/**
+ * SQL value.
+ *
+ * Used in cases where it's difficult to automatically determine how the value
+ * should be escaped (which can result in invalid query if determined wrong).
+ *
+ * `Value` node shouldn't be in general used for all types, only types where
+ * the mapping is ambiguous and can't be automatically deduced. For example
+ * PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `xql`
+ * has no knowledge which format to use and will choose ARRAY over JSON.
+ *
+ * Value is an alternative to schema. If schema is provided it's unnecessary
+ * to wrap values to `Value` nodes.
+ *
+ * @param {string}  type  Type of the value.
+ * @param {*}       value Data of the value.
+ * @param {string=} as    SQL's AS clause, if given.
+ *
+ * @alias xql.node.Value
+ */
+class Value extends Node {
+  constructor(type, value, as) {
+    super(type, as);
+    this._value = value;
+  }
 
-    out = left + keyword + right;
+  /** @override */
+  mustWrap() {
+    return false;
+  }
 
-    // Compile `USING (...)` clause.
-    var condition = this._condition;
-    if (isArray(condition)) {
-      var t = "";
-
-      for (var i = 0, len = condition.length; i < len; i++) {
-        var identifier = condition[i];
-
-        if (t)
-          t += ", ";
-
-        if (typeof identifier === "string")
-          t += ctx.escapeIdentifier(identifier);
-        else
-          t += identifier.compileNode(ctx);
-      }
-
-      if (t)
-        out += " USING (" + t + ")";
-    }
-    // Compile `ON ...` clause.
-    else if (condition instanceof Node) {
-      out += " ON " + condition.compileNode(ctx);
-    }
-
+  /** @override */
+  compileNode(ctx) {
+    var out = ctx.escapeValue(this._value, this._type);
     var as = this._as;
     if (as)
       out += " AS " + ctx.escapeIdentifier(as);
-
     return out;
   }
 
   /**
-   * Gets the join condition.
+   * Gets the associated value.
    *
-   * @return {Node|array}
+   * @return {*}
    */
-  getCondition() {
-    return this._condition;
+  getValue() {
+    return this._value;
   }
 
   /**
-   * Sets the join condition.
+   * Sets the associated value.
    *
-   * @param {Node|array} condition A single node or array of nodes that form the
-   *   condition.
+   * @param {*} value A new value to associate with.
    * @return {this}
    */
-  setCondition(condition) {
-    this._condition = condition;
+  setValue(value) {
+    this._value = value;
     return this;
   }
 }
-xql$node.Join = Join;
+xql$node.Value = Value;
 
 /**
  * SQL sort expression.
  *
- * @class
  * @alias xql.node.Sort
  */
 class Sort extends Identifier {
@@ -2498,7 +2882,6 @@ class Sort extends Identifier {
     if (nulls && hasOwn.call(SortNulls, nulls))
       flags |= SortNulls[nulls];
 
-    // Doesn't call `Identifier` constructor.
     super("SORT", "");
     this._flags = flags;
     this._value = column;
@@ -2506,35 +2889,7 @@ class Sort extends Identifier {
 
   /** @override */
   compileNode(ctx) {
-    var value = this._value;
-    var flags = this._flags;
-
-    // Value of type:
-    //   - `number` - describes column order,
-    //   - `string` - describes column name.
-    //   - `Node`   - SQL expression/column.
-    var s;
-
-    if (typeof value === "number")
-      s = "" + value;
-    else if (typeof value === "string")
-      s = ctx.escapeIdentifier(value);
-    else if (value instanceof Node)
-      s = value.compileNode(ctx);
-    else
-      throwCompileError("Sort.compileNode() - Invalid value type " + typeof value);
-
-    if (flags & NodeFlags.kAscending)
-      s += " ASC";
-    else if (flags & NodeFlags.kDescending)
-      s += " DESC";
-
-    if (flags & NodeFlags.kNullsFirst)
-      s += " NULLS FIRST";
-    else if (flags & NodeFlags.kNullsLast)
-      s += " NULLS LAST";
-
-    return s;
+    return ctx._compileSort(this);
   }
 
   /**
@@ -2688,155 +3043,48 @@ class Sort extends Identifier {
 xql$node.Sort = Sort;
 
 /**
- * SQL function expression.
+ * SQL join expression.
  *
- * @class
- * @alias xql.node.Func
+ * @alias xql.node.Join
  */
-class Func extends NodeArray {
-  constructor(type, values) {
-    super(type, "");
-    this._flags |= NodeFlags.kAll;
-    this._values = values || [];
+class Join extends Binary {
+  constructor(left, type, right, condition) {
+    super(left, type, right, "");
+    this._condition = condition;
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     return false;
   }
 
   /** @override */
   compileNode(ctx) {
-    var out = "";
-
-    var flags = this._flags;
-    var values = this._values;
-
-    for (var i = 0, len = values.length; i < len; i++) {
-      var value = values[i];
-      var escaped = ctx.escapeValue(value);
-
-      if (out)
-        out += ", ";
-      out += escaped;
-    }
-
-    // Add `DISTINCT` if specified.
-    if (flags & NodeFlags.kDistinct)
-      out = out ? "DISTINCT " + out : "DISTINCT";
-
-    // Form `FUNCTION([DISTINCT] [parameters...])`.
-    out = this._type + "(" + out + ")";
-
-    var as = this._as;
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
-
-    return out;
+    return ctx._compileJoin(this);
   }
 
-  getArguments() {
-    return this._values;
+  /**
+   * Gets the join condition.
+   *
+   * @return {Node|array}
+   */
+  getCondition() {
+    return this._condition;
   }
 
-  setArguments(args) {
-    this._values = args || [];
+  /**
+   * Sets the join condition.
+   *
+   * @param {Node|array} condition A single node or array of nodes that form the
+   *   condition.
+   * @return {this}
+   */
+  setCondition(condition) {
+    this._condition = condition;
     return this;
   }
 }
-xql$node.Func = Func;
-
-/**
- * SQL aggregate function.
- *
- * @class
- * @alias xql.node.Aggregate
- */
-class Aggregate extends Func {
-  /**
-   * Sets the `ALL` option of the aggregate (and clears the `DISTINCT` option).
-   *
-   * @return {this}
-   */
-  ALL() {
-    return this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
-  }
-
-  /**
-   * Sets the `DISTINCT` option of the aggregate (and clears the `ALL` option).
-   *
-   * @return {this}
-   */
-  DISTINCT() {
-    return this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
-  }
-}
-xql$node.Aggregate = Aggregate;
-
-/**
- * SQL value.
- *
- * Used in cases where it's difficult to automatically determine how the value
- * should be escaped (which can result in invalid query if determined wrong).
- *
- * `Value` node shouldn't be in general used for all types, only types where
- * the mapping is ambiguous and can't be automatically deduced. For example
- * PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `xql`
- * has no knowledge which format to use and will choose ARRAY over JSON.
- *
- * Value is an alternative to schema. If schema is provided it's unnecessary
- * to wrap values to `Value` nodes.
- *
- * @param {string}  type  Type of the value.
- * @param {*}       value Data of the value.
- * @param {string=} as    SQL's AS clause, if given.
- *
- * @class
- * @alias xql.node.Value
- */
-class Value extends Node {
-  constructor(type, value, as) {
-    super(type, as);
-    this._value = value;
-  }
-
-  /** @override */
-  mustWrap() {
-    return false;
-  }
-
-  /** @override */
-  compileNode(ctx) {
-    var out = ctx.escapeValue(this._value, this._type);
-    var as = this._as;
-
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
-
-    return out;
-  }
-
-  /**
-   * Gets the associated value.
-   *
-   * @return {*}
-   */
-  getValue() {
-    return this._value;
-  }
-
-  /**
-   * Sets the associated value.
-   *
-   * @param {*} value A new value to associate with.
-   * @return {this}
-   */
-  setValue(value) {
-    this._value = value;
-    return this;
-  }
-}
-xql$node.Value = Value;
+xql$node.Join = Join;
 
 /**
  * SQL query.
@@ -2846,7 +3094,7 @@ xql$node.Value = Value;
  *   - `INSERT` - See `InsertQuery`.
  *   - `UPDATE` - See `UpdateQuery`.
  *   - `DELETE` - See `DeleteQuery`.
- *   - `EXCEPT`, `INTERSECT`, and `UNION` - See `CombiningQuery`.
+ *   - `EXCEPT`, `INTERSECT`, and `UNION` - See `CompoundQuery`.
  *
  * The following features are implemented by the `Query`:
  *   - `TABLE`- Specifies a single database table.
@@ -2855,7 +3103,6 @@ xql$node.Value = Value;
  *
  * @param {string} type Type of the query.
  *
- * @class
  * @alias xql.node.Query
  */
 class Query extends Node {
@@ -2897,7 +3144,7 @@ class Query extends Node {
 
     // Used by:
     //   - `SELECT`
-    //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CombiningQuery`.
+    //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CompoundQuery`.
     this._orderBy = null;
 
     // Used by:
@@ -3016,61 +3263,6 @@ class Query extends Node {
     return this;
   }
 
-  _compileGroupBy(ctx, groupBy) {
-    var out = "";
-    var _COMMA_STR = ctx._COMMA_STR;
-
-    for (var i = 0, len = groupBy.length; i < len; i++) {
-      var group = groupBy[i];
-      if (out) out += _COMMA_STR;
-
-      // Group can be in a form of `string` or `Node`.
-      if (typeof group === "string")
-        out += ctx.escapeIdentifier(group);
-      else
-        out += group.compileNode(ctx);
-    }
-
-    return out;
-  }
-
-  _compileOrderBy(ctx, orderBy) {
-    var out = "";
-    var _COMMA_STR = ctx._COMMA_STR;
-
-    for (var i = 0, len = orderBy.length; i < len; i++) {
-      var sort = orderBy[i];
-      if (out) out += _COMMA_STR;
-      out += sort.compileNode(ctx);
-    }
-
-    return out;
-  }
-
-  _compileFieldsOrReturning(ctx, list) {
-    var out = "";
-    var _COMMA_STR = ctx._COMMA_STR;
-
-    for (var i = 0, len = list.length; i < len; i++) {
-      var column = list[i];
-      if (out) out += _COMMA_STR;
-
-      // Returning column can be in a form of `string` or `Node`.
-      if (typeof column === "string") {
-        out += ctx.escapeIdentifier(column);
-      }
-      else {
-        var compiled = column.compileNode(ctx);
-        if (column.mustWrap())
-          out += this._wrapQuery(ctx, compiled);
-        else
-          out += compiled;
-      }
-    }
-
-    return out;
-  }
-
   _addFromOrUsing(args) {
     var len = args.length;
     if (len < 1) return this;
@@ -3109,15 +3301,6 @@ class Query extends Node {
     return this;
   }
 
-  _compileFromOrUsing(ctx, node) {
-    var out = "";
-    if (typeof node === "string")
-      out += ctx.escapeIdentifier(node);
-    else
-      out += node.compileNode(ctx);
-    return out;
-  }
-
   // Add `WHERE` condition of specified `type`.
   _addWhere(type, a, op, b, nArgs) {
     var node;
@@ -3139,7 +3322,7 @@ class Query extends Node {
     else {
       aIsArray = isArray(a);
       if (!aIsArray)
-        node = (a instanceof Node) ? a : new ObjectOp("AND", a);
+        node = (a instanceof Node) ? a : new ConditionMap("AND", a);
     }
 
     // If no `WHERE` has been added yet, create one.
@@ -3161,52 +3344,6 @@ class Query extends Node {
       where.push(node);
 
     return this;
-  }
-
-  _compileWhereOrHaving(ctx, condition) {
-    var out = "";
-
-    var list = condition._values;
-    var i, len = list.length;
-
-    if (len === 1)
-      return list[0].compileNode(ctx);
-
-    for (i = 0; i < len; i++) {
-      var expression = list[i];
-      var compiled = expression.compileNode(ctx);
-
-      if (out)
-        out += " " + condition._type + " ";
-
-      if (expression.mustWrap())
-        out += "(" + compiled + ")";
-      else
-        out += compiled;
-    }
-
-    return out;
-  }
-
-  _compileOffsetLimit(ctx, offset, limit) {
-    var out = "";
-
-    if (offset)
-      out += "OFFSET" + ctx._CONCAT_STR + offset;
-
-    if (limit) {
-      if (out) out += ctx._SPACE_OR_NL;
-      out += "LIMIT" + ctx._CONCAT_STR + limit;
-    }
-
-    return out;
-  }
-
-  _wrapQuery(ctx, str) {
-    if (ctx.pretty)
-      return "(" + indent(str + ")", " ").substr(1);
-    else
-      return "(" + str + ")";
   }
 
   /**
@@ -3355,7 +3492,6 @@ xql$node.Query = Query;
 /**
  * SQL select.
  *
- * @class
  * @alias xql.node.SelectQuery
  */
 class SelectQuery extends Query {
@@ -3373,60 +3509,7 @@ class SelectQuery extends Query {
 
   /** @override */
   compileNode(ctx) {
-    var out = "SELECT";
-    var space = ctx._SPACE_OR_NL;
-    var flags = this._flags;
-
-    // Compile `SELECT [ALL|DISTINCT]`
-    //
-    // Use `*` if  fields are not used.
-    if (flags & NodeFlags.kDistinct)
-      out += " DISTINCT";
-
-    // Compile `[*|fields]`
-    //
-    // Note, `*` is only used if there are no columns specified.
-    var cols = this._fieldsOrReturning;
-    out += ctx.concat(cols && cols.length ? this._compileFieldsOrReturning(ctx, cols) : "*");
-
-    // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
-    var from = this._fromOrUsing;
-    if (from)
-      out += space + "FROM" + ctx.concat(this._compileFromOrUsing(ctx, from));
-
-    // Compile `WHERE ...`.
-    var where = this._where;
-    if (where && where._values.length)
-      out += space + "WHERE" + ctx.concat(this._compileWhereOrHaving(ctx, where));
-
-    // Compile `GROUP BY ...`.
-    var groupBy = this._groupBy;
-    if (groupBy && groupBy.length)
-      out += space + "GROUP BY" + ctx.concat(this._compileGroupBy(ctx, groupBy));
-
-    // Compile `HAVING ...`.
-    var having = this._having;
-    if (having && having._values.length)
-      out += space + "HAVING" + ctx.concat(this._compileWhereOrHaving(ctx, having));
-
-    // TODO: Compile `WINDOW ...`.
-
-    // Compile `ORDER BY ...`.
-    var orderBy = this._orderBy;
-    if (orderBy && orderBy.length)
-      out += space + "ORDER BY" + ctx.concat(this._compileOrderBy(ctx, orderBy));
-
-    // Compile `OFFSET ...` / `LIMIT ...`.
-    var offset = this._offset;
-    var limit = this._limit;
-
-    if (offset || limit)
-      out += space + this._compileOffsetLimit(ctx, offset, limit);
-
-    // TODO: Compile `FETCH ...`.
-    // TODO: Compile `FOR ...`.
-
-    return out;
+    return ctx._compileSelect(this);
   }
 
   // Add `HAVING` condition of specified `type`.
@@ -3450,7 +3533,7 @@ class SelectQuery extends Query {
     else {
       aIsArray = isArray(a);
       if (!aIsArray)
-        node = (a instanceof Node) ? a : new ObjectOp("AND", a);
+        node = (a instanceof Node) ? a : new ConditionMap("AND", a);
     }
 
     // If no `HAVING` has been added yet, create one.
@@ -3639,7 +3722,6 @@ xql$node.SelectQuery = alias(SelectQuery, {
 /**
  * SQL insert.
  *
- * @class
  * @alias xql.node.InsertQuery
  */
 class InsertQuery extends Query {
@@ -3649,61 +3731,7 @@ class InsertQuery extends Query {
 
   /** @override */
   compileNode(ctx) {
-    var out = "";
-
-    var t = "";
-    var space = ctx._SPACE_OR_NL;
-
-    var k;
-    var i, len;
-
-    // Compile `INSERT INTO table (...)`.
-    var table = this._table;
-    var columns = this._columns;
-    var typeMapping = this._typeMapping || EmptyObject;
-
-    if (!table)
-      throwCompileError("InsertQuery.compileNode() - Table not defined");
-
-    // Compile `INSERT INTO table (...)`.
-    if (typeof table === "string")
-      t = ctx.escapeIdentifier(table);
-    else
-      t = table.compileNode(ctx);
-
-    for (k in columns) {
-      if (out) out += ", ";
-      out += ctx.escapeIdentifier(k);
-    }
-    out = "INSERT INTO" + ctx.concat(t + " (" + out + ")");
-
-    // Compile `VALUES (...)[, (...)]`.
-    var objects = this._values;
-    var prefix = (ctx.pretty ? ctx._CONCAT_STR : " ") + "(";
-
-    out += space + "VALUES";
-    for (i = 0, len = objects.length; i < len; i++) {
-      var object = objects[i];
-
-      t = "";
-      for (k in columns) {
-        if (t) t += ", ";
-        if (hasOwn.call(object, k))
-          t += ctx.escapeValue(object[k], typeMapping[k]);
-        else
-          t += "DEFAULT";
-      }
-
-      if (i !== 0) out += ",";
-      out += prefix + t + ")";
-    }
-
-    // Compile `RETURNING ...`.
-    var returning = this._fieldsOrReturning;
-    if (returning && returning.length)
-      out += space + "RETURNING" + ctx.concat(this._compileFieldsOrReturning(ctx, returning));
-
-    return out;
+    return ctx._compileInsert(this);
   }
 
   // \function InsertQuery.TABLE(table)
@@ -3727,7 +3755,6 @@ xql$node.InsertQuery = alias(InsertQuery, {
 /**
  * SQL update.
  *
- * @class
  * @alias xql.node.UpdateQuery
  */
 class UpdateQuery extends Query {
@@ -3737,73 +3764,7 @@ class UpdateQuery extends Query {
 
   /** @override */
   compileNode(ctx) {
-    var out = "";
-
-    var t = "";
-    var space = ctx._SPACE_OR_NL;
-    var _COMMA_STR = ctx._COMMA_STR;
-
-    // Compile `UPDATE ...`
-    var table = this._table;
-    if (!table)
-      throwCompileError("UpdateQuery.compileNode() - Table not defined");
-
-    if (typeof table === "string")
-      t = ctx.escapeIdentifier(table);
-    else
-      t = table.compileNode(ctx);
-    out = "UPDATE" + ctx.concat(t);
-
-    // Compile `SET ...`
-    var objects = this._values;
-
-    if (!objects)
-      throwCompileError("UpdateQuery.compileNode() - No data to update provided");
-
-    if (objects.length !== 1)
-      throwCompileError("UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided)");
-
-    var values = objects[0];
-    var typeMapping = this._typeMapping || EmptyObject;
-
-    t = "";
-    for (var k in values) {
-      var value = values[k];
-      var compiled;
-
-      if (!(value instanceof Node))
-        compiled = ctx.escapeValue(value, typeMapping[k]);
-      else
-        compiled = value.compileNode(ctx);
-
-      if (t) t += _COMMA_STR;
-      t += ctx.escapeIdentifier(k) + " = " + compiled;
-    }
-    out += space + "SET" + ctx.concat(t);
-
-    // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
-    var from = this._fromOrUsing;
-    if (from)
-      out += space + "FROM"  + ctx.concat(this._compileFromOrUsing(ctx, from));
-
-    // Compile `WHERE ...`.
-    var where = this._where;
-    if (where && where._values.length)
-      out += space + "WHERE" + ctx.concat(this._compileWhereOrHaving(ctx, where));
-
-    // Compile `OFFSET ...` / `LIMIT ...`.
-    var offset = this._offset;
-    var limit = this._limit;
-
-    if (offset || limit)
-      out += space + this._compileOffsetLimit(ctx, offset, limit);
-
-    // Compile `RETURNING ...`.
-    var returning = this._fieldsOrReturning;
-    if (returning && returning.length)
-      out += space + "RETURNING" + ctx.concat(this._compileFieldsOrReturning(ctx, returning));
-
-    return out;
+    return ctx._compileUpdate(this);
   }
 
   // \function UpdateQuery.TABLE(table)
@@ -3825,7 +3786,6 @@ xql$node.UpdateQuery = alias(UpdateQuery, {
 /**
  * SQL delete.
  *
- * @class
  * @alias xql.node.DeleteQuery
  */
 class DeleteQuery extends Query {
@@ -3835,46 +3795,7 @@ class DeleteQuery extends Query {
 
   /** @override */
   compileNode(ctx) {
-    var out = "";
-
-    var t = "";
-    var space = ctx._SPACE_OR_NL;
-
-    // Compile `DELETE FROM ...`
-    var table = this._table;
-    if (!table)
-      throwCompileError("DeleteQuery.compileNode() - Table not defined");
-
-    if (typeof table === "string")
-      t = ctx.escapeIdentifier(table);
-    else
-      t = table.compileNode(ctx);
-
-    out += "DELETE FROM" + ctx.concat(t);
-
-    // Compile `USING table[, table[, ...]]` or `USING table JOIN table [, JOIN ...]`.
-    var using = this._fromOrUsing;
-    if (using)
-      out += space + "USING" + ctx.concat(this._compileFromOrUsing(ctx, using));
-
-    // Compile `WHERE ...`
-    var where = this._where;
-    if (where && where._values.length)
-      out += space + "WHERE" + ctx.concat(this._compileWhereOrHaving(ctx, where));
-
-    // Compile `OFFSET ...` / `LIMIT ...`.
-    var offset = this._offset;
-    var limit = this._limit;
-
-    if (offset || limit)
-      out += space + this._compileOffsetLimit(ctx, offset, limit);
-
-    // Compile `RETURNING ...`.
-    var returning = this._fieldsOrReturning;
-    if (returning && returning.length)
-      out += space + "RETURNING" + ctx.concat(this._compileFieldsOrReturning(ctx, returning));
-
-    return out;
+    return ctx._compileDelete(this);
   }
 
   // \function DeleteQuery.TABLE(table)
@@ -3903,10 +3824,9 @@ xql$node.DeleteQuery = alias(DeleteQuery, {
 /**
  * SQL combining query/operator (UNION, INTERSECT, EXCEPT).
  *
- * @class
- * @alias xql.node.CombiningQuery
+ * @alias xql.node.CompoundQuery
  */
-class CombiningQuery extends Query {
+class CompoundQuery extends Query {
   constructor(type, values) {
     super(type);
 
@@ -3921,46 +3841,7 @@ class CombiningQuery extends Query {
 
   /** @override */
   compileNode(ctx) {
-    var out = "";
-    var space = ctx._SPACE_OR_NL;
-
-    var flags = this._flags;
-    var combineOp = this._type;
-
-    if (flags & NodeFlags.kAll)
-      combineOp += " ALL";
-
-    var values = this._values;
-    var separator = space + combineOp + space;
-
-    for (var i = 0, len = values.length; i < len; i++) {
-      var value = values[i];
-      var compiled = ctx.escapeValue(value);
-
-      if (out)
-        out += separator;
-
-      // TODO: This is not nice, introduce something better than this.
-      var mustWrap = !(value instanceof Query) || (value instanceof CombiningQuery);
-      if (mustWrap)
-        compiled = this._wrapQuery(ctx, compiled);
-
-      out += compiled;
-    }
-
-    // Compile `ORDER BY ...`.
-    var orderBy = this._orderBy;
-    if (orderBy && orderBy.length)
-      out += space + "ORDER BY" + ctx.concat(this._compileOrderBy(ctx, orderBy));
-
-    // Compile `OFFSET ...` / `LIMIT ...`.
-    var offset = this._offset;
-    var limit = this._limit;
-
-    if (offset || limit)
-      out += space + this._compileOffsetLimit(ctx, offset, limit);
-
-    return out;
+    return ctx._compileCompound(this);
   }
 
   /**
@@ -3994,7 +3875,7 @@ class CombiningQuery extends Query {
     return this;
   }
 }
-xql$node.CombiningQuery = CombiningQuery;
+xql$node.CompoundQuery = CompoundQuery;
 
 // ============================================================================
 // [xql.SQL]
@@ -4150,13 +4031,13 @@ xql.OR = OR;
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
  *   Arguments must be SQL queries that form the EXCEPT expression.
- * @return {CombiningQuery}
+ * @return {CompoundQuery}
  *
  * @alias xql.EXCEPT
  */
 function EXCEPT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombiningQuery("EXCEPT", values);
+  return new CompoundQuery("EXCEPT", values);
 }
 xql.EXCEPT = EXCEPT;
 
@@ -4164,16 +4045,16 @@ xql.EXCEPT = EXCEPT;
  * Shorthand for `EXCEPT(...args).ALL()`.
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
- * @return {CombiningQuery}
+ * @return {CompoundQuery}
  *
  * @see EXCEPT
- * @see CombiningQuery.prototype.ALL
+ * @see CompoundQuery.prototype.ALL
  *
  * @alias xql.EXCEPT_ALL
  */
 function EXCEPT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombiningQuery("EXCEPT", values).ALL();
+  return new CompoundQuery("EXCEPT", values).ALL();
 }
 xql.EXCEPT_ALL = EXCEPT_ALL;
 
@@ -4182,13 +4063,13 @@ xql.EXCEPT_ALL = EXCEPT_ALL;
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
  *   Arguments must be SQL queries that form the INTERSECT expression.
- * @return {CombiningQuery}
+ * @return {CompoundQuery}
  *
  * @alias xql.INTERSECT
  */
 function INTERSECT(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombiningQuery("INTERSECT", values);
+  return new CompoundQuery("INTERSECT", values);
 }
 xql.INTERSECT = INTERSECT;
 
@@ -4196,16 +4077,16 @@ xql.INTERSECT = INTERSECT;
  * Shorthand for `INTERSECT(...args).ALL()`.
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
- * @return {CombiningQuery}
+ * @return {CompoundQuery}
  *
  * @see INTERSECT
- * @see CombiningQuery.prototype.ALL
+ * @see CompoundQuery.prototype.ALL
  *
  * @alias xql.INTERSECT_ALL
  */
 function INTERSECT_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombiningQuery("INTERSECT", values).ALL();
+  return new CompoundQuery("INTERSECT", values).ALL();
 }
 xql.INTERSECT_ALL = INTERSECT_ALL;
 
@@ -4214,13 +4095,13 @@ xql.INTERSECT_ALL = INTERSECT_ALL;
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
  *   Arguments must be SQL queries that form the UNION expression.
- * @return {CombiningQuery}
+ * @return {CompoundQuery}
  *
  * @alias xql.UNION
  */
 function UNION(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombiningQuery("UNION", values);
+  return new CompoundQuery("UNION", values);
 }
 xql.UNION = UNION;
 
@@ -4228,16 +4109,16 @@ xql.UNION = UNION;
  * Shorthand for `UNION(...args).ALL()`.
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
- * @return {CombiningQuery}
+ * @return {CompoundQuery}
  *
  * @see UNION
- * @see CombiningQuery.prototype.ALL
+ * @see CompoundQuery.prototype.ALL
  *
  * @alias xql.UNION_ALL
  */
 function UNION_ALL(array) {
   var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CombiningQuery("UNION", values).ALL();
+  return new CompoundQuery("UNION", values).ALL();
 }
 xql.UNION_ALL = UNION_ALL;
 
@@ -4322,9 +4203,9 @@ xql.SORT = SORT;
 // \internal
 function UNARY_OP(op, child) {
   // High-performane version of:
-  //   `new Unary(op, x)`
+  //   `new UnaryOp(op, x)`
   return {
-    __proto__: Unary.prototype,
+    __proto__: UnaryOp.prototype,
     _type    : op,
     _flags   : 0,
     _as      : "",
@@ -4335,9 +4216,9 @@ function UNARY_OP(op, child) {
 // \internal
 function BINARY_OP(a, op, b) {
   // High-performane version of:
-  //   `new Operator(a, op, b)`
+  //   `new BinaryOp(a, op, b)`
   return {
-    __proto__: Operator.prototype,
+    __proto__: BinaryOp.prototype,
     _type    : op,
     _flags   : 0,
     _as      : "",
@@ -4375,27 +4256,370 @@ xql.LE = LE;
 xql.GT = GT;
 xql.GE = GE;
 
-// Add functions to `xql`.
-functionsList.forEach(function(name) {
-  var func = function(/* ... */) {
-    return new Func(name, slice.call(arguments, 0));
-  };
-  xql[name] = func;
-});
+function FUNC(name /* [, ...] */) {
+  return new Func(name, slice.call(arguments, 1));
+}
+xql.FUNC = FUNC;
 
-// Add aggregates to `xql`.
-aggregatesList.forEach(function(name) {
-  var func = function(/* ... */) {
-    return new Aggregate(name, slice.call(arguments, 0));
-  };
-  xql[name] = func;
-});
+// ============================================================================
+// [xql.FUNC]
+// ============================================================================
 
-// Link camel-cased equivalents of all functions in `xql` namespace.
-Object.keys(xql).forEach(function(name) {
-  if (reUpperCase.test(name)) {
-    xql[toCamelCase(name)] = xql[name];
+(function() {
+
+const N = -1;
+
+const kUnary        = OpFlags.kUnary;
+const kBinary       = OpFlags.kBinary;
+const kFunction     = OpFlags.kFunction;
+const kAggregate    = OpFlags.kAggregate;
+const kVoid         = OpFlags.kVoid;
+const kInPlaceNot   = OpFlags.kInPlaceNot;
+const kLeftValues   = OpFlags.kLeftValues;
+const kRightValues  = OpFlags.kRightValues;
+
+function register(defs, commons) {
+  const baseFlags    = commons.flags    || 0;
+  const baseCategory = commons.category || "core";
+  const baseDialect  = commons.dialect  || "*";
+
+  for (var i = 0; i < defs.length; i++) {
+    const def = defs[i];
+    const name = def.name;
+    const args = def.args;
+    const flags = (def.flags || 0) | baseFlags;
+    const dialect = def.dialect || baseDialect;
+    const category = def.category || baseCategory;
+
+    OpInfo.add({
+      name    : name,
+      nameFmt : (flags & kFunction) ? name : " " + def.name + " ",
+      desc    : def.desc || "",
+      ctor    : def.ctor || Func,
+      flags   : flags,
+      dialect : dialect,
+      category: category,
+      minArgs : isArray(args) ? args[0] : args,
+      maxArgs : isArray(args) ? args[1] : args,
+      compile : def.compile || null
+    });
+  }
+}
+
+function compileBETWEEN(ctx, $) {
+  const args = $._values;
+
+  return ctx.escapeOrWrap(args[0]) + " BETWEEN " +
+         ctx.escapeOrWrap(args[1]) + " AND " +
+         ctx.escapeOrWrap(args[2]);
+}
+
+function compileATAN(ctx, $) {
+  const args = $._values;
+  return ctx._compileFuncImpl(args.length <= 1 ? "ATAN" : "ATAN2", $._as, $._flags, args);
+}
+
+function compileLOG10(ctx, $) {
+  if (ctx.dialect !== "mysql")
+    return ctx._compileFuncImpl("LOG", $._as, $._flags, [10, $._values[0]]);
+  else
+    return ctx._compileFuncImpl("LOG10", $._as, $._flags, $._values);
+}
+
+function compileLOG2(ctx, $) {
+  if (ctx.dialect !== "mysql")
+    return ctx._compileFuncImpl("LOG", $._as, $._flags, [2, $._values[0]]);
+  else
+    return ctx._compileFuncImpl("LOG2", $._as, $._flags, $._values);
+}
+
+function compileRANDOM(ctx, $) {
+  if (ctx.dialect === "mysql")
+    return ctx._compileFuncImpl("RAND", $._as, $._flags, $._values);
+  else
+    return ctx._compileFuncImpl("RANDOM", $._as, $._flags, $._values);
+}
+
+function compileTRUNC(ctx, $) {
+  var name = "TRUNC";
+  var args = $._values;
+
+  if (ctx.dialect === "mysql") {
+    name = "TRUNCATE";
+    if (args.length === 1)
+      args = args.concat(0);
+  }
+
+  return ctx._compileFuncImpl(name, $._as, $._flags, args);
+}
+
+function compileCHR(ctx, $) {
+  if (ctx.dialect === "mysql")
+    return ctx._compileFuncImpl("CHAR", $._as, $._flags, $._values);
+  else
+    return ctx._compileFuncImpl("CHR", $._as, $._flags, $._values);
+}
+
+register([
+  { name: "="                    , args: 2     , flags: 0           , dialect: "*"     },
+  { name: ">"                    , args: 2     , flags: 0           , dialect: "*"     },
+  { name: ">="                   , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "<"                    , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "<="                   , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "<>"                   , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "@>"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Contains"               },
+  { name: "<@"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Contained by"           },
+  { name: "&&"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Overlap"                },
+  { name: "&<"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Right of"               },
+  { name: "&>"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Left of"                },
+  { name: "-|-"                  , args: 2     , flags: 0           , dialect: "*"     , desc: "Adjacent to"            },
+  { name: "+"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Add / union"            },
+  { name: "-"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Subtract / Difference"  },
+  { name: "*"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Multiply / Intersect"   },
+  { name: "/"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Divide"                 },
+  { name: "%"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Modulo"                 },
+  { name: "^"                    , args: 2     , flags: 0           , dialect: "pgsql" , desc: "Power"                  },
+  { name: "&"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise AND"            },
+  { name: "|"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise OR"             },
+  { name: "#"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise XOR"            },
+  { name: "~"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise NOT / Match"    },
+  { name: "<<"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Left shift / Left of"   },
+  { name: ">>"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Right shift / Right of" },
+  { name: "||"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Concatenate"            },
+  { name: "~*"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Match (I)"              },
+  { name: "!~"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Not match"              },
+  { name: "!~*"                  , args: 2     , flags: 0           , dialect: "*"     , desc: "Not match (I)"          }
+], { category: "general", flags: kBinary });
+
+register([
+  { name: "IS"                   , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "AND"                  , args: 2     , flags: 0           , dialect: "*"     , desc: "Logical AND" },
+  { name: "OR"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Logical OR" },
+  { name: "LIKE"                 , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "ILIKE"                , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "IN"                   , args: 2     , flags: kRightValues, dialect: "*"     , desc: "x IN (y)" },
+], { category: "general", flags: kBinary | kInPlaceNot });
+
+register([
+  { name: "COALESCE"             , args: [1, N], flags: 0           , dialect: "*"     , desc: "Return the first NON-NULL argument" },
+  { name: "GREATEST"             , args: [1, N], flags: 0           , dialect: "*"     , desc: "Select the largest" },
+  { name: "LEAST"                , args: [1, N], flags: 0           , dialect: "*"     , desc: "Select the smallest" },
+  { name: "NULLIF"               , args: 2     , flags: 0           , dialect: "*"     , desc: "Return NULL if value1 equals value2; value1 otherwise" },
+  { name: "BETWEEN"              , args: 3     , flags: 0           , dialect: "*"     , desc: "x BETWEEN a AND b", compile: compileBETWEEN }
+], { category: "general", flags: kFunction });
+
+register([
+  { name: "ABS"                  , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "ACOS"                 , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "ASIN"                 , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "ATAN"                 , args: [1, 2], flags: 0           , dialect: "*"      , compile: compileATAN },
+  { name: "ATAN2"                , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "CBRT"                 , args: 1     , flags: 0           , dialect: "pgsql" },
+  { name: "CEILING"              , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "COS"                  , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "COT"                  , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "DEGREES"              , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "DIV"                  , args: 2     , flags: 0           , dialect: "*"     }, // TODO:
+  { name: "EXP"                  , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "FLOOR"                , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "LN"                   , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "LOG"                  , args: [1, 2], flags: 0           , dialect: "*"     },
+  { name: "LOG10"                , args: 1     , flags: 0           , dialect: "*"      , compile: compileLOG10 },
+  { name: "LOG2"                 , args: 1     , flags: 0           , dialect: "*"      , compile: compileLOG2 },
+  { name: "MOD"                  , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "PI"                   , args: 0     , flags: 0           , dialect: "*"     },
+  { name: "POWER"                , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "RADIANS"              , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "RANDOM"               , args: 0     , flags: 0           , dialect: "*"      , compile: compileRANDOM },
+  { name: "ROUND"                , args: [1, 2], flags: 0           , dialect: "*"     },
+  { name: "SETSEED"              , args: 1     , flags: kVoid       , dialect: "pgsql" },
+  { name: "SIGN"                 , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "SIN"                  , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "SQRT"                 , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "TAN"                  , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "TRUNC"                , args: 1     , flags: 0           , dialect: "*"      , compile: compileTRUNC },
+  { name: "WIDTH_BUCKET"         , args: 4     , flags: 0           , dialect: "pgsql" }
+], { category: "math", flags: kFunction });
+
+register([
+  { name: "ASCII"                , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "BIT_LENGTH"           , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "BTRIM"                , args: [1, N], flags: 0           , dialect: "pgsql" },
+  { name: "CHAR"                 , args: [1, N], flags: 0           , dialect: "mysql" },
+  { name: "CHAR_LENGTH"          , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "CHR"                  , args: 1     , flags: 0           , dialect: "*"      , compile: compileCHR },
+  { name: "CONCAT"               , args: [1, N], flags: 0           , dialect: "*"     },
+  { name: "CONCAT_WS"            , args: [2, N], flags: 0           , dialect: "*"     },
+  { name: "CONVERT"              , args: 3     , flags: 0           , dialect: "pgsql" },
+  { name: "CONVERT_FROM"         , args: 2     , flags: 0           , dialect: "pgsql" },
+  { name: "CONVERT_TO"           , args: 2     , flags: 0           , dialect: "pgsql" },
+  { name: "FORMAT"               , args: null  , flags: 0           , dialect: "-"     },
+  { name: "INITCAP"              , args: 1     , flags: 0           , dialect: "pgsql" },
+  { name: "LEFT"                 , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "LENGTH"               , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "LOWER"                , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "LPAD"                 , args: [2, 3], flags: 0           , dialect: "*"     },
+  { name: "LTRIM"                , args: [1, N], flags: 0           , dialect: "*"     },
+  { name: "MD5"                  , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "OCTET_LENGTH"         , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "OVERLAY"              , args: null  , flags: 0           , dialect: "pgsql" }, // TODO:
+  { name: "PG_CLIENT_ENCODING"   , args: 0     , flags: 0           , dialect: "pgsql" },
+  { name: "POSITION"             , args: null  , flags: 0           , dialect: "*"     }, // TODO:
+  { name: "REPEAT"               , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "REPLACE"              , args: 3     , flags: 0           , dialect: "*"     },
+  { name: "REVERSE"              , args: 1     , flags: 0           , dialect: "*"     },
+  { name: "RIGHT"                , args: 2     , flags: 0           , dialect: "*"     },
+  { name: "RPAD"                 , args: [2, 3], flags: 0           , dialect: "*"     },
+  { name: "RTRIM"                , args: [1, N], flags: 0           , dialect: "*"     },
+  { name: "SPLIT_PART"           , args: 3     , flags: 0           , dialect: "pgsql" },
+  { name: "STRCMP"               , args: 2     , flags: 0           , dialect: "mysql" },
+  { name: "STRPOS"               , args: 2     , flags: 0           , dialect: "pgsql" },
+  { name: "SUBSTR"               , args: [2, 3], flags: 0           , dialect: "*"     },
+  { name: "SUBSTRING"            , args: null  , flags: 0           , dialect: "*"     },
+  { name: "TRANSLATE"            , args: 3     , flags: 0           , dialect: "pgsql" },
+  { name: "TRIM"                 , args: null  , flags: 0           , dialect: "*"     },
+  { name: "UPPER"                , args: 1     , flags: 0           , dialect: "*"     }
+], { category: "string", flags: kFunction });
+
+register([
+  { name: "DECODE"               , args: null  , flags: 0           , dialect: "*"     },
+  { name: "ENCODE"               , args: null  , flags: 0           , dialect: "*"     },
+
+  { name: "GET_BIT"              , args: null  , flags: 0           , dialect: "*"     },
+  { name: "GET_BYTE"             , args: null  , flags: 0           , dialect: "*"     },
+  { name: "QUOTE_IDENT"          , args: null  , flags: 0           , dialect: "*"     },
+  { name: "QUOTE_LITERAL"        , args: null  , flags: 0           , dialect: "*"     },
+  { name: "QUOTE_NULLABLE"       , args: null  , flags: 0           , dialect: "*"     },
+  { name: "REGEXP_MATCHES"       , args: null  , flags: 0           , dialect: "*"     },
+  { name: "REGEXP_REPLACE"       , args: null  , flags: 0           , dialect: "*"     },
+  { name: "REGEXP_SPLIT_TO_ARRAY", args: null  , flags: 0           , dialect: "*"     },
+  { name: "REGEXP_SPLIT_TO_TABLE", args: null  , flags: 0           , dialect: "*"     },
+  { name: "SET_BIT"              , args: null  , flags: 0           , dialect: "*"     },
+  { name: "SET_BYTE"             , args: null  , flags: 0           , dialect: "*"     },
+  { name: "TO_ASCII"             , args: null  , flags: 0           , dialect: "*"     },
+  { name: "TO_HEX"               , args: null  , flags: 0           , dialect: "*"     }
+], { category: "other", flags: kFunction });
+
+register([
+  { name: "ISEMPTY"              , args: 1     , dialect: "pgsql" },
+  { name: "LOWER_INC"            , args: 1     , dialect: "pgsql" },
+  { name: "LOWER_INF"            , args: 1     , dialect: "pgsql" },
+  { name: "UPPER_INC"            , args: 1     , dialect: "pgsql" },
+  { name: "UPPER_INF"            , args: 1     , dialect: "pgsql" },
+  { name: "RANGE_MERGE"          , args: 2     , dialect: "pgsql" }
+], { category: "range", flags: kFunction });
+
+register([
+  { name: "ARRAY_APPEND"         , args: 2     , dialect: "pgsql" , desc: "Append an element to the array" },
+  { name: "ARRAY_CAT"            , args: 2     , dialect: "pgsql" , desc: "Concatenate two arrays" },
+  { name: "ARRAY_DIMS"           , args: 1     , dialect: "pgsql" , desc: "Return a text representation of array's dimensions" },
+  { name: "ARRAY_NDIMS"          , args: 1     , dialect: "pgsql" , desc: "Return the number of dimensions of the array" },
+  { name: "ARRAY_FILL"           , args: [2, N], dialect: "pgsql" , desc: "Return an array initialized with supplied value and dimensions" },
+  { name: "ARRAY_LENGTH"         , args: 2     , dialect: "pgsql" , desc: "Return the length of the requested array dimension" },
+  { name: "ARRAY_LOWER"          , args: 2     , dialect: "pgsql" , desc: "Return lower bound of the requested array dimension" },
+  { name: "ARRAY_POSITION"       , args: [2, 3], dialect: "pgsql" , desc: "Return the subscript of the first occurrence of the second argument, optionally starting from index (3rd argument)" },
+  { name: "ARRAY_POSITIONS"      , args: 2     , dialect: "pgsql" , desc: "Return an array of subscripts of all occurrences of the second argument in the array" },
+  { name: "ARRAY_PREPEND"        , args: 2     , dialect: "pgsql" , desc: "Prepend an element to the array" },
+  { name: "ARRAY_REMOVE"         , args: 2     , dialect: "pgsql" , desc: "Remove all elements equal to the given value from the array" },
+  { name: "ARRAY_REPLACE"        , args: 3     , dialect: "pgsql" , desc: "Replace each element equal to the given value with a new value" },
+  { name: "ARRAY_TO_STRING"      , args: [2, 3], dialect: "pgsql" , desc: "Concatenates array elements using supplied delimiter" },
+  { name: "ARRAY_UPPER"          , args: 2     , dialect: "pgsql" , desc: "Return upper bound of the requested array dimension" },
+  { name: "CARDINALITY"          , args: 1     , dialect: "pgsql" , desc: "Return the total number of elements in the array" },
+  { name: "STRING_TO_ARRAY"      , args: [2, 3], dialect: "pgsql" , desc: "Split string into array elements using supplied delimiter" },
+  { name: "UNNEST"               , args: [1, N], dialect: "pgsql" , desc: "Expand an array (or multiple arrays) to a set of rows" }
+], { category: "array", flags: kFunction });
+
+register([
+  { name: "STRING_AGG"           , args: 2     , dialect: "pgsql" , desc: "Input values concatenated into a string, separated by delimiter" }
+], { category: "string", flags: kFunction | kAggregate });
+
+register([
+  { name: "ARRAY_AGG"            , args: 1     , dialect: "pgsql" }
+], { category: "array", flags: kFunction | kAggregate });
+
+register([
+  { name: "AVG"                  , args: 1     , dialect: "*"     , desc: "The average (arithmetic mean) of all input values" },
+  { name: "BIT_AND"              , args: 1     , dialect: "*"     , desc: "The bitwise AND of all NON-NULL input values, or NULL" },
+  { name: "BIT_OR"               , args: 1     , dialect: "*"     , desc: "The bitwise OR of all NON-NULL input values, or NULL" },
+  { name: "BIT_XOR"              , args: 1     , dialect: "mysql" , desc: "The bitwise XOR of all NON-NULL input values, or NULL" },
+  { name: "BOOL_AND"             , args: 1     , dialect: "pgsql" , desc: "TRUE if all input values are TRUE, otherwise FALSE" },
+  { name: "BOOL_OR"              , args: 1     , dialect: "pgsql" , desc: "TRUE if at least one input value is TRUE, otherwise FALSE" },
+  { name: "COUNT"                , args: 1     , dialect: "*"     , desc: "Number of input rows (*) for which the value of expression is not null" },
+  { name: "MAX"                  , args: 1     , dialect: "*"     , desc: "Maximum value of expression across all input values" },
+  { name: "MIN"                  , args: 1     , dialect: "*"     , desc: "Minimum value of expression across all input values" },
+  { name: "SUM"                  , args: 1     , dialect: "*"     , desc: "Sum of expression across all input values" }
+], { category: "general", flags: kFunction | kAggregate });
+
+register([
+  { name: "JSON_AGG"             , args: 1     , dialect: "pgsql" , desc: "Aggregates values as a JSON array" },
+  { name: "JSONB_AGG"            , args: 2     , dialect: "pgsql" , desc: "Aggregates values as a JSON array" },
+  { name: "JSON_OBJECT_AGG"      , args: 2     , dialect: "pgsql" , desc: "Aggregates name/value pairs as a JSON object" },
+  { name: "JSONB_OBJECT_AGG"     , args: 2     , dialect: "pgsql" , desc: "Aggregates name/value pairs as a JSON object" }
+], { category: "json", flags: kFunction | kAggregate });
+
+register([
+  { name: "XMLAGG"               , args: 1     , dialect: "pgsql" , desc: "Concatenation of XML values" }
+], { category: "xml", flags: kFunction | kAggregate });
+
+register([
+  { name: "CORR"                 , args: 2     , dialect: "pgsql" , desc: "Correlation coefficient" },
+  { name: "COVAR_POP"            , args: 2     , dialect: "pgsql" , desc: "Population covariance" },
+  { name: "COVAR_SAMP"           , args: 2     , dialect: "pgsql" , desc: "Sample covariance" },
+  { name: "REGR_AVGX"            , args: 2     , dialect: "pgsql" , desc: "Average of the independent variable (sum(X)/N)" },
+  { name: "REGR_AVGY"            , args: 2     , dialect: "pgsql" , desc: "Average of the dependent variable (sum(Y)/N)" },
+  { name: "REGR_COUNT"           , args: 2     , dialect: "pgsql" , desc: "Number of input rows in which both expressions are NON-NULL" },
+  { name: "REGR_INTERCEPT"       , args: 2     , dialect: "pgsql" , desc: "Y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs" },
+  { name: "REGR_R2"              , args: 2     , dialect: "pgsql" , desc: "Square of the correlation coefficient" },
+  { name: "REGR_SLOPE"           , args: 2     , dialect: "pgsql" , desc: "Slope of the least-squares-fit linear equation determined by the (X, Y) pairs" },
+  { name: "REGR_SXX"             , args: 2     , dialect: "pgsql" , desc: "`sum(X^2) - sum(X)^2/N` - sum of squares of the independent variable" },
+  { name: "REGR_SXY"             , args: 2     , dialect: "pgsql" , desc: "`sum(X*Y) - sum(X) * sum(Y)/N` - sum of products of independent times dependent variable)" },
+  { name: "REGR_SYY"             , args: 2     , dialect: "pgsql" , desc: "`sum(Y^2) - sum(Y)^2/N` - sum of squares of the dependent variable" },
+  { name: "STDDEV_POP"           , args: 1     , dialect: "pgsql" , desc: "Population standard deviation of the input values" },
+  { name: "STDDEV_SAMP"          , args: 1     , dialect: "pgsql" , desc: "Sample standard deviation of the input values" },
+  { name: "VAR_POP"              , args: 1     , dialect: "pgsql" , desc: "Population variance of the input values" },
+  { name: "VAR_SAMP"             , args: 1     , dialect: "pgsql" , desc: "Sample variance of the input values" }
+], { category: "statistics", flags: kFunction | kAggregate });
+
+register([
+  { name: "CUME_DIST"            , args: [1, N], dialect: "pgsql" , desc: "Rank of the hypothetical row, with gaps for duplicate rows" },
+  { name: "DENSE_RANK"           , args: [1, N], dialect: "pgsql" , desc: "Rank of the hypothetical row, without gaps" },
+  { name: "PERCENT_RANK"         , args: [1, N], dialect: "pgsql" , desc: "Relative rank of the hypothetical row, ranging from 0 to 1" },
+  { name: "RANK"                 , args: [1, N], dialect: "pgsql" , desc: "Relative rank of the hypothetical row, ranging from 1/N to 1" }
+], { category: "hypothetical-set", flags: kFunction | kAggregate });
+
+// TODO:
+/*
+  { name: "EXISTS"               , args: null  , flags: 0           , dialect: "*"     },
+*/
+
+OpInfo.alias("!=", "<>");
+OpInfo.alias("POW", "POWER");
+OpInfo.alias("CEIL", "CEILING");
+OpInfo.alias("EVERY", "BOOL_AND");
+OpInfo.alias("STDDEV", "STDDEV_SAMP");
+OpInfo.alias("VARIANCE", "VAR_SAMP");
+
+OpInfo.not("=", "<>");
+OpInfo.not(">", "<=");
+OpInfo.not("<", ">=");
+OpInfo.not("~", "!~");
+OpInfo.not("~*", "!~*");
+
+// Add all known functions to `xql` namespace.
+OpInfo.forEach(function(_alias, info) {
+  const alias = _alias;
+  const flags = info.flags;
+
+  if (flags & kFunction) {
+    const name = info.name;
+    const Func = info.ctor;
+
+    xql[alias] = function(/* ... */) {
+      return new Func(name, slice.call(arguments, 0));
+    };
   }
 });
+
+})();
 
 }).apply(this, typeof module === "object" ? [exports] : [this.xql = {}]);
