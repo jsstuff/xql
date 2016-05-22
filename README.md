@@ -4,7 +4,8 @@ xql.js
 SQL builder and utilities library for node.js, [try it online](http://kobalicek.com/fiddle-xql.html).
 
   * [Official Repository (exjs/xql)](https://github.com/exjs/xql)
-  * [Public Domain (unlicense.org)](https://unlicense.org)
+  * [Official Chat (gitter)](https://gitter.im/exjs/exjs)
+  * [Public Domain (https://unlicense.org)](https://unlicense.org)
 
 Disclaimer
 ----------

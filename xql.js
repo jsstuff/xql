@@ -2994,7 +2994,7 @@ class Sort extends Identifier {
   /**
    * Gets the sorting order.
    *
-   * @return {string} Either an empty string (if not set) or "ASC" or "DESC".
+   * @return {string} Empty string (if not set), "ASC", or "DESC".
    */
   getSortOrder() {
     var flags = this._flags;
@@ -3394,7 +3394,7 @@ class Query extends Node {
 
     // Well this shouldn't be `null`.
     if (left === null)
-      throwCompileError("Query._join() - There is no table in query to join with");
+      throwCompileError("Query._join() - There is no table to join with");
 
     this._fromOrUsing = new Join(left, type, with_, condition);
     return this;
