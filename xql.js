@@ -213,7 +213,7 @@ const SortNulls = {
 // ============================================================================
 
 /**
- * Error classes namespace.
+ * Error classes.
  *
  * @namespace
  * @alias xql.error
@@ -478,22 +478,22 @@ class Context {
 
     // Computed properties based on configuration and dialect features. These
     // require `_update()` to be called after one or more property is changed.
-    this._DB_POS_INF     = "";   // Positive infinity value or keyword.
-    this._DB_NEG_INF     = "";   // Negative infinity value or keyword.
-    this._DB_NAN         = "";   // NaN value or keyword.
+    this._DB_POS_INF   = "";   // Positive infinity value or keyword.
+    this._DB_NEG_INF   = "";   // Negative infinity value or keyword.
+    this._DB_NAN       = "";   // NaN value or keyword.
 
-    this._DB_TRUE        = "";   // Dialect-specific TRUE value.
-    this._DB_FALSE       = "";   // Dialect-specific FALSE value.
+    this._DB_TRUE      = "";   // Dialect-specific TRUE value.
+    this._DB_FALSE     = "";   // Dialect-specific FALSE value.
 
-    this._SPACE_OR_NL    = "";   // Space character, either " " or "\n" (pretty).
-    this._COMMA_STR      = "";   // Comma separator, either ", " or ",\n" (pretty).
-    this._INDENT_STR     = "";   // Indentation string.
-    this._CONCAT_STR     = "";   // Concatenation string, equals to `space + _INDENT_STR`.
+    this._NL           = "";   // Space character, either " " or "\n" (pretty).
+    this._COMMA        = "";   // Comma separator, either ", " or ",\n" (pretty).
+    this._INDENT       = "";   // Indentation string.
+    this._CONCAT_STR   = "";   // Concatenation string, equals to `space + _INDENT`.
 
-    this._IDENT_BEFORE   = "";   // Escape character inserted before identifiers.
-    this._IDENT_AFTER    = "";   // Escape character inserted after identifiers.
-    this._IDENT_CHECK    = null; // Regular expression that checks if the identifier
-                                 // needs escaping or contains or contains ill chars.
+    this._IDENT_BEFORE = "";   // Escape character inserted before identifiers.
+    this._IDENT_AFTER  = "";   // Escape character inserted after identifiers.
+    this._IDENT_CHECK  = null; // Regular expression that checks if the identifier
+                               // needs escaping or contains or contains ill chars.
   }
 
   /**
@@ -1021,8 +1021,8 @@ class Context {
    * @private
    */
   _compileFunc(node) {
-    var name = node._type;
-    var info = OpInfo.get(name);
+    const name = node._type;
+    const info = OpInfo.get(name);
 
     // Check if the function is known and if it has specialized compiler.
     if (info !== null && info.compile !== null)
@@ -1047,11 +1047,15 @@ class Context {
     if (flags & NodeFlags.kDistinct)
       out = "DISTINCT " + out;
 
-    // Form `FUNCTION([DISTINCT] [parameters...])`.
+    // Form the function including an alias.
     out = name + "(" + out + ")";
     if (as)
       out += " AS " + this.escapeIdentifier(as);
     return out;
+  }
+
+  _compileAs(exp, as) {
+    return as ? "(" + exp +") AS " + this.escapeIdentifier(as) : exp;
   }
 
   /**
@@ -1064,12 +1068,13 @@ class Context {
    */
   _compileSelect(node) {
     var out = "SELECT";
-    var space = this._SPACE_OR_NL;
-    var flags = node._flags;
 
-    var offset = node._offset;
-    var limit = node._limit;
-    var hasLimit = offset !== 0 || limit !== 0;
+    const space = this._NL;
+    const flags = node._flags;
+
+    const offset = node._offset;
+    const limit = node._limit;
+    const hasLimit = offset !== 0 || limit !== 0;
 
     // Compile `SELECT [ALL|DISTINCT]`
     //
@@ -1080,33 +1085,33 @@ class Context {
     // Compile `[*|fields]`
     //
     // Note, `*` is only used if there are no columns specified.
-    var cols = node._fieldsOrReturning;
+    const cols = node._fieldsOrReturning;
     out += this.concat(cols && cols.length ? this._compileFields(cols) : "*");
 
     // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
-    var from = node._fromOrUsing;
+    const from = node._fromOrUsing;
     if (from)
       out += space + "FROM" + this.concat(this._compileFromOrUsing(from));
 
     // Compile `WHERE ...`.
-    var where = node._where;
+    const where = node._where;
     if (where && where._values.length)
       out += space + "WHERE" + this.concat(this._compileWhereOrHaving(where));
 
     // Compile `GROUP BY ...`.
-    var groupBy = node._groupBy;
+    const groupBy = node._groupBy;
     if (groupBy && groupBy.length)
       out += space + "GROUP BY" + this.concat(this._compileGroupBy(groupBy));
 
     // Compile `HAVING ...`.
-    var having = node._having;
+    const having = node._having;
     if (having && having._values.length)
       out += space + "HAVING" + this.concat(this._compileWhereOrHaving(having));
 
     // TODO: Compile `WINDOW ...`.
 
     // Compile `ORDER BY ...`.
-    var orderBy = node._orderBy;
+    const orderBy = node._orderBy;
     if (orderBy && orderBy.length)
       out += space + "ORDER BY" + this.concat(this._compileOrderBy(orderBy));
 
@@ -1135,7 +1140,7 @@ class Context {
     var k;
     var i, len;
 
-    const NL = this._SPACE_OR_NL;
+    const NL = this._NL;
 
     const table = node._table;
     const columns = node._columns;
@@ -1200,8 +1205,8 @@ class Context {
     var out = "";
     var t = "";
 
-    const NL = this._SPACE_OR_NL;
-    const COMMA = this._COMMA_STR;
+    const NL = this._NL;
+    const COMMA = this._COMMA;
 
     const table = node._table;
     const returning = node._fieldsOrReturning || emptyArray;
@@ -1282,7 +1287,7 @@ class Context {
     var out = "";
     var t = "";
 
-    const NL = this._SPACE_OR_NL;
+    const NL = this._NL;
 
     const table = node._table;
     const returning = node._fieldsOrReturning || emptyArray;
@@ -1336,7 +1341,7 @@ class Context {
   _compileCompound(node) {
     var out = "";
 
-    const space = this._SPACE_OR_NL;
+    const space = this._NL;
 
     const flags = node._flags;
     var combineOp = node._type;
@@ -1480,14 +1485,14 @@ class Context {
     // Okay, we want the opposite of what DB does, one more expression
     // that precedes the current one is needed: `<column> IS [NOT] NULL`.
     if (nullsFirst)
-      return "(" + out + " IS NOT NULL)" + this._COMMA_STR + out + sortOrder;
+      return "(" + out + " IS NOT NULL)" + this._COMMA + out + sortOrder;
     else
-      return "(" + out + " IS NULL)"     + this._COMMA_STR + out + sortOrder;
+      return "(" + out + " IS NULL)"     + this._COMMA + out + sortOrder;
   }
 
   _compileGroupBy(groupBy) {
     var out = "";
-    var COMMA = this._COMMA_STR;
+    var COMMA = this._COMMA;
 
     for (var i = 0, len = groupBy.length; i < len; i++) {
       var group = groupBy[i];
@@ -1505,7 +1510,7 @@ class Context {
 
   _compileOrderBy(orderBy) {
     var out = "";
-    var COMMA = this._COMMA_STR;
+    var COMMA = this._COMMA;
 
     for (var i = 0, len = orderBy.length; i < len; i++) {
       var sort = orderBy[i];
@@ -1518,7 +1523,7 @@ class Context {
 
   _compileFields(list) {
     var out = "";
-    var COMMA = this._COMMA_STR;
+    var COMMA = this._COMMA;
 
     for (var i = 0, len = list.length; i < len; i++) {
       var column = list[i];
@@ -1606,13 +1611,13 @@ class Context {
     const compact = !this.pretty;
     const features = this.features;
 
-    this._DB_TRUE     = features.nativeBoolean ? "TRUE"  : "1";
-    this._DB_FALSE    = features.nativeBoolean ? "FALSE" : "0";
+    this._DB_TRUE    = features.nativeBoolean ? "TRUE"  : "1";
+    this._DB_FALSE   = features.nativeBoolean ? "FALSE" : "0";
 
-    this._SPACE_OR_NL = compact ? " "  : "\n";
-    this._COMMA_STR   = compact ? ", " : ",\n";
-    this._INDENT_STR  = compact ? ""   : " ".repeat(this.indentation);
-    this._CONCAT_STR  = compact ? " "  : this._SPACE_OR_NL + this._INDENT_STR;
+    this._NL         = compact ? " "  : "\n";
+    this._COMMA      = compact ? ", " : ",\n";
+    this._INDENT     = compact ? ""   : " ".repeat(this.indentation);
+    this._CONCAT_STR = compact ? " "  : this._NL + this._INDENT;
 
     this.indent    = compact ? this._indent$none : this._indent$pretty;
     this.concat    = compact ? this._concat$none : this._concat$pretty;
@@ -1653,7 +1658,7 @@ class Context {
   }
 
   _indent$pretty(s) {
-    var INDENT = this._INDENT_STR;
+    var INDENT = this._INDENT;
     return INDENT + s.replace(reNewLine, "\n" + INDENT);
   }
 
@@ -2828,6 +2833,76 @@ class Func extends NodeArray {
   }
 }
 xql$node.Func = Func;
+
+/**
+ * SQL case.
+ *
+ * @alias xql.node.Case
+ */
+class Case extends NodeArray {
+  constructor() {
+    super("CASE");
+    this._else = null;
+  }
+
+  /** @override */
+  mustWrap() {
+    return false;
+  }
+
+  /** @override */
+  compileNode(ctx) {
+    var out = "CASE";
+    var as = this._as;
+
+    var whens = this._values;
+    var else_ = this._else;
+
+    for (var i = 0; i < whens.length; i++)
+      out += " " + whens[i].compileNode(ctx);
+
+    if (else_ !== null)
+      out += " ELSE " + ctx.escapeValue(else_);
+
+    out += " END";
+    if (as)
+      out = out + " AS " + ctx.escapeIdentifier(as);
+    return out;
+  }
+
+  WHEN(expression, body) {
+    this._values.push(new When(expression, body));
+    return this;
+  }
+
+  ELSE(body) {
+    this._else = body;
+    return this;
+  }
+}
+xql$node.Case = Case;
+
+/**
+ * SQL when.
+ *
+ * @alias xql.node.When
+ */
+class When extends Binary {
+  constructor(expression, body) {
+    super(expression, "WHEN", body);
+  }
+
+  /** @override */
+  mustWrap() {
+    return false;
+  }
+
+  /** @override */
+  compileNode(ctx) {
+    return "WHEN " + ctx.escapeValue(this._left) + " THEN " + ctx.escapeValue(this._right);
+  }
+}
+xql$node.When = When;
 
 /**
  * SQL value.
@@ -4285,6 +4360,11 @@ function FUNC(name /* [, ...] */) {
 }
 xql.FUNC = FUNC;
 
+function CASE() {
+  return new Case();
+}
+xql.CASE = CASE;
+
 // ============================================================================
 // [xql.FUNC]
 // ============================================================================
@@ -4328,6 +4408,11 @@ function register(defs, commons) {
       compile : def.compile || null
     });
   }
+}
+
+function compileCAST(ctx, $) {
+  const args = $._values;
+  return "CAST(" + ctx.escapeValue(args[0]) + " AS " + ctx.escapeValue(args[1]) + ")";
 }
 
 function compileBETWEEN(ctx, $) {
@@ -4397,7 +4482,7 @@ register([
   { name: "&<"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Right of"               },
   { name: "&>"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Left of"                },
   { name: "-|-"                  , args: 2     , flags: 0           , dialect: "*"     , desc: "Adjacent to"            },
-  { name: "+"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Add / union"            },
+  { name: "+"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Add / Union"            },
   { name: "-"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Subtract / Difference"  },
   { name: "*"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Multiply / Intersect"   },
   { name: "/"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Divide"                 },
@@ -4421,15 +4506,16 @@ register([
   { name: "OR"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Logical OR" },
   { name: "LIKE"                 , args: 2     , flags: 0           , dialect: "*"     },
   { name: "ILIKE"                , args: 2     , flags: 0           , dialect: "*"     },
-  { name: "IN"                   , args: 2     , flags: kRightValues, dialect: "*"     , desc: "x IN (y)" },
+  { name: "IN"                   , args: 2     , flags: kRightValues, dialect: "*"     , desc: "$1 IN ($2)" },
 ], { category: "general", flags: kBinary | kInPlaceNot });
 
 register([
+  { name: "CAST"                 , args: 2     , flags: 0           , dialect: "*"     , desc: "Cast to a different type", compile: compileCAST },
   { name: "COALESCE"             , args: [1, N], flags: 0           , dialect: "*"     , desc: "Return the first NON-NULL argument" },
   { name: "GREATEST"             , args: [1, N], flags: 0           , dialect: "*"     , desc: "Select the largest" },
   { name: "LEAST"                , args: [1, N], flags: 0           , dialect: "*"     , desc: "Select the smallest" },
-  { name: "NULLIF"               , args: 2     , flags: 0           , dialect: "*"     , desc: "Return NULL if value1 equals value2; value1 otherwise" },
-  { name: "BETWEEN"              , args: 3     , flags: 0           , dialect: "*"     , desc: "x BETWEEN a AND b", compile: compileBETWEEN }
+  { name: "NULLIF"               , args: 2     , flags: 0           , dialect: "*"     , desc: "Return NULL if $1 == $2; otherwise return $1" },
+  { name: "BETWEEN"              , args: 3     , flags: 0           , dialect: "*"     , desc: "$1 BETWEEN $2 AND $3", compile: compileBETWEEN }
 ], { category: "general", flags: kFunction });
 
 register([
@@ -4456,7 +4542,6 @@ register([
   { name: "RADIANS"              , args: 1     , flags: 0           , dialect: "*"     },
   { name: "RANDOM"               , args: 0     , flags: 0           , dialect: "*"      , compile: compileRANDOM },
   { name: "ROUND"                , args: [1, 2], flags: 0           , dialect: "*"     },
-  { name: "SETSEED"              , args: 1     , flags: kVoid       , dialect: "pgsql" },
   { name: "SIGN"                 , args: 1     , flags: 0           , dialect: "*"     },
   { name: "SIN"                  , args: 1     , flags: 0           , dialect: "*"     },
   { name: "SQRT"                 , args: 1     , flags: 0           , dialect: "*"     },
@@ -4464,6 +4549,10 @@ register([
   { name: "TRUNC"                , args: 1     , flags: 0           , dialect: "*"      , compile: compileTRUNC },
   { name: "WIDTH_BUCKET"         , args: 4     , flags: 0           , dialect: "pgsql" }
 ], { category: "math", flags: kFunction });
+
+register([
+  { name: "SETSEED"              , args: 1     , flags: 0           , dialect: "pgsql" }
+], { category: "math", flags: kFunction | kVoid });
 
 register([
   { name: "ASCII"                , args: 1     , flags: 0           , dialect: "*"     },
@@ -4534,27 +4623,27 @@ register([
 ], { category: "range", flags: kFunction });
 
 register([
-  { name: "ARRAY_APPEND"         , args: 2     , dialect: "pgsql" , desc: "Append an element to the array" },
-  { name: "ARRAY_CAT"            , args: 2     , dialect: "pgsql" , desc: "Concatenate two arrays" },
+  { name: "ARRAY_APPEND"         , args: 2     , dialect: "pgsql" , desc: "Append $2 to the array" },
+  { name: "ARRAY_CAT"            , args: 2     , dialect: "pgsql" , desc: "Concatenate arrays $1 and $2" },
   { name: "ARRAY_DIMS"           , args: 1     , dialect: "pgsql" , desc: "Return a text representation of array's dimensions" },
   { name: "ARRAY_NDIMS"          , args: 1     , dialect: "pgsql" , desc: "Return the number of dimensions of the array" },
   { name: "ARRAY_FILL"           , args: [2, N], dialect: "pgsql" , desc: "Return an array initialized with supplied value and dimensions" },
   { name: "ARRAY_LENGTH"         , args: 2     , dialect: "pgsql" , desc: "Return the length of the requested array dimension" },
   { name: "ARRAY_LOWER"          , args: 2     , dialect: "pgsql" , desc: "Return lower bound of the requested array dimension" },
-  { name: "ARRAY_POSITION"       , args: [2, 3], dialect: "pgsql" , desc: "Return the subscript of the first occurrence of the second argument, optionally starting from index (3rd argument)" },
-  { name: "ARRAY_POSITIONS"      , args: 2     , dialect: "pgsql" , desc: "Return an array of subscripts of all occurrences of the second argument in the array" },
-  { name: "ARRAY_PREPEND"        , args: 2     , dialect: "pgsql" , desc: "Prepend an element to the array" },
-  { name: "ARRAY_REMOVE"         , args: 2     , dialect: "pgsql" , desc: "Remove all elements equal to the given value from the array" },
-  { name: "ARRAY_REPLACE"        , args: 3     , dialect: "pgsql" , desc: "Replace each element equal to the given value with a new value" },
-  { name: "ARRAY_TO_STRING"      , args: [2, 3], dialect: "pgsql" , desc: "Concatenates array elements using supplied delimiter" },
+  { name: "ARRAY_POSITION"       , args: [2, 3], dialect: "pgsql" , desc: "Return the subscript of the first occurrence of $2, optionally starting from $3" },
+  { name: "ARRAY_POSITIONS"      , args: 2     , dialect: "pgsql" , desc: "Return an array of subscripts of all occurrences of $2 in the array" },
+  { name: "ARRAY_PREPEND"        , args: 2     , dialect: "pgsql" , desc: "Prepend $2 to the array" },
+  { name: "ARRAY_REMOVE"         , args: 2     , dialect: "pgsql" , desc: "Remove all elements equal to $2 from the array" },
+  { name: "ARRAY_REPLACE"        , args: 3     , dialect: "pgsql" , desc: "Replace each element equal to $2 with $3" },
+  { name: "ARRAY_TO_STRING"      , args: [2, 3], dialect: "pgsql" , desc: "Concatenates $1 and $2 optionally using delimiter $3" },
   { name: "ARRAY_UPPER"          , args: 2     , dialect: "pgsql" , desc: "Return upper bound of the requested array dimension" },
   { name: "CARDINALITY"          , args: 1     , dialect: "pgsql" , desc: "Return the total number of elements in the array" },
-  { name: "STRING_TO_ARRAY"      , args: [2, 3], dialect: "pgsql" , desc: "Split string into array elements using supplied delimiter" },
+  { name: "STRING_TO_ARRAY"      , args: [2, 3], dialect: "pgsql" , desc: "Split string into array elements optionally using delimiter $3" },
   { name: "UNNEST"               , args: [1, N], dialect: "pgsql" , desc: "Expand an array (or multiple arrays) to a set of rows" }
 ], { category: "array", flags: kFunction });
 
 register([
-  { name: "STRING_AGG"           , args: 2     , dialect: "pgsql" , desc: "Input values concatenated into a string, separated by delimiter" }
+  { name: "STRING_AGG"           , args: 2     , dialect: "pgsql" , desc: "Input values concatenated into a string, separated by $2" }
 ], { category: "string", flags: kFunction | kAggregate });
 
 register([
@@ -4613,7 +4702,7 @@ register([
 
 // TODO:
 /*
-  { name: "EXISTS"               , args: null  , flags: 0           , dialect: "*"     },
+  { name: "EXISTS"               , args: null  , dialect: "*"     },
 */
 
 OpInfo.alias("!=", "<>");
