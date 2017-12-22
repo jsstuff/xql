@@ -1,10 +1,11 @@
 xql.js
 ======
 
-SQL builder and utilities library for node.js, [try it online](http://kobalicek.com/fiddle-xql.html).
+SQL builder and utilities library for node.js.
 
   * [Official Repository (exjs/xql)](https://github.com/exjs/xql)
   * [Official Chat (gitter)](https://gitter.im/exjs/exjs)
+  * [Official Fiddler](https://kobalicek.com/fiddle-xql.html)
   * [Public Domain (https://unlicense.org)](https://unlicense.org)
 
 Disclaimer
@@ -435,4 +436,4 @@ WHERE
 More Examples
 -------------
 
-There is a project called [xql-fiddle](http://kobalicek.com/fiddle-xql.html), which can be used to explore xql.js possibilities by playing with it online. It contains more snippets and tries to teach by examples.
+There is a project called [xql-fiddle](https://kobalicek.com/fiddle-xql.html), which can be used to explore xql.js possibilities by playing with it online. It contains more snippets and tries to teach by examples.

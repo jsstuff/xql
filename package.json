@@ -2,6 +2,7 @@
   "name": "xql",
   "version": "1.2.0",
   "license": "Unlicense",
+  "engines": { "node": ">=4" },
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
@@ -32,9 +33,6 @@
   ],
 
   "main": "xql.js",
-
-  "engines": { "node": ">=4" },
-  "devDependencies": { "mocha": "*" },
 
   "repository" : {
     "type": "git",

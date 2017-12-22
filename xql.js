@@ -1,5 +1,5 @@
 // xql.js <https://github.com/exjs/xql>
-(function(_xql) {
+(function($export, $as) {
 "use strict";
 
 /**
@@ -8,7 +8,7 @@
  * @namespace
  * @alias xql
  */
-const xql = _xql;
+const xql = $export[$as] = {};
 
 const VERSION = "1.2.0";
 
@@ -20,14 +20,16 @@ const VERSION = "1.2.0";
 function returnFalse() { return false; }
 
 // Global shorthands.
-const isArray  = Array.isArray;
-const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
+const freeze   = Object.freeze;
 const hasOwn   = Object.prototype.hasOwnProperty;
 const slice    = Array.prototype.slice;
 
+const isArray  = Array.isArray;
+const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
+
 // Empty object/array used as an replacement for null/undefined in some cases.
-const EmptyObject = {};
-const emptyArray = [];
+const NoObject = freeze(Object.create(null));
+const NoArray = freeze([]);
 
 // Global regular expressions.
 const reNewLine      = /\n/g;                // Check for new line characters.
@@ -164,12 +166,9 @@ xql.OpInfo = OpInfo;
  * @alias xql.QuoteStyle
  */
 const QuoteStyle = {
-  /** Double quotes, for example "identifier". */
-  kDouble       : 0,
-  /** Grave quotes, for example `identifier`. */
-  kGrave        : 1,
-  /** Brackets, for example [identifier]. */
-  kBrackets     : 2
+  kDouble       : 0,          // Double quotes, for example "identifier".
+  kGrave        : 1,          // Grave quotes, for example `identifier`.
+  kBrackets     : 2           // Brackets, for example [identifier].
 };
 xql.QuoteStyle = QuoteStyle;
 
@@ -179,14 +178,14 @@ xql.QuoteStyle = QuoteStyle;
  * @alias xql.NodeFlags
  */
 const NodeFlags = {
-  kImmutable    : 0x00000001,
-  kNot          : 0x00000002,
-  kAscending    : 0x00000010,
-  kDescending   : 0x00000020,
-  kNullsFirst   : 0x00000040,
-  kNullsLast    : 0x00000080,
-  kAll          : 0x00000100,
-  kDistinct     : 0x00000200
+  kImmutable    : 0x00000001, // Node is immutable (cannot be changed).
+  kNot          : 0x00000002, // Expression is negated (NOT).
+  kAscending    : 0x00000010, // Sort ascending (ASC).
+  kDescending   : 0x00000020, // Sort descending (DESC).
+  kNullsFirst   : 0x00000040, // Sort nulls first (NULLS FIRST).
+  kNullsLast    : 0x00000080, // Sort nulls last (NULLS LAST).
+  kAll          : 0x00000100, // ALL flag.
+  kDistinct     : 0x00000200  // DISTINCT flag.
 };
 xql.NodeFlags = NodeFlags;
 
@@ -646,7 +645,7 @@ class Context {
    * the type explicitly in case of ambiguity.
    *
    * @param {*} value A value to escape.
-   * @param {string=} explicitType SQL type override
+   * @param {string} [explicitType] SQL type override
    * @return {string} Escaped `value` as string.
    */
   escapeValue(value, explicitType) {
@@ -926,7 +925,7 @@ class Context {
    * not performing expensive validation (that will be done by the server anyway).
    *
    * @param {string} query Query string to substitute (template).
-   * @param {array=} bindings Array of values to bind to `query`.
+   * @param {array} [bindings] Array of values to bind to `query`.
    * @return {string}
    *
    * @abstract
@@ -1144,8 +1143,8 @@ class Context {
 
     const table = node._table;
     const columns = node._columns;
-    const returning = node._fieldsOrReturning || emptyArray;
-    const typeMapping = node._typeMapping || EmptyObject;
+    const returning = node._fieldsOrReturning || NoArray;
+    const typeMapping = node._typeMapping || NoObject;
 
     const features = this.features;
     const hasReturning = features.returning && returning.length !== 0;
@@ -1209,7 +1208,7 @@ class Context {
     const COMMA = this._COMMA;
 
     const table = node._table;
-    const returning = node._fieldsOrReturning || emptyArray;
+    const returning = node._fieldsOrReturning || NoArray;
 
     const features = this.features;
     const hasReturning = features.returning && returning.length !== 0;
@@ -1234,7 +1233,7 @@ class Context {
       throwCompileError("UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided)");
 
     const values = objects[0];
-    const typeMapping = node._typeMapping || EmptyObject;
+    const typeMapping = node._typeMapping || NoObject;
 
     t = "";
     for (var k in values) {
@@ -1290,7 +1289,7 @@ class Context {
     const NL = this._NL;
 
     const table = node._table;
-    const returning = node._fieldsOrReturning || emptyArray;
+    const returning = node._fieldsOrReturning || NoArray;
 
     const features = this.features;
     const hasReturning = features.returning && returning.length !== 0;
@@ -2384,7 +2383,7 @@ xql$node.Node = Node;
  * SQL RAW expression.
  *
  * @param {string} expression Expression string.
- * @param {array=} bindings Bindings array used by the expression.
+ * @param {array} [bindings] Bindings array used by the expression.
  *
  * @alias xql.node.Raw
  */
@@ -2920,7 +2919,7 @@ xql$node.When = When;
  *
  * @param {string}  type  Type of the value.
  * @param {*}       value Data of the value.
- * @param {string=} as    SQL's AS clause, if given.
+ * @param {string}  [as]  SQL's AS clause, if given.
  *
  * @alias xql.node.Value
  */
@@ -3533,9 +3532,9 @@ class Query extends Node {
    *
    * @param {array|string|Identifier} column A single column or an array of
    *   columns.
-   * @param {string=} order Sorting order.
+   * @param {string} [order] Sorting order.
    *   Can contain either "" (default), "ASC", or "DESC".
-   * @param {string=} nulls Sorting nulls option.
+   * @param {string} [nulls] Sorting nulls option.
    *   Can contain either "" (default), "NULLS FIRST", or "NULLS LAST".
    * @return {this}
    */
@@ -3984,7 +3983,7 @@ xql$node.CompoundQuery = CompoundQuery;
  * Constructs a RAW query node.
  *
  * @param {string} raw Raw query string (won't be escaped).
- * @param {array=} bindings Data that will be sustituted in `raw`.
+ * @param {array} [bindings] Data that will be sustituted in `raw`.
  * @return {Raw}
  *
  * @alias xql.RAW
@@ -4082,7 +4081,7 @@ xql.UPDATE = UPDATE;
 /**
  * Constructs a DELETE query.
  *
- * @param {string=} from SQL table where to delete records.
+ * @param {string} [from] SQL table where to delete records.
  * @return {DeleteQuery}
  *
  * @alias xql.DELETE
@@ -4225,7 +4224,7 @@ xql.UNION_ALL = UNION_ALL;
  * Constructs a column's identifier.
  *
  * @param {string} column Column's name.
- * @param {string=} as SQL alias.
+ * @param {string} [as] SQL alias.
  * @return {Identifier}
  *
  * @alias xql.COL
@@ -4247,7 +4246,7 @@ xql.COL = COL;
  * Constructs a wrapped value.
  *
  * @param {*} value The value to wrap (any type).
- * @param {string=} as SQL alias.
+ * @param {string} [as] SQL alias.
  * @return {Value}
  *
  * @alias xql.VAL
@@ -4269,7 +4268,7 @@ xql.VAL = VAL;
  * Constructs a wrapped ARRAY value.
  *
  * @param {array} value The value to wrap.
- * @param {string=} as SQL alias.
+ * @param {string} [as] SQL alias.
  * @return {Value}
  *
  * @alias xql.ARRAY_VAL
@@ -4283,7 +4282,7 @@ xql.ARRAY_VAL = ARRAY_VAL;
  * Constructs a wrapped JSON value.
  *
  * @param {*} value The value to wrap.
- * @param {string=} as SQL alias.
+ * @param {string} [as] SQL alias.
  * @return {Value}
  *
  * @alias xql.JSON_VAL
@@ -4595,6 +4594,10 @@ register([
 ], { category: "string", flags: kFunction });
 
 register([
+  { name: "TO_CHAR"              , args: 2     , flags: 0           , dialect: "pgsql" }
+], { category: "datetime", flags: kFunction });
+
+register([
   { name: "DECODE"               , args: null  , flags: 0           , dialect: "*"     },
   { name: "ENCODE"               , args: null  , flags: 0           , dialect: "*"     },
 
@@ -4735,4 +4738,5 @@ OpInfo.forEach(function(_alias, info) {
 
 })();
 
-}).apply(this, typeof module === "object" ? [exports] : [this.xql = {}]);
+}).apply(this, typeof module === "object" && module && module.exports
+  ? [module, "exports"] : [this, "xql"]);
