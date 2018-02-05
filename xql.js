@@ -1121,6 +1121,11 @@ class Context {
     // TODO: Compile `FETCH ...`.
     // TODO: Compile `FOR ...`.
 
+    // Compile `(...) AS identifier`.
+    const as = node._as;
+    if (as)
+      out = this._wrapQuery(out) + " AS " + this.escapeIdentifier(as);
+
     return out;
   }
 
@@ -2679,7 +2684,7 @@ class Logical extends NodeArray {
         out += separator;
 
       if (value.mustWrap(ctx))
-        out += "(" + escaped + ")";
+        out += `(${escaped})`;
       else
         out += escaped;
     }
@@ -2704,7 +2709,7 @@ class ConditionMap extends Unary {
   compileNode(ctx) {
     var out = "";
 
-    var separator = " " + this._type + " ";
+    var separator = ` ${this._type} `;
     var columns = this._value;
 
     for (var k in columns) {
@@ -2721,7 +2726,7 @@ class ConditionMap extends Unary {
         out += " = ";
 
       if (value instanceof Node && value.mustWrap())
-        out += "(" + compiled + ")";
+        out += `(${compiled})`;
       else
         out += compiled;
     }
@@ -3603,6 +3608,13 @@ class SelectQuery extends Query {
 
     // `HAVING` clause.
     this._having = null;
+  }
+
+  /** @override */
+  mustWrap() {
+    // If this is a sub-select that will be compiled as `(SELECT ???) AS something` then we
+    // will wrap it during compilation and return `false` here so it's not double-wrapped.
+    return this._as ? false : true;
   }
 
   /** @override */
