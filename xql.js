@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.3.1";
+const VERSION = "1.3.2";
 
 // ============================================================================
 // [internal]
@@ -362,14 +362,15 @@ function alias(classobj, spec) {
  * @namespace
  * @alias xql.dialect
  */
-const xql$dialect = xql.dialect = {};
+const xql$dialect = xql.dialect = Object.create(null);
 
 /**
- * Hash table that maps a dialect string into a `Context` class.
+ * Mapping from a dialect string into a dialect `Context` class.
  *
- * @private
+ * @var xql.dialect.registry
  */
-const xql$dialect$map = {};
+const xql$dialect$registry = Object.create(null);
+xql$dialect.registry = xql$dialect$registry;
 
 /**
  * Checks whether the `dialect` exists in the global registry.
@@ -377,23 +378,36 @@ const xql$dialect$map = {};
  * @param {string} dialect A name of the dialect (always lowercase).
  * @return {boolean}
  *
- * @function xql.dialect.get
+ * @function xql.dialect.has
  */
 function xql$dialect$has(dialect) {
-  return hasOwn.call(xql$dialect$map, dialect);
+  return hasOwn.call(xql$dialect$registry, dialect);
 }
 xql$dialect.has = xql$dialect$has;
+
+/**
+ * Checks whether the `dialect` exists in the global registry.
+ *
+ * @param {string} dialect A name of the dialect (always lowercase).
+ * @return {Context} A dialect Context (if found) or null.
+ *
+ * @function xql.dialect.get
+ */
+function xql$dialect$get(dialect) {
+  return hasOwn.call(xql$dialect$registry, dialect) ? xql$dialect$registry[dialect] : null;
+}
+xql$dialect.get = xql$dialect$get;
 
 /**
  * Adds a new dialect to the global registry.
  *
  * @param {string} dialect A name of the dialect (always lowercase).
- * @param {function} classobj A `Context` class object (non-instantiated).
+ * @param {function} classobj A `Context` class object (not instantiated).
  *
  * @function xql.dialect.add
  */
 function xql$dialect$add(dialect, classobj) {
-  xql$dialect$map[dialect] = classobj;
+  xql$dialect$registry[dialect] = classobj;
 }
 xql$dialect.add = xql$dialect$add;
 
@@ -410,14 +424,14 @@ function $xql$dialect$newContext(options) {
   if (typeof options !== "object" || options === null)
     throwTypeError("xql.dialect.newContext() - Options must be Object");
 
-  var dialect = options.dialect;
+  const dialect = options.dialect;
   if (typeof dialect !== "string")
     throwTypeError("xql.dialect.newContext() - Options must have a dialect key");
 
-  if (!hasOwn.call(xql$dialect$map, dialect))
+  if (!hasOwn.call(xql$dialect$registry, dialect))
     throwTypeError("xql.dialect.newContext() - Unknown dialect '" + dialect + "'");
 
-  var classobj = xql$dialect$map[dialect];
+  const classobj = xql$dialect$registry[dialect];
   return new classobj(options);
 }
 xql$dialect.newContext = $xql$dialect$newContext;
@@ -628,7 +642,7 @@ class Context {
     // regexp search & replace anyway. This is the main reason it's generally
     // not reimplemented by a dialect-specific implementation as it won't
     // bring any performance gain.
-    var qs = this.features.quoteStyle;
+    const qs = this.features.quoteStyle;
 
     if (qs == QuoteStyle.kDouble  ) return ident.replace(reDoubleQuotes, "\"\"");
     if (qs == QuoteStyle.kGrave   ) return ident.replace(reGraveQuotes, "``");
