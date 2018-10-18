@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.3.2";
+const VERSION = "1.4.0";
 
 // ============================================================================
 // [internal]
@@ -109,9 +109,10 @@ const OpFlags = {
   kFunction    : 0x00000004, // Operator is a function.
   kAggregate   : 0x00000008, // Operator is an aggregation function.
   kVoid        : 0x00000010, // Operator has no return value.
-  kInPlaceNot  : 0x00000020, // Operator allows in place NOT (a NOT OP b).
-  kLeftValues  : 0x00000040, // Operator expects left  values as (a, b[, ...]).
-  kRightValues : 0x00000080, // Operator expects right values as (a, b[, ...]).
+  kNotBeforeOp : 0x00000020, // Operator allows in place NOT (a NOT OP b).
+  kNotAfterOp  : 0x00000040, // Operator allows in place NOT (a OP NOT b).
+  kLeftValues  : 0x00000080, // Operator expects left  values as (a, b[, ...]).
+  kRightValues : 0x00000100  // Operator expects right values as (a, b[, ...]).
 };
 xql.OpFlags = OpFlags;
 
@@ -982,6 +983,7 @@ class Context {
 
     var leftNode = node._left;
     var rightNode = node._right;
+    var nodeFlags = node._flags;
 
     var left = "";
     var right = "";
@@ -991,19 +993,25 @@ class Context {
 
     var opInfo = OpInfo.get(type);
     if (opInfo) {
-      const flags = opInfo.flags;
+      const opFlags = opInfo.flags;
 
-      if (flags & OpFlags.kLeftValues) left = this.escapeValues(leftNode);
-      if (flags & OpFlags.kRightValues) right = this.escapeValues(rightNode);
+      if (opFlags & OpFlags.kLeftValues) left = this.escapeValues(leftNode);
+      if (opFlags & OpFlags.kRightValues) right = this.escapeValues(rightNode);
 
       // Check if the right operand is `NULL` and convert the operator to `IS`
-      // or `IS NOT` if necessary to be more conforming with SQL standard.
+      // or `IS NOT` if necessary to be more conforming to the SQL standard.
       if (right === "NULL") {
         if (opInfo.name === "=")
           opInfo = OpInfo.get("IS");
       }
 
       keyword = opInfo.nameFmt;
+      if (nodeFlags & NodeFlags.kNot) {
+        if (opFlags & OpFlags.kNotBeforeOp)
+          keyword = " NOT" + keyword;
+        else if (opFlags & OpFlags.kNotAfterOp)
+          keyword = keyword + "NOT ";
+      }
     }
     else {
       keyword = " " + type + " ";
@@ -2374,6 +2382,12 @@ class Node {
   GT(b) { return BINARY_OP(this, ">", b); }
   GE(b) { return BINARY_OP(this, ">=", b); }
 
+  // Returns a new Node which contains `this BETWEEN a AND b` expression
+  BETWEEN(a, b) { return xql.BETWEEN(this, a, b); }
+
+  // Returns a new Node which contains `this NOT BETWEEN a AND b` expression
+  NOT_BETWEEN(a, b) { return xql.NOT_BETWEEN(this, a, b); }
+
   // Returns a new Node which contains `this IN b` expression.
   IN(b) {
     const len = arguments.length;
@@ -2391,9 +2405,9 @@ class Node {
     return BINARY_OP(this, "IN", b);
   }
 
-  // Returns a new Node which contains `this BETWEEN a AND b` expression
-  BETWEEN(a, b) {
-    return xql.BETWEEN(this, a, b);
+  // Returns a new Node which contains `this NOT IN b` expression.
+  NOT_IN(b) {
+    return this.IN(...arguments).setFlag(NodeFlags.kNot);
   }
 }
 xql$node.Node = Node;
@@ -4403,7 +4417,8 @@ const kBinary       = OpFlags.kBinary;
 const kFunction     = OpFlags.kFunction;
 const kAggregate    = OpFlags.kAggregate;
 const kVoid         = OpFlags.kVoid;
-const kInPlaceNot   = OpFlags.kInPlaceNot;
+const kNotBeforeOp  = OpFlags.kNotBeforeOp;
+const kNotAfterOp   = OpFlags.kNotAfterOp;
 const kLeftValues   = OpFlags.kLeftValues;
 const kRightValues  = OpFlags.kRightValues;
 
@@ -4423,7 +4438,7 @@ function register(defs, commons) {
     OpInfo.add({
       name    : name,
       nameFmt : (flags & kFunction) ? name : " " + def.name + " ",
-      desc    : def.desc || "",
+      doc     : def.doc || "",
       ctor    : def.ctor || Func,
       flags   : flags,
       dialect : dialect,
@@ -4442,8 +4457,9 @@ function compileCAST(ctx, $) {
 
 function compileBETWEEN(ctx, $) {
   const args = $._values;
+  const keyword = $._flags & NodeFlags.kNot ? " NOT BETWEEN " : " BETWEEN ";
 
-  return ctx.escapeOrWrap(args[0]) + " BETWEEN " +
+  return ctx.escapeOrWrap(args[0]) + keyword +
          ctx.escapeOrWrap(args[1]) + " AND " +
          ctx.escapeOrWrap(args[2]);
 }
@@ -4501,46 +4517,49 @@ register([
   { name: "<"                    , args: 2     , flags: 0           , dialect: "*"     },
   { name: "<="                   , args: 2     , flags: 0           , dialect: "*"     },
   { name: "<>"                   , args: 2     , flags: 0           , dialect: "*"     },
-  { name: "@>"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Contains"               },
-  { name: "<@"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Contained by"           },
-  { name: "&&"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Overlap"                },
-  { name: "&<"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Right of"               },
-  { name: "&>"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Left of"                },
-  { name: "-|-"                  , args: 2     , flags: 0           , dialect: "*"     , desc: "Adjacent to"            },
-  { name: "+"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Add / Union"            },
-  { name: "-"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Subtract / Difference"  },
-  { name: "*"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Multiply / Intersect"   },
-  { name: "/"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Divide"                 },
-  { name: "%"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Modulo"                 },
-  { name: "^"                    , args: 2     , flags: 0           , dialect: "pgsql" , desc: "Power"                  },
-  { name: "&"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise AND"            },
-  { name: "|"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise OR"             },
-  { name: "#"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise XOR"            },
-  { name: "~"                    , args: 2     , flags: 0           , dialect: "*"     , desc: "Bitwise NOT / Match"    },
-  { name: "<<"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Left shift / Left of"   },
-  { name: ">>"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Right shift / Right of" },
-  { name: "||"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Concatenate"            },
-  { name: "~*"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Match (I)"              },
-  { name: "!~"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Not match"              },
-  { name: "!~*"                  , args: 2     , flags: 0           , dialect: "*"     , desc: "Not match (I)"          }
+  { name: "@>"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Contains"               },
+  { name: "<@"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Contained by"           },
+  { name: "&&"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Overlap"                },
+  { name: "&<"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Right of"               },
+  { name: "&>"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Left of"                },
+  { name: "-|-"                  , args: 2     , flags: 0           , dialect: "*"     , doc: "Adjacent to"            },
+  { name: "+"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Add / Union"            },
+  { name: "-"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Subtract / Difference"  },
+  { name: "*"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Multiply / Intersect"   },
+  { name: "/"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Divide"                 },
+  { name: "%"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Modulo"                 },
+  { name: "^"                    , args: 2     , flags: 0           , dialect: "pgsql" , doc: "Power"                  },
+  { name: "&"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Bitwise AND"            },
+  { name: "|"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Bitwise OR"             },
+  { name: "#"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Bitwise XOR"            },
+  { name: "~"                    , args: 2     , flags: 0           , dialect: "*"     , doc: "Bitwise NOT / Match"    },
+  { name: "<<"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Left shift / Left of"   },
+  { name: ">>"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Right shift / Right of" },
+  { name: "||"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Concatenate"            },
+  { name: "~*"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Match (I)"              },
+  { name: "!~"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Not match"              },
+  { name: "!~*"                  , args: 2     , flags: 0           , dialect: "*"     , doc: "Not match (I)"          }
+], { category: "general", flags: kBinary });
+
+register([
+  { name: "AND"                  , args: 2     , flags: 0           , dialect: "*"     , doc: "Logical AND" },
+  { name: "OR"                   , args: 2     , flags: 0           , dialect: "*"     , doc: "Logical OR" }
 ], { category: "general", flags: kBinary });
 
 register([
   { name: "IS"                   , args: 2     , flags: 0           , dialect: "*"     },
-  { name: "AND"                  , args: 2     , flags: 0           , dialect: "*"     , desc: "Logical AND" },
-  { name: "OR"                   , args: 2     , flags: 0           , dialect: "*"     , desc: "Logical OR" },
   { name: "LIKE"                 , args: 2     , flags: 0           , dialect: "*"     },
   { name: "ILIKE"                , args: 2     , flags: 0           , dialect: "*"     },
-  { name: "IN"                   , args: 2     , flags: kRightValues, dialect: "*"     , desc: "$1 IN ($2)" },
-], { category: "general", flags: kBinary | kInPlaceNot });
+  { name: "IN"                   , args: 2     , flags: kRightValues, dialect: "*"     , doc: "$1 IN ($2)" }
+], { category: "general", flags: kBinary | kNotBeforeOp });
 
 register([
-  { name: "CAST"                 , args: 2     , flags: 0           , dialect: "*"     , desc: "Cast to a different type", compile: compileCAST },
-  { name: "COALESCE"             , args: [1, N], flags: 0           , dialect: "*"     , desc: "Return the first NON-NULL argument" },
-  { name: "GREATEST"             , args: [1, N], flags: 0           , dialect: "*"     , desc: "Select the largest" },
-  { name: "LEAST"                , args: [1, N], flags: 0           , dialect: "*"     , desc: "Select the smallest" },
-  { name: "NULLIF"               , args: 2     , flags: 0           , dialect: "*"     , desc: "Return NULL if $1 == $2; otherwise return $1" },
-  { name: "BETWEEN"              , args: 3     , flags: 0           , dialect: "*"     , desc: "$1 BETWEEN $2 AND $3", compile: compileBETWEEN }
+  { name: "CAST"                 , args: 2     , flags: 0           , dialect: "*"     , doc: "Cast to a different type", compile: compileCAST },
+  { name: "NULLIF"               , args: 2     , flags: 0           , dialect: "*"     , doc: "Return NULL if $1 == $2; otherwise return $1" },
+  { name: "COALESCE"             , args: [1, N], flags: 0           , dialect: "*"     , doc: "Return the first NON-NULL argument" },
+  { name: "GREATEST"             , args: [1, N], flags: 0           , dialect: "*"     , doc: "Select the largest" },
+  { name: "LEAST"                , args: [1, N], flags: 0           , dialect: "*"     , doc: "Select the smallest" },
+  { name: "BETWEEN"              , args: 3     , flags: kNotBeforeOp, dialect: "*"     , doc: "$1 BETWEEN $2 AND $3", compile: compileBETWEEN }
 ], { category: "general", flags: kFunction });
 
 register([
@@ -4652,27 +4671,27 @@ register([
 ], { category: "range", flags: kFunction });
 
 register([
-  { name: "ARRAY_APPEND"         , args: 2     , dialect: "pgsql" , desc: "Append $2 to the array" },
-  { name: "ARRAY_CAT"            , args: 2     , dialect: "pgsql" , desc: "Concatenate arrays $1 and $2" },
-  { name: "ARRAY_DIMS"           , args: 1     , dialect: "pgsql" , desc: "Return a text representation of array's dimensions" },
-  { name: "ARRAY_NDIMS"          , args: 1     , dialect: "pgsql" , desc: "Return the number of dimensions of the array" },
-  { name: "ARRAY_FILL"           , args: [2, N], dialect: "pgsql" , desc: "Return an array initialized with supplied value and dimensions" },
-  { name: "ARRAY_LENGTH"         , args: 2     , dialect: "pgsql" , desc: "Return the length of the requested array dimension" },
-  { name: "ARRAY_LOWER"          , args: 2     , dialect: "pgsql" , desc: "Return lower bound of the requested array dimension" },
-  { name: "ARRAY_POSITION"       , args: [2, 3], dialect: "pgsql" , desc: "Return the subscript of the first occurrence of $2, optionally starting from $3" },
-  { name: "ARRAY_POSITIONS"      , args: 2     , dialect: "pgsql" , desc: "Return an array of subscripts of all occurrences of $2 in the array" },
-  { name: "ARRAY_PREPEND"        , args: 2     , dialect: "pgsql" , desc: "Prepend $2 to the array" },
-  { name: "ARRAY_REMOVE"         , args: 2     , dialect: "pgsql" , desc: "Remove all elements equal to $2 from the array" },
-  { name: "ARRAY_REPLACE"        , args: 3     , dialect: "pgsql" , desc: "Replace each element equal to $2 with $3" },
-  { name: "ARRAY_TO_STRING"      , args: [2, 3], dialect: "pgsql" , desc: "Concatenates $1 and $2 optionally using delimiter $3" },
-  { name: "ARRAY_UPPER"          , args: 2     , dialect: "pgsql" , desc: "Return upper bound of the requested array dimension" },
-  { name: "CARDINALITY"          , args: 1     , dialect: "pgsql" , desc: "Return the total number of elements in the array" },
-  { name: "STRING_TO_ARRAY"      , args: [2, 3], dialect: "pgsql" , desc: "Split string into array elements optionally using delimiter $3" },
-  { name: "UNNEST"               , args: [1, N], dialect: "pgsql" , desc: "Expand an array (or multiple arrays) to a set of rows" }
+  { name: "ARRAY_APPEND"         , args: 2     , dialect: "pgsql" , doc: "Append $2 to the array" },
+  { name: "ARRAY_CAT"            , args: 2     , dialect: "pgsql" , doc: "Concatenate arrays $1 and $2" },
+  { name: "ARRAY_DIMS"           , args: 1     , dialect: "pgsql" , doc: "Return a text representation of array's dimensions" },
+  { name: "ARRAY_NDIMS"          , args: 1     , dialect: "pgsql" , doc: "Return the number of dimensions of the array" },
+  { name: "ARRAY_FILL"           , args: [2, N], dialect: "pgsql" , doc: "Return an array initialized with supplied value and dimensions" },
+  { name: "ARRAY_LENGTH"         , args: 2     , dialect: "pgsql" , doc: "Return the length of the requested array dimension" },
+  { name: "ARRAY_LOWER"          , args: 2     , dialect: "pgsql" , doc: "Return lower bound of the requested array dimension" },
+  { name: "ARRAY_POSITION"       , args: [2, 3], dialect: "pgsql" , doc: "Return the subscript of the first occurrence of $2, optionally starting from $3" },
+  { name: "ARRAY_POSITIONS"      , args: 2     , dialect: "pgsql" , doc: "Return an array of subscripts of all occurrences of $2 in the array" },
+  { name: "ARRAY_PREPEND"        , args: 2     , dialect: "pgsql" , doc: "Prepend $2 to the array" },
+  { name: "ARRAY_REMOVE"         , args: 2     , dialect: "pgsql" , doc: "Remove all elements equal to $2 from the array" },
+  { name: "ARRAY_REPLACE"        , args: 3     , dialect: "pgsql" , doc: "Replace each element equal to $2 with $3" },
+  { name: "ARRAY_TO_STRING"      , args: [2, 3], dialect: "pgsql" , doc: "Concatenates $1 and $2 optionally using delimiter $3" },
+  { name: "ARRAY_UPPER"          , args: 2     , dialect: "pgsql" , doc: "Return upper bound of the requested array dimension" },
+  { name: "CARDINALITY"          , args: 1     , dialect: "pgsql" , doc: "Return the total number of elements in the array" },
+  { name: "STRING_TO_ARRAY"      , args: [2, 3], dialect: "pgsql" , doc: "Split string into array elements optionally using delimiter $3" },
+  { name: "UNNEST"               , args: [1, N], dialect: "pgsql" , doc: "Expand an array (or multiple arrays) to a set of rows" }
 ], { category: "array", flags: kFunction });
 
 register([
-  { name: "STRING_AGG"           , args: 2     , dialect: "pgsql" , desc: "Input values concatenated into a string, separated by $2" }
+  { name: "STRING_AGG"           , args: 2     , dialect: "pgsql" , doc: "Input values concatenated into a string, separated by $2" }
 ], { category: "string", flags: kFunction | kAggregate });
 
 register([
@@ -4680,53 +4699,53 @@ register([
 ], { category: "array", flags: kFunction | kAggregate });
 
 register([
-  { name: "AVG"                  , args: 1     , dialect: "*"     , desc: "The average (arithmetic mean) of all input values" },
-  { name: "BIT_AND"              , args: 1     , dialect: "*"     , desc: "The bitwise AND of all NON-NULL input values, or NULL" },
-  { name: "BIT_OR"               , args: 1     , dialect: "*"     , desc: "The bitwise OR of all NON-NULL input values, or NULL" },
-  { name: "BIT_XOR"              , args: 1     , dialect: "mysql" , desc: "The bitwise XOR of all NON-NULL input values, or NULL" },
-  { name: "BOOL_AND"             , args: 1     , dialect: "pgsql" , desc: "TRUE if all input values are TRUE, otherwise FALSE" },
-  { name: "BOOL_OR"              , args: 1     , dialect: "pgsql" , desc: "TRUE if at least one input value is TRUE, otherwise FALSE" },
-  { name: "COUNT"                , args: 1     , dialect: "*"     , desc: "Number of input rows (*) for which the value of expression is not null" },
-  { name: "MAX"                  , args: 1     , dialect: "*"     , desc: "Maximum value of expression across all input values" },
-  { name: "MIN"                  , args: 1     , dialect: "*"     , desc: "Minimum value of expression across all input values" },
-  { name: "SUM"                  , args: 1     , dialect: "*"     , desc: "Sum of expression across all input values" }
+  { name: "AVG"                  , args: 1     , dialect: "*"     , doc: "The average (arithmetic mean) of all input values" },
+  { name: "BIT_AND"              , args: 1     , dialect: "*"     , doc: "The bitwise AND of all NON-NULL input values, or NULL" },
+  { name: "BIT_OR"               , args: 1     , dialect: "*"     , doc: "The bitwise OR of all NON-NULL input values, or NULL" },
+  { name: "BIT_XOR"              , args: 1     , dialect: "mysql" , doc: "The bitwise XOR of all NON-NULL input values, or NULL" },
+  { name: "BOOL_AND"             , args: 1     , dialect: "pgsql" , doc: "TRUE if all input values are TRUE, otherwise FALSE" },
+  { name: "BOOL_OR"              , args: 1     , dialect: "pgsql" , doc: "TRUE if at least one input value is TRUE, otherwise FALSE" },
+  { name: "COUNT"                , args: 1     , dialect: "*"     , doc: "Number of input rows (*) for which the value of expression is not null" },
+  { name: "MAX"                  , args: 1     , dialect: "*"     , doc: "Maximum value of expression across all input values" },
+  { name: "MIN"                  , args: 1     , dialect: "*"     , doc: "Minimum value of expression across all input values" },
+  { name: "SUM"                  , args: 1     , dialect: "*"     , doc: "Sum of expression across all input values" }
 ], { category: "general", flags: kFunction | kAggregate });
 
 register([
-  { name: "JSON_AGG"             , args: 1     , dialect: "pgsql" , desc: "Aggregates values as a JSON array" },
-  { name: "JSONB_AGG"            , args: 2     , dialect: "pgsql" , desc: "Aggregates values as a JSON array" },
-  { name: "JSON_OBJECT_AGG"      , args: 2     , dialect: "pgsql" , desc: "Aggregates name/value pairs as a JSON object" },
-  { name: "JSONB_OBJECT_AGG"     , args: 2     , dialect: "pgsql" , desc: "Aggregates name/value pairs as a JSON object" }
+  { name: "JSON_AGG"             , args: 1     , dialect: "pgsql" , doc: "Aggregates values as a JSON array" },
+  { name: "JSONB_AGG"            , args: 2     , dialect: "pgsql" , doc: "Aggregates values as a JSON array" },
+  { name: "JSON_OBJECT_AGG"      , args: 2     , dialect: "pgsql" , doc: "Aggregates name/value pairs as a JSON object" },
+  { name: "JSONB_OBJECT_AGG"     , args: 2     , dialect: "pgsql" , doc: "Aggregates name/value pairs as a JSON object" }
 ], { category: "json", flags: kFunction | kAggregate });
 
 register([
-  { name: "XMLAGG"               , args: 1     , dialect: "pgsql" , desc: "Concatenation of XML values" }
+  { name: "XMLAGG"               , args: 1     , dialect: "pgsql" , doc: "Concatenation of XML values" }
 ], { category: "xml", flags: kFunction | kAggregate });
 
 register([
-  { name: "CORR"                 , args: 2     , dialect: "pgsql" , desc: "Correlation coefficient" },
-  { name: "COVAR_POP"            , args: 2     , dialect: "pgsql" , desc: "Population covariance" },
-  { name: "COVAR_SAMP"           , args: 2     , dialect: "pgsql" , desc: "Sample covariance" },
-  { name: "REGR_AVGX"            , args: 2     , dialect: "pgsql" , desc: "Average of the independent variable (sum(X)/N)" },
-  { name: "REGR_AVGY"            , args: 2     , dialect: "pgsql" , desc: "Average of the dependent variable (sum(Y)/N)" },
-  { name: "REGR_COUNT"           , args: 2     , dialect: "pgsql" , desc: "Number of input rows in which both expressions are NON-NULL" },
-  { name: "REGR_INTERCEPT"       , args: 2     , dialect: "pgsql" , desc: "Y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs" },
-  { name: "REGR_R2"              , args: 2     , dialect: "pgsql" , desc: "Square of the correlation coefficient" },
-  { name: "REGR_SLOPE"           , args: 2     , dialect: "pgsql" , desc: "Slope of the least-squares-fit linear equation determined by the (X, Y) pairs" },
-  { name: "REGR_SXX"             , args: 2     , dialect: "pgsql" , desc: "`sum(X^2) - sum(X)^2/N` - sum of squares of the independent variable" },
-  { name: "REGR_SXY"             , args: 2     , dialect: "pgsql" , desc: "`sum(X*Y) - sum(X) * sum(Y)/N` - sum of products of independent times dependent variable)" },
-  { name: "REGR_SYY"             , args: 2     , dialect: "pgsql" , desc: "`sum(Y^2) - sum(Y)^2/N` - sum of squares of the dependent variable" },
-  { name: "STDDEV_POP"           , args: 1     , dialect: "pgsql" , desc: "Population standard deviation of the input values" },
-  { name: "STDDEV_SAMP"          , args: 1     , dialect: "pgsql" , desc: "Sample standard deviation of the input values" },
-  { name: "VAR_POP"              , args: 1     , dialect: "pgsql" , desc: "Population variance of the input values" },
-  { name: "VAR_SAMP"             , args: 1     , dialect: "pgsql" , desc: "Sample variance of the input values" }
+  { name: "CORR"                 , args: 2     , dialect: "pgsql" , doc: "Correlation coefficient" },
+  { name: "COVAR_POP"            , args: 2     , dialect: "pgsql" , doc: "Population covariance" },
+  { name: "COVAR_SAMP"           , args: 2     , dialect: "pgsql" , doc: "Sample covariance" },
+  { name: "REGR_AVGX"            , args: 2     , dialect: "pgsql" , doc: "Average of the independent variable (sum(X)/N)" },
+  { name: "REGR_AVGY"            , args: 2     , dialect: "pgsql" , doc: "Average of the dependent variable (sum(Y)/N)" },
+  { name: "REGR_COUNT"           , args: 2     , dialect: "pgsql" , doc: "Number of input rows in which both expressions are NON-NULL" },
+  { name: "REGR_INTERCEPT"       , args: 2     , dialect: "pgsql" , doc: "Y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs" },
+  { name: "REGR_R2"              , args: 2     , dialect: "pgsql" , doc: "Square of the correlation coefficient" },
+  { name: "REGR_SLOPE"           , args: 2     , dialect: "pgsql" , doc: "Slope of the least-squares-fit linear equation determined by the (X, Y) pairs" },
+  { name: "REGR_SXX"             , args: 2     , dialect: "pgsql" , doc: "`sum(X^2) - sum(X)^2/N` - sum of squares of the independent variable" },
+  { name: "REGR_SXY"             , args: 2     , dialect: "pgsql" , doc: "`sum(X*Y) - sum(X) * sum(Y)/N` - sum of products of independent times dependent variable)" },
+  { name: "REGR_SYY"             , args: 2     , dialect: "pgsql" , doc: "`sum(Y^2) - sum(Y)^2/N` - sum of squares of the dependent variable" },
+  { name: "STDDEV_POP"           , args: 1     , dialect: "pgsql" , doc: "Population standard deviation of the input values" },
+  { name: "STDDEV_SAMP"          , args: 1     , dialect: "pgsql" , doc: "Sample standard deviation of the input values" },
+  { name: "VAR_POP"              , args: 1     , dialect: "pgsql" , doc: "Population variance of the input values" },
+  { name: "VAR_SAMP"             , args: 1     , dialect: "pgsql" , doc: "Sample variance of the input values" }
 ], { category: "statistics", flags: kFunction | kAggregate });
 
 register([
-  { name: "CUME_DIST"            , args: [1, N], dialect: "pgsql" , desc: "Rank of the hypothetical row, with gaps for duplicate rows" },
-  { name: "DENSE_RANK"           , args: [1, N], dialect: "pgsql" , desc: "Rank of the hypothetical row, without gaps" },
-  { name: "PERCENT_RANK"         , args: [1, N], dialect: "pgsql" , desc: "Relative rank of the hypothetical row, ranging from 0 to 1" },
-  { name: "RANK"                 , args: [1, N], dialect: "pgsql" , desc: "Relative rank of the hypothetical row, ranging from 1/N to 1" }
+  { name: "CUME_DIST"            , args: [1, N], dialect: "pgsql" , doc: "Rank of the hypothetical row, with gaps for duplicate rows" },
+  { name: "DENSE_RANK"           , args: [1, N], dialect: "pgsql" , doc: "Rank of the hypothetical row, without gaps" },
+  { name: "PERCENT_RANK"         , args: [1, N], dialect: "pgsql" , doc: "Relative rank of the hypothetical row, ranging from 0 to 1" },
+  { name: "RANK"                 , args: [1, N], dialect: "pgsql" , doc: "Relative rank of the hypothetical row, ranging from 1/N to 1" }
 ], { category: "hypothetical-set", flags: kFunction | kAggregate });
 
 // TODO:
@@ -4759,6 +4778,18 @@ OpInfo.forEach(function(_alias, info) {
     xql[alias] = function(/* ... */) {
       return new Func(name, slice.call(arguments, 0));
     };
+
+    if (flags & kNotBeforeOp) {
+      xql["NOT_" + alias] = function(/* ... */) {
+        return (new Func(name, slice.call(arguments, 0))).setFlag(NodeFlags.kNot);
+      };
+    }
+
+    if (flags & kNotAfterOp) {
+      xql[alias + "_NOT"] = function(/* ... */) {
+        return (new Func(name, slice.call(arguments, 0))).setFlag(NodeFlags.kNot);
+      };
+    }
   }
 });
 

@@ -1,8 +1,8 @@
 {
   "name": "xql",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "license": "Unlicense",
-  "engines": { "node": ">=4" },
+  "engines": { "node": ">=8" },
 
   "description": "SQL builder and utilities library designed to work with PostgreSQL.",
   "keywords": [
