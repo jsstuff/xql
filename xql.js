@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.1";
+const VERSION = "1.4.2";
 
 // ============================================================================
 // [internal]
@@ -52,22 +52,22 @@ const IdentifierMap = {
 // Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
 const BoolMap = (function() {
   const map = {
-    "0"       : false,
-    "f"       : false,
-    "false"   : false,
-    "n"       : false,
-    "no"      : false,
-    "off"     : false,
+    "0"     : false,
+    "f"     : false,
+    "false" : false,
+    "n"     : false,
+    "no"    : false,
+    "off"   : false,
 
-    "1"       : true,
-    "t"       : true,
-    "true"    : true,
-    "y"       : true,
-    "yes"     : true,
-    "on"      : true
+    "1"     : true,
+    "t"     : true,
+    "true"  : true,
+    "y"     : true,
+    "yes"   : true,
+    "on"    : true
   };
   Object.keys(map).forEach(function(key) { map[key.toUpperCase()] = map[key]; });
-  return Object.freeze(map);
+  return freeze(map);
 })();
 
 const TypeMap = {
@@ -105,16 +105,18 @@ Object.keys(TypeMap).forEach(function(key) {
  *
  * @alias xql.OpFlags
  */
-const OpFlags = Object.freeze({
-  kUnary       : 0x00000001, // Operator is unary (has one child node - `value`).
-  kBinary      : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
-  kFunction    : 0x00000004, // Operator is a function.
-  kAggregate   : 0x00000008, // Operator is an aggregation function.
-  kVoid        : 0x00000010, // Operator has no return value.
-  kNotBeforeOp : 0x00000020, // Operator allows in-place NOT (a NOT OP b).
-  kNotAfterOp  : 0x00000040, // Operator allows in-place NOT (a OP NOT b).
-  kLeftValues  : 0x00000080, // Operator expects left  values as (a, b[, ...]).
-  kRightValues : 0x00000100  // Operator expects right values as (a, b[, ...]).
+const OpFlags = freeze({
+  kUnary        : 0x00000001, // Operator is unary (has one child node - `value`).
+  kBinary       : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
+  kFunction     : 0x00000004, // Operator is a function.
+  kAggregate    : 0x00000008, // Operator is an aggregation function.
+  kVoid         : 0x00000010, // Operator has no return value.
+  kNotBeforeOp  : 0x00000020, // Operator allows in-place NOT (a NOT OP b).
+  kNotAfterOp   : 0x00000040, // Operator allows in-place NOT (a OP NOT b).
+  kNotMiddleOp  : 0x00000080, // Operator allows in-place NOT (a OP NOT b).
+  kLeftValues   : 0x00000100, // Operator expects left  values as (a, b[, ...]).
+  kRightValues  : 0x00000200, // Operator expects right values as (a, b[, ...]).
+  kSpaceSeparate: 0x00000400  // Separate the function or operator by spaces before and after.
 });
 xql.OpFlags = OpFlags;
 
@@ -130,37 +132,32 @@ const OpInfo = new class OpInfo {
   }
 
   get(name) {
-    var map = this._map;
-    return hasOwn.call(map, name) ? map[name] : null;
+    const map = this._map;
+    return name && hasOwn.call(map, name) ? map[name] : null;
   }
 
   add(info) {
-    const opFlags = info.opFlags;
     this._map[info.name] = info;
-
-    if (opFlags & OpFlags.kNotBeforeOp) {
-      const neg = Object.assign({}, info);
-      neg.nodeFlags = NodeFlags.kNot;
-      this._map["NOT " + info.name] = neg;
+    if (info.nameNot) {
+      const infoNot = Object.assign({}, info);
+      infoNot.nodeFlags = NodeFlags.kNot;
+      this._map[info.nameNot] = infoNot;
     }
-
-    if (opFlags & OpFlags.kNotAfterOp) {
-      const neg = Object.assign({}, info);
-      neg.nodeFlags = NodeFlags.kNot;
-      this._map[info.name + "NOT"] = neg;
-    }
+    return this;
   }
 
   addAlias(a, b) {
     this._map[a] = this._map[b];
+    return this;
   }
 
   addNegation(a, b) {
-    var aInfo = this._map[a];
-    var bInfo = this._map[b];
+    const aInfo = this._map[a];
+    const bInfo = this._map[b];
 
     aInfo.not = bInfo;
     bInfo.not = aInfo;
+    return this;
   }
 
   all() {
@@ -168,10 +165,9 @@ const OpInfo = new class OpInfo {
   }
 
   forEach(cb, thisArg) {
-    var map = this._map;
-    for (var k in map) {
+    const map = this._map;
+    for (var k in map)
       cb.call(thisArg, k, map[k]);
-    }
   }
 };
 xql.OpInfo = OpInfo;
@@ -181,7 +177,7 @@ xql.OpInfo = OpInfo;
  *
  * @alias xql.QuoteStyle
  */
-const QuoteStyle = Object.freeze({
+const QuoteStyle = freeze({
   kDouble       : 0,          // Double quotes, for example "identifier".
   kGrave        : 1,          // Grave quotes, for example `identifier`.
   kBrackets     : 2           // Brackets, for example [identifier].
@@ -193,7 +189,7 @@ xql.QuoteStyle = QuoteStyle;
  *
  * @alias xql.NodeFlags
  */
-const NodeFlags = Object.freeze({
+const NodeFlags = freeze({
   kImmutable    : 0x00000001, // Node is immutable (cannot be changed).
   kNot          : 0x00000002, // Expression is negated (NOT).
   kAscending    : 0x00000010, // Sort ascending (ASC).
@@ -206,7 +202,7 @@ const NodeFlags = Object.freeze({
 xql.NodeFlags = NodeFlags;
 
 // Sort directions.
-const SortDirection = Object.freeze({
+const SortDirection = freeze({
   ""            : 0,
   "0"           : 0,
 
@@ -218,7 +214,7 @@ const SortDirection = Object.freeze({
 });
 
 // Sort nulls.
-const SortNulls = Object.freeze({
+const SortNulls = freeze({
   "NULLS FIRST" : NodeFlags.kNullsFirst,
   "NULLS LAST"  : NodeFlags.kNullsLast
 });
@@ -1034,13 +1030,9 @@ class Context {
         }
       }
 
-      keyword = opInfo.nameFmt;
-      if (nodeFlags & NodeFlags.kNot) {
-        if (opFlags & OpFlags.kNotBeforeOp)
-          keyword = " NOT" + keyword;
-        else if (opFlags & OpFlags.kNotAfterOp)
-          keyword = keyword + "NOT ";
-      }
+      keyword = opInfo.format;
+      if (nodeFlags & NodeFlags.kNot)
+        keyword = opInfo.formatNot;
     }
     else {
       keyword = " " + type + " ";
@@ -1587,7 +1579,7 @@ class Context {
       }
       else {
         var compiled = column.compileNode(this);
-        if (column.mustWrap())
+        if (column.mustWrap(this))
           out += this._wrapQuery(compiled);
         else
           out += compiled;
@@ -1624,7 +1616,7 @@ class Context {
       if (out)
         out += " " + condition._type + " ";
 
-      if (expression.mustWrap())
+      if (expression.mustWrap(this))
         out += "(" + compiled + ")";
       else
         out += compiled;
@@ -2245,6 +2237,12 @@ class Node {
     this._type = type || "";
     this._flags = 0;
     this._as = as || "";
+
+    const opInfo = OpInfo.get(type);
+    if (opInfo) {
+      this._type = opInfo.name;
+      this._flags |= opInfo.nodeFlags;
+    }
   }
 
   /**
@@ -2268,8 +2266,7 @@ class Node {
     if (!info)
       return false;
 
-    return info.not != null ||
-           (info.opFlags & (OpFlags.kNotAfterOp | OpFlags.kNotBeforeOp)) != 0;
+    return info.not != null || OpFlags.nameNot != null;
   }
 
   /**
@@ -2426,7 +2423,7 @@ class Node {
         return this;
       }
 
-      if (info.opFlags & (OpFlags.kNotAfterOp | OpFlags.kNotBeforeOp)) {
+      if (info.nameNot != null) {
         this._flags ^= NodeFlags.kNot;
         return this;
       }
@@ -2782,7 +2779,7 @@ class Logical extends NodeArray {
       if (out)
         out += separator;
 
-      if (value.mustWrap(ctx))
+      if (value instanceof Node && value.mustWrap(ctx))
         out += `(${escaped})`;
       else
         out += escaped;
@@ -2824,7 +2821,7 @@ class ConditionMap extends Unary {
       else
         out += " = ";
 
-      if (value instanceof Node && value.mustWrap())
+      if (value instanceof Node && value.mustWrap(ctx))
         out += `(${compiled})`;
       else
         out += compiled;
@@ -2847,7 +2844,7 @@ class Identifier extends Node {
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     return false;
   }
 
@@ -2899,7 +2896,7 @@ class Func extends NodeArray {
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     return false;
   }
 
@@ -2949,7 +2946,7 @@ class Case extends NodeArray {
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     return false;
   }
 
@@ -2996,7 +2993,7 @@ class When extends Binary {
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     return false;
   }
 
@@ -3034,7 +3031,7 @@ class Value extends Node {
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     return false;
   }
 
@@ -3370,7 +3367,7 @@ class Query extends Node {
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     return true;
   }
 
@@ -3736,7 +3733,7 @@ class SelectQuery extends Query {
   }
 
   /** @override */
-  mustWrap() {
+  mustWrap(ctx) {
     // If this is a sub-select that will be compiled as `(SELECT ???) AS something` then we
     // will wrap it during compilation and return `false` here so it's not double-wrapped.
     return this._as ? false : true;
@@ -4518,15 +4515,17 @@ xql.CASE = CASE;
 
 const N = -1;
 
-const kUnary        = OpFlags.kUnary;
-const kBinary       = OpFlags.kBinary;
-const kFunction     = OpFlags.kFunction;
-const kAggregate    = OpFlags.kAggregate;
-const kVoid         = OpFlags.kVoid;
-const kNotBeforeOp  = OpFlags.kNotBeforeOp;
-const kNotAfterOp   = OpFlags.kNotAfterOp;
-const kLeftValues   = OpFlags.kLeftValues;
-const kRightValues  = OpFlags.kRightValues;
+const kUnary         = OpFlags.kUnary;
+const kBinary        = OpFlags.kBinary;
+const kFunction      = OpFlags.kFunction;
+const kAggregate     = OpFlags.kAggregate;
+const kVoid          = OpFlags.kVoid;
+const kNotBeforeOp   = OpFlags.kNotBeforeOp;
+const kNotAfterOp    = OpFlags.kNotAfterOp;
+const kNotMiddleOp   = OpFlags.kNotMiddleOp;
+const kLeftValues    = OpFlags.kLeftValues;
+const kRightValues   = OpFlags.kRightValues;
+const kSpaceSeparate = OpFlags.kSpaceSeparate;
 
 function register(defs, commons) {
   const baseOpFlags  = commons.opFlags  || 0;
@@ -4534,25 +4533,39 @@ function register(defs, commons) {
   const baseDialect  = commons.dialect  || "*";
 
   for (var i = 0; i < defs.length; i++) {
-    const def      = defs[i];
-    const name     = def.name;
-    const args     = def.args;
-    const opFlags  = (def.opFlags || 0) | baseOpFlags;
-    const dialect  = def.dialect  || baseDialect;
-    const category = def.category || baseCategory;
+    const def = defs[i];
+
+    var name       = def.name;
+    var nameNot    = def.nameNot || null;
+
+    var args       = def.args;
+    var opFlags    = (def.opFlags || 0) | baseOpFlags;
+    var dialect    = def.dialect  || baseDialect;
+    var category   = def.category || baseCategory;
+
+    if (!nameNot && (opFlags & kNotBeforeOp)) nameNot = "NOT " + name;
+    if (!nameNot && (opFlags & kNotAfterOp)) nameNot = name + " NOT";
+
+    var format = (opFlags & kSpaceSeparate) ? " " + name + " " : name;
+    var formatNot = null;
+
+    if (nameNot)
+      formatNot = (opFlags & kSpaceSeparate) ? " " + nameNot + " " : nameNot;
 
     OpInfo.add({
-      name     : name,
-      nameFmt  : (opFlags & kFunction) ? name : " " + def.name + " ",
-      doc      : def.doc || "",
-      ctor     : def.ctor || Func,
-      opFlags  : opFlags,
-      nodeFlags: 0,
-      dialect  : dialect,
-      category : category,
-      minArgs  : isArray(args) ? args[0] : args,
-      maxArgs  : isArray(args) ? args[1] : args,
-      compile  : def.compile || null
+      name      : name,
+      nameNot   : nameNot,
+      format    : format,
+      formatNot : formatNot,
+      doc       : def.doc || "",
+      ctor      : def.ctor || Func,
+      opFlags   : opFlags,
+      nodeFlags : 0,
+      dialect   : dialect,
+      category  : category,
+      minArgs   : isArray(args) ? args[0] : args,
+      maxArgs   : isArray(args) ? args[1] : args,
+      compile   : def.compile || null
     });
   }
 }
@@ -4564,7 +4577,8 @@ function compileCAST(ctx, $) {
 
 function compileBETWEEN(ctx, $) {
   const args = $._values;
-  const keyword = $._flags & NodeFlags.kNot ? " NOT BETWEEN " : " BETWEEN ";
+  const info = OpInfo.get($._type);
+  const keyword = ($._flags & NodeFlags.kNot) ? info.formatNot : info.format;
 
   return ctx.escapeOrWrap(args[0]) + keyword +
          ctx.escapeOrWrap(args[1]) + " AND " +
@@ -4618,6 +4632,11 @@ function compileCHR(ctx, $) {
 }
 
 register([
+  { name: "NOT"                  , args: 1     , opFlags: 0           , dialect: "*"     , doc: "NOT($1)" },
+  { name: "EXISTS"               , args: 1     , opFlags: kNotBeforeOp, dialect: "*"     , doc: "EXISTS($1)" }
+], { category: "general", opFlags: kUnary });
+
+register([
   { name: "="                    , args: 2     , opFlags: 0           , dialect: "*"     },
   { name: ">"                    , args: 2     , opFlags: 0           , dialect: "*"     },
   { name: ">="                   , args: 2     , opFlags: 0           , dialect: "*"     },
@@ -4646,35 +4665,32 @@ register([
   { name: "~*"                   , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Match (I)"              },
   { name: "!~"                   , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Not match"              },
   { name: "!~*"                  , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Not match (I)"          }
-], { category: "general", opFlags: kBinary });
-
-register([
-  { name: "NOT"                  , args: 1     , opFlags: 0           , dialect: "*"     , doc: "NOT($1)" },
-  { name: "EXISTS"               , args: 1     , opFlags: kNotBeforeOp, dialect: "*"     , doc: "EXISTS($1)" }
-], { category: "general", opFlags: kUnary });
+], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
   { name: "AND"                  , args: 2     , opFlags: 0           , dialect: "*"     , doc: "$1 AND $2" },
-  { name: "OR"                   , args: 2     , opFlags: 0           , dialect: "*"     , doc: "$1 OR $2" }
-], { category: "general", opFlags: kBinary });
-
-register([
-  { name: "IS"                   , args: 2     , opFlags: 0           , dialect: "*"     }
-], { category: "general", opFlags: kBinary | kNotAfterOp });
+  { name: "OR"                   , args: 2     , opFlags: 0           , dialect: "*"     , doc: "$1 OR $2" },
+  { name: "IS"                   , args: 2     , opFlags: kNotAfterOp , dialect: "*"     , doc: "$1 IS $2" },
+  { name: "IS DISTINCT FROM"     , args: 2     , opFlags: kNotMiddleOp, dialect: "*"     , nameNot: "IS NOT DISTINCT FROM" }
+], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
   { name: "LIKE"                 , args: 2     , opFlags: 0           , dialect: "*"     },
   { name: "ILIKE"                , args: 2     , opFlags: 0           , dialect: "*"     },
   { name: "IN"                   , args: 2     , opFlags: kRightValues, dialect: "*"     , doc: "$1 IN ($2)" }
-], { category: "general", opFlags: kBinary | kNotBeforeOp });
+], { category: "general", opFlags: kBinary | kSpaceSeparate | kNotBeforeOp });
+
+register([
+  { name: "BETWEEN"              , args: 3     , opFlags: 0           , dialect: "*"     , doc: "$1 BETWEEN $2 AND $3", compile: compileBETWEEN },
+  { name: "BETWEEN SYMMETRIC"    , args: 3     , opFlags: 0           , dialect: "*"     , doc: "$1 BETWEEN SYMMETRIC $2 AND $3", compile: compileBETWEEN }
+], { category: "general", opFlags: kFunction | kSpaceSeparate | kNotBeforeOp });
 
 register([
   { name: "CAST"                 , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Cast to a different type", compile: compileCAST },
   { name: "NULLIF"               , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Return NULL if $1 == $2; otherwise return $1" },
   { name: "COALESCE"             , args: [1, N], opFlags: 0           , dialect: "*"     , doc: "Return the first NON-NULL argument" },
   { name: "GREATEST"             , args: [1, N], opFlags: 0           , dialect: "*"     , doc: "Select the largest" },
-  { name: "LEAST"                , args: [1, N], opFlags: 0           , dialect: "*"     , doc: "Select the smallest" },
-  { name: "BETWEEN"              , args: 3     , opFlags: kNotBeforeOp, dialect: "*"     , doc: "$1 BETWEEN $2 AND $3", compile: compileBETWEEN }
+  { name: "LEAST"                , args: [1, N], opFlags: 0           , dialect: "*"     , doc: "Select the smallest" }
 ], { category: "general", opFlags: kFunction });
 
 register([
@@ -4893,8 +4909,8 @@ OpInfo.forEach(function(_alias, info) {
       };
     }
     else {
-      fn = function() {
-        const node = new Func(name, ...arguments);
+      fn = function(...args) {
+        const node = new ctor(name, args);
         node._flags |= nodeFlags;
         return node;
       };

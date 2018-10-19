@@ -23,11 +23,14 @@ const ARRAY_VAL        = xql.ARRAY_VAL;
 const JSON_VAL         = xql.JSON_VAL;
 
 // Operators/Functions
+const NOT              = xql.NOT;
 const AND              = xql.AND;
 const OR               = xql.OR;
 const OP               = xql.OP;
 const MIN              = xql.MIN;
 const MAX              = xql.MAX;
+const BETWEEN          = xql.BETWEEN;
+const NOT_BETWEEN      = xql.NOT_BETWEEN;
 
 // Helpers.
 var ctx = xql.dialect.newContext({ dialect: "pgsql" });
@@ -187,6 +190,15 @@ describe("xql", function() {
     shouldMatch(
       ctx.substitute("\"a$1\" = $1, b = E'$1\\'?', c = $2", [1, 2]),
       "\"a$1\" = 1, b = E'$1\\'?', c = 2");
+  });
+
+  // OPERATORS.
+  it("should test common operators", function() {
+    shouldMatch(AND(0, 1), '0 AND 1');
+    shouldMatch(OR(0, 1), '0 OR 1');
+    shouldMatch(NOT(OR(0, 1)), 'NOT (0 OR 1)');
+    shouldMatch(BETWEEN(0, 1, 2), '0 BETWEEN 1 AND 2');
+    shouldMatch(NOT_BETWEEN(0, 1, 2), '0 NOT BETWEEN 1 AND 2');
   });
 
   // SELECT.
