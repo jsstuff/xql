@@ -1,4 +1,4 @@
-// xql.js <https://github.com/exjs/xql>
+// xql.js <https://github.com/jsstuff/xql>
 "use strict";
 
 const assert = require("assert");

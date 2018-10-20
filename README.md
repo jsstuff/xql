@@ -3,8 +3,7 @@ xql.js
 
 SQL builder and utilities library for node.js.
 
-  * [Official Repository (exjs/xql)](https://github.com/exjs/xql)
-  * [Official Chat (gitter)](https://gitter.im/exjs/exjs)
+  * [Official Repository (jsstuff/xql)](https://github.com/jsstuff/xql)
   * [Official Fiddler](https://kobalicek.com/fiddle-xql.html)
   * [Public Domain (https://unlicense.org)](https://unlicense.org)
 
@@ -21,7 +20,7 @@ xql.js is a library designed to build SQL queries programmatically. It provides 
 There are several reasons why xql.js has been developed:
 
   1. Full support and focus on PostgreSQL (PG is the primary engine, but xql is getting support for MySQL and SQLite3 as well).
-  2. High performance and low memory footprint, see [exjs/xql-bench](https://github.com/exjs/xql-bench) that compares with other engines.
+  2. High performance and low memory footprint, see [jsstuff/xql-bench](https://github.com/jsstuff/xql-bench) that compares with other engines.
   3. Schemaless by design, but allows to specify type-mapping so the input data can be properly escaped.
   4. Control of SQL parameters and the way they are formatted / escaped.
   5. Construction of SQL query shouldn't require RAW expressions to be written, but it should be easy to use RAW expressions in case they are needed.

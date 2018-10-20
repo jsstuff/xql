@@ -1,4 +1,4 @@
-// xql.js <https://github.com/exjs/xql>
+// xql.js <https://github.com/jsstuff/xql>
 (function($export, $as) {
 "use strict";
 
@@ -1815,7 +1815,7 @@ function fnEscapeString(s) {
 }
 
 /**
- * PostgreSQL compiler.
+ * PostgreSQL context.
  *
  * @private
  */
@@ -2147,7 +2147,7 @@ function fnEscapeString(s) {
 }
 
 /**
- * MySQL/MariaDB compiler.
+ * MySQL/MariaDB context.
  *
  * @private
  */
@@ -2189,7 +2189,7 @@ xql$dialect.add("mysql", MySQLContext);
 (function() {
 
 /**
- * SQLite compiler.
+ * SQLite context.
  *
  * @private
  */
@@ -4996,7 +4996,7 @@ register([
   { name: "MAKE_INTERVAL"            , args: [0, 7], opFlags: 0           , dialect: "*"     },
   { name: "MAKE_TIME"                , args: 3     , opFlags: 0           , dialect: "*"     },
   { name: "MAKE_TIMESTAMP"           , args: 6     , opFlags: 0           , dialect: "*"     },
-  { name: "MAKE_TIMESTAMPZ"          , args: [6, 7], opFlags: 0           , dialect: "*"     },
+  { name: "MAKE_TIMESTAMPTZ"         , args: [6, 7], opFlags: 0           , dialect: "*"     },
   { name: "NOW"                      , args: 0     , opFlags: 0           , dialect: "*"     },
   { name: "STATEMENT_TIMESTAMP"      , args: 0     , opFlags: 0           , dialect: "*"     },
   { name: "TIMEOFDAY"                , args: 0     , opFlags: 0           , dialect: "*"     },

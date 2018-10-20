@@ -23,9 +23,9 @@
     "utility",
     "wrapper"
   ],
-  "homepage": "https://github.com/exjs/xql",
+  "homepage": "https://github.com/jsstuff/xql",
   "bugs": {
-    "url": "https://github.com/exjs/xql/issues"
+    "url": "https://github.com/jsstuff/xql/issues"
   },
   "contributors": [
     "Petr Kobalicek <kobalicek.petr@gmail.com> (kobalicek.com)"
@@ -33,7 +33,7 @@
   "main": "xql.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/exjs/xql.git"
+    "url": "https://github.com/jsstuff/xql.git"
   },
   "scripts": {
     "test": "mocha xql-spec.js"
