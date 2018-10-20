@@ -16,7 +16,7 @@ This library is used in production, but it doesn't contain all possible features
 Introduction
 ------------
 
-xql.js is a library designed to build SQL queries programmatically. It implements a SQL expression tree that is created by high level API calls which mimic SQL syntax. It's a tool that helps to create the SQL expression tree that can be compiled into a single query string at the end of the building phase. The library has been designed primarily for DAO/DB layers, but use-cases are nearly unlimited.
+xql.js is a library designed to build SQL queries programmatically. It provides SQL expression tree that is created by high level API calls which mimic SQL syntax. It's a tool that helps to create the SQL expression tree that can be compiled into a single query string at the end of the building phase. The library has been designed primarily for DAO/DB layers, but use-cases are nearly unlimited.
 
 There are several reasons why xql.js has been developed:
 
@@ -25,7 +25,7 @@ There are several reasons why xql.js has been developed:
   3. Schemaless by design, but allows to specify type-mapping so the input data can be properly escaped.
   4. Control of SQL parameters and the way they are formatted / escaped.
   5. Construction of SQL query shouldn't require RAW expressions to be written, but it should be easy to use RAW expressions in case they are needed.
-  6. No more legacy JS (xml.js is based on ES6 classes), however, it doesn't dictate you how to write your own code.
+  6. No more legacy JS (xql.js is based on ES6 classes), however, it doesn't dictate you how to write your own code.
 
 There are several node.js libraries that focus on SQL query building, but none has satisfied all the needs. The closest library and huge inspiration for xql.js was Python's [SqlAlchemy](http://www.sqlalchemy.org), which is much more advanced compared to any node.js SQL framework at the moment. However, xql.js is just a query builder that has a type-mapping feature, which is used describe column types for serialization, but they are not used to describe relations or anything else. There are no plans to add ORM support to xql.js in any future release.
 

@@ -201,6 +201,13 @@ describe("xql", function() {
     shouldMatch(NOT_BETWEEN(0, 1, 2), '0 NOT BETWEEN 1 AND 2');
   });
 
+  // DATETIME.
+  it("should test common datetime functions", function() {
+    shouldMatch(xql.NOW(), 'NOW()');
+    shouldMatch(xql.CURRENT_DATE(), 'CURRENT_DATE');
+    shouldMatch(xql.EXTRACT("MONTH", "2017-06-15"), 'EXTRACT(MONTH FROM \'2017-06-15\')');
+  });
+
   // SELECT.
   it("should test SELECT(*).", function() {
     shouldMatch(
@@ -301,7 +308,7 @@ describe("xql", function() {
 
   it("should test SELECT ... FROM ... WHERE ... IN ...", function() {
     shouldMatch(
-      SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("x").IN(1, 2, 3)),
+      SELECT(["a", "b", "c"]).FROM("x").WHERE(COL("x").IN([1, 2, 3])),
       'SELECT "a", "b", "c" FROM "x" WHERE "x" IN (1, 2, 3)');
   });
 
