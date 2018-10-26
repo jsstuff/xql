@@ -29,6 +29,8 @@ const OR               = xql.OR;
 const OP               = xql.OP;
 const MIN              = xql.MIN;
 const MAX              = xql.MAX;
+const IN               = xql.IN;
+const NOT_IN           = xql.NOT_IN;
 const BETWEEN          = xql.BETWEEN;
 const NOT_BETWEEN      = xql.NOT_BETWEEN;
 
@@ -148,11 +150,11 @@ describe("xql", function() {
     shouldMatch(ctx.escapeValue([["a"], ["b"]]), "ARRAY[['a'], ['b']]");
 
     // {} defaults to JSON.
-    shouldMatch(ctx.escapeValue({})            , "'{}'");
-    shouldMatch(ctx.escapeValue({a:1})         , "'{\"a\":1}'");
-    shouldMatch(ctx.escapeValue({a:1,b:2})     , "'{\"a\":1,\"b\":2}'");
-    shouldMatch(ctx.escapeValue({a:"a",b:"b"}) , "'{\"a\":\"a\",\"b\":\"b\"}'");
-    shouldMatch(ctx.escapeValue({a:["a","b"]}) , "'{\"a\":[\"a\",\"b\"]}'");
+    shouldMatch(ctx.escapeValue({})            , "'{}'::json");
+    shouldMatch(ctx.escapeValue({a:1})         , "'{\"a\":1}'::json");
+    shouldMatch(ctx.escapeValue({a:1,b:2})     , "'{\"a\":1,\"b\":2}'::json");
+    shouldMatch(ctx.escapeValue({a:"a",b:"b"}) , "'{\"a\":\"a\",\"b\":\"b\"}'::json");
+    shouldMatch(ctx.escapeValue({a:["a","b"]}) , "'{\"a\":[\"a\",\"b\"]}'::json");
 
     shouldThrow(function() { ctx.escapeValue('\0'); });
   });
@@ -199,6 +201,8 @@ describe("xql", function() {
     shouldMatch(NOT(OR(0, 1)), 'NOT (0 OR 1)');
     shouldMatch(BETWEEN(0, 1, 2), '0 BETWEEN 1 AND 2');
     shouldMatch(NOT_BETWEEN(0, 1, 2), '0 NOT BETWEEN 1 AND 2');
+    shouldMatch(IN(COL("a"), [1, 2]), '"a" IN (1, 2)');
+    shouldMatch(NOT_IN(COL("a"), [1, 2]), '"a" NOT IN (1, 2)');
   });
 
   // DATETIME.
@@ -400,6 +404,13 @@ describe("xql", function() {
       'SELECT 0 AS "a", \'test\' AS "b"');
   });
 
+  it("should test SELECT ... with nested SELECT", function() {
+    shouldMatch(
+      SELECT(["a", "b", "c"]).FROM("x")
+        .WHERE("c", "=", SELECT(MAX(COL("c"))).FROM("x")),
+      'SELECT "a", "b", "c" FROM "x" WHERE "c" = (SELECT MAX("c") FROM "x")');
+  });
+
   // INSERT.
   it("should test INSERT INTO ... () VALUES (...)", function() {
     shouldMatch(
@@ -505,7 +516,7 @@ describe("xql", function() {
       'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" ORDER BY "a" LIMIT 20 OFFSET 10');
   });
 
-  // Multiple combined queries in the same group.
+  // Multiple combined queries.
   it("should test ... UNION ... UNION ...", function() {
     shouldMatch(
       UNION(
@@ -513,10 +524,7 @@ describe("xql", function() {
         SELECT("a").FROM("y"),
         SELECT("a").FROM("z")),
       'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" UNION SELECT "a" FROM "z"');
-  });
 
-  // Multiple combined queries in nested groups.
-  it("should test ... UNION (... UNION ...)", function() {
     shouldMatch(
       UNION(
         SELECT("a").FROM("x"),
@@ -524,10 +532,8 @@ describe("xql", function() {
           SELECT("a").FROM("y"),
           SELECT("a").FROM("z"))
       ),
-      'SELECT "a" FROM "x" UNION (SELECT "a" FROM "y" UNION SELECT "a" FROM "z")');
-  });
+      'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" UNION SELECT "a" FROM "z"');
 
-  it("should test ... UNION (... UNION ...)", function() {
     shouldMatch(
       UNION(
         UNION(
@@ -535,6 +541,18 @@ describe("xql", function() {
           SELECT("a").FROM("y")),
         SELECT("a").FROM("z")
       ),
-      '(SELECT "a" FROM "x" UNION SELECT "a" FROM "y") UNION SELECT "a" FROM "z"');
+      'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" UNION SELECT "a" FROM "z"');
+  });
+
+  // Multiple combined queries of different kinds
+  it("should test ... UNION ... INTERSECT ...", function() {
+    shouldMatch(
+      UNION(
+        INTERSECT(
+          SELECT("a").FROM("x"),
+          SELECT("a").FROM("y")),
+        SELECT("a").FROM("z")
+      ),
+      '(SELECT "a" FROM "x" INTERSECT SELECT "a" FROM "y") UNION SELECT "a" FROM "z"');
   });
 });

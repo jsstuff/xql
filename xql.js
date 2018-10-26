@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.3";
+const VERSION = "1.4.4";
 
 // ============================================================================
 // [internal]
@@ -38,8 +38,13 @@ const reDoubleQuotes = /\"/g;                 // Check for double (") quotes.
 const reBrackets     = /\[\]/g;               // Check for [] brackets.
 const reDotNull      = /[\.\x00]/g;           // Check for '.' or '\0' characters.
 const reInt          = /^-?\d+$/;             // Check for a well-formatted int with optional '-' sign.
-const reUpperCase    = /^[A-Z_][A-Z_0-9]*$/;  // Check for an UPPERCASE_ONLY string.
-const reFunctionOrOp = /^[A-Z_][A-Z_0-9 ]*$/; // Check for a function or operator name.
+
+// Check for an UPPERCASE_ONLY string.
+const reUpperCased   = /^[A-Z_][A-Z_0-9]*$/;
+
+// Check for a function or operator name (UPPERCASED string with possible spaces between words).
+const reUpperCasedWithSpaces = /^[A-Z_][A-Z_0-9 ]*(?: [A-Z_][A-Z_0-9 ]*)*$/;
+
 // Checks if a string is a well formatted integer or floating point number, also
 // accepts scientific notation "E[+-]?xxx".
 const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
@@ -872,7 +877,7 @@ class Context {
     if (isArray(value))
       return this.escapeArray(value, false);
 
-    return this.escapeString(JSON.stringify(value));
+    return this.escapeJSON(value, "json");
   }
 
   /**
@@ -1103,9 +1108,8 @@ class Context {
       keyword = " " + type + " ";
     }
 
-
-    if (leftNode instanceof Binary) left = "(" + left + ")";
-    if (rightNode instanceof Binary) right = "(" + right + ")";
+    if (leftNode instanceof Node && leftNode.mustWrap(this, node)) left = "(" + left + ")";
+    if (rightNode instanceof Node && rightNode.mustWrap(this, node)) right = "(" + right + ")";
 
     out = left + keyword + right;
 
@@ -1453,19 +1457,17 @@ class Context {
     if (flags & NodeFlags.kAll)
       combineOp += " ALL";
 
-    const values = node._values;
+    const queries = node._values;
     const separator = space + combineOp + space;
 
-    for (var i = 0, len = values.length; i < len; i++) {
-      var value = values[i];
-      var compiled = this._compile(values[i]);
+    for (var i = 0, len = queries.length; i < len; i++) {
+      var query = queries[i];
+      var compiled = this._compile(query);
 
       if (out)
         out += separator;
 
-      // TODO: This is not nice, introduce something better than this.
-      const mustWrap = !(value instanceof Query) || (value instanceof CompoundQuery);
-      if (mustWrap)
+      if (query.mustWrap(this, node))
         compiled = this._wrapQuery(compiled);
 
       out += compiled;
@@ -1639,7 +1641,7 @@ class Context {
       }
       else {
         var compiled = column.compileNode(this);
-        if (column.mustWrap(this))
+        if (column.mustWrap(this, null))
           out += this._wrapQuery(compiled);
         else
           out += compiled;
@@ -1676,7 +1678,7 @@ class Context {
       if (out)
         out += " " + condition._type + " ";
 
-      if (expression.mustWrap(this))
+      if (expression.mustWrap(this, null))
         out += "(" + compiled + ")";
       else
         out += compiled;
@@ -1888,7 +1890,8 @@ class PGSQLContext extends Context {
   }
 
   escapeJSON(value, type) {
-    return this.escapeString(JSON.stringify(value)) + "::" + type;
+    var out = this.escapeString(JSON.stringify(value));
+    return type ? out + "::" + type : out;
   }
 
   /** @override */
@@ -2310,14 +2313,14 @@ class Node {
   }
 
   /**
-   * Returns whether the returned expression must be wrapped in parentheses if
-   * not alone.
+   * Gets whether the returned expression must be wrapped in parentheses if not alone.
    *
    * @param {Context} ctx Context.
+   * @param {Node} parent Parent node or null if there is no parent.
    * @return {boolean} Whether the expression must be wrapped.
    */
-  mustWrap(ctx) {
-    throwTypeError("Abstract method called");
+  mustWrap(ctx, parent) {
+    return parent != null;
   }
 
   /**
@@ -2327,10 +2330,7 @@ class Node {
    */
   canNegate() {
     const info = OpInfo.get(this._type);
-    if (!info)
-      return false;
-
-    return info.not != null || OpFlags.nameNot != null;
+    return info && (info.not != null || OpFlags.nameNot != null);
   }
 
   /**
@@ -2520,6 +2520,10 @@ class Node {
 }
 xql$node.Node = Node;
 
+// ============================================================================
+// [xql.Raw]
+// ============================================================================
+
 /**
  * SQL RAW expression.
  *
@@ -2536,7 +2540,7 @@ class Raw extends Node {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     return false;
   }
 
@@ -2603,6 +2607,24 @@ class Raw extends Node {
 xql$node.Raw = Raw;
 
 /**
+ * Constructs a RAW query node.
+ *
+ * @param {string} raw Raw query string (won't be escaped).
+ * @param {array} [bindings] Data that will be sustituted in `raw`.
+ * @return {Raw}
+ *
+ * @alias xql.RAW
+ */
+function RAW(raw, bindings) {
+  return new Raw(raw, bindings);
+}
+xql.RAW = RAW;
+
+// ============================================================================
+// [xql.Unary]
+// ============================================================================
+
+/**
  * SQL unary node.
  *
  * @alias xql.node.UnaryOp
@@ -2614,7 +2636,7 @@ class Unary extends Node {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     return false;
   }
 
@@ -2640,6 +2662,10 @@ class Unary extends Node {
 }
 xql$node.Unary = Unary;
 
+// ============================================================================
+// [xql.UnaryOp]
+// ============================================================================
+
 /**
  * SQL unary operator.
  *
@@ -2650,8 +2676,37 @@ class UnaryOp extends Unary {
   compileNode(ctx) {
     return ctx._compileUnaryOp(this);
   }
+
+  static makeWrap(type, flags, ctor) {
+    if (!ctor)
+      ctor = UnaryOp;
+
+    return function(value) {
+      return {
+        __proto__: ctor.prototype,
+        _type    : type,
+        _flags   : flags,
+        _as      : "",
+        _value   : value
+      };
+    }
+  }
 }
 xql$node.UnaryOp = UnaryOp;
+
+function UNARY_OP(op, child) {
+  return {
+    __proto__: UnaryOp.prototype,
+    _type    : op,
+    _flags   : 0,
+    _as      : "",
+    _value   : child,
+  };
+}
+
+// ============================================================================
+// [xql.Binary]
+// ============================================================================
 
 /**
  * SQL binary node.
@@ -2734,8 +2789,42 @@ class Binary extends Node {
     right.push(value);
     return this;
   }
+
+  static makeWrap(type, flags, ctor) {
+    if (!ctor)
+      ctor = UnaryOp;
+
+    return function(left, right) {
+      return {
+        __proto__: ctor.prototype,
+        _type    : type,
+        _flags   : flags,
+        _as      : "",
+        _left    : left,
+        _right   : right
+      };
+    }
+  }
 }
 xql$node.Binary = Binary;
+
+function BINARY_OP(a, op, b) {
+  const info = OpInfo.get(op);
+  const flags = info ? info.nodeFlags : 0;
+
+  return {
+    __proto__: BinaryOp.prototype,
+    _type    : op,
+    _flags   : flags,
+    _as      : "",
+    _left    : a,
+    _right   : b
+  };
+}
+
+// ============================================================================
+// [xql.BinaryOp]
+// ============================================================================
 
 /**
  * SQL binary operator.
@@ -2748,8 +2837,14 @@ class BinaryOp extends Binary {
   }
 
   /** @override */
-  mustWrap(ctx) {
-    return false;
+  mustWrap(ctx, parent) {
+    if (!parent)
+      return false;
+
+    if (parent._type === this._type)
+      return false;
+
+    return true;
   }
 
   /** @override */
@@ -2758,6 +2853,10 @@ class BinaryOp extends Binary {
   }
 }
 xql$node.BinaryOp = BinaryOp;
+
+// ============================================================================
+// [xql.NodeArray]
+// ============================================================================
 
 /**
  * A node that can have children (base for `Logical` and `Func`).
@@ -2791,8 +2890,27 @@ class NodeArray extends Node {
       values.push(array[i]);
     return this;
   }
+
+  static makeWrap(type, flags, ctor) {
+    if (!ctor)
+      ctor = NodeArray;
+
+    return function(...args) {
+      return {
+        __proto__: ctor.prototype,
+        _type    : type,
+        _flags   : flags,
+        _as      : "",
+        _values  : args
+      };
+    }
+  }
 }
 xql$node.NodeArray = NodeArray;
+
+// ============================================================================
+// [xql.Logical]
+// ============================================================================
 
 /**
  * SQL logical expression.
@@ -2800,8 +2918,8 @@ xql$node.NodeArray = NodeArray;
  * @alias xql.node.Logical
  */
 class Logical extends NodeArray {
-  mustWrap(ctx) {
-    return this._values.length > 1;
+  mustWrap(ctx, parent) {
+    return parent != null && this._values.length > 1;
   }
 
   /** @override */
@@ -2819,7 +2937,7 @@ class Logical extends NodeArray {
       if (out)
         out += separator;
 
-      if (value instanceof Node && value.mustWrap(ctx))
+      if (value instanceof Node && value.mustWrap(ctx, this))
         out += `(${compiled})`;
       else
         out += compiled;
@@ -2829,6 +2947,10 @@ class Logical extends NodeArray {
   }
 }
 xql$node.Logical = Logical;
+
+// ============================================================================
+// [xql.ConditionMap]
+// ============================================================================
 
 /**
  * Node that holds conditional expressions stored in a JS object, where each
@@ -2854,14 +2976,11 @@ class ConditionMap extends Unary {
 
       if (out)
         out += separator;
+
       out += ctx.escapeIdentifier(k);
+      out += (compiled === "NULL") ? " IS " : " = ";
 
-      if (compiled === "NULL")
-        out += " IS ";
-      else
-        out += " = ";
-
-      if (value instanceof Node && value.mustWrap(ctx))
+      if (value instanceof Node && value.mustWrap(ctx, this))
         out += `(${compiled})`;
       else
         out += compiled;
@@ -2871,6 +2990,10 @@ class ConditionMap extends Unary {
   }
 }
 xql$node.ConditionMap = ConditionMap;
+
+// ============================================================================
+// [xql.Identifier]
+// ============================================================================
 
 /**
  * SQL identifier.
@@ -2884,7 +3007,7 @@ class Identifier extends Node {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     return false;
   }
 
@@ -2923,6 +3046,33 @@ class Identifier extends Node {
 xql$node.Identifier = Identifier;
 
 /**
+ * Constructs SQL identifier.
+ *
+ * @param {string} value SQL identifier.
+ * @param {string} [as] SQL alias.
+ * @return {Identifier}
+ *
+ * @alias xql.IDENT
+ */
+function IDENT(value, as) {
+  return {
+    __proto__: Identifier.prototype,
+    _type    : "",
+    _flags   : 0,
+    _as      : as || "",
+    _value   : String(value)
+  };
+}
+xql.IDENT  = IDENT;
+xql.TABLE  = IDENT;
+xql.COL    = IDENT;
+xql.COLUMN = IDENT;
+
+// ============================================================================
+// [xql.Func]
+// ============================================================================
+
+/**
  * SQL function or aggregate expression.
  *
  * @alias xql.node.Func
@@ -2936,7 +3086,7 @@ class Func extends NodeArray {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     return false;
   }
 
@@ -2971,8 +3121,45 @@ class Func extends NodeArray {
   DISTINCT() {
     return this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
   }
+
+  static makeWrap(type, flags, ctor) {
+    return NodeArray.makeWrap(type, flags, ctor || Func);
+  }
 }
 xql$node.Func = Func;
+
+function FUNC(name, ...args) { return new Func(name, args); };
+xql.FUNC = FUNC;
+
+// ============================================================================
+// [xql.When]
+// ============================================================================
+
+/**
+ * SQL when.
+ *
+ * @alias xql.node.When
+ */
+class When extends Binary {
+  constructor(expression, body) {
+    super(expression, "WHEN", body);
+  }
+
+  /** @override */
+  mustWrap(ctx, parent) {
+    return false;
+  }
+
+  /** @override */
+  compileNode(ctx) {
+    return "WHEN " + ctx._compile(this._left) + " THEN " + ctx._compile(this._right);
+  }
+}
+xql$node.When = When;
+
+// ============================================================================
+// [xql.Case]
+// ============================================================================
 
 /**
  * SQL case.
@@ -2986,7 +3173,7 @@ class Case extends NodeArray {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     return false;
   }
 
@@ -3022,27 +3209,11 @@ class Case extends NodeArray {
 }
 xql$node.Case = Case;
 
-/**
- * SQL when.
- *
- * @alias xql.node.When
- */
-class When extends Binary {
-  constructor(expression, body) {
-    super(expression, "WHEN", body);
-  }
+xql.CASE = function CASE() { return new Case(); }
 
-  /** @override */
-  mustWrap(ctx) {
-    return false;
-  }
-
-  /** @override */
-  compileNode(ctx) {
-    return "WHEN " + ctx._compile(this._left) + " THEN " + ctx._compile(this._right);
-  }
-}
-xql$node.When = When;
+// ============================================================================
+// [xql.Value]
+// ============================================================================
 
 /**
  * SQL value.
@@ -3071,7 +3242,7 @@ class Value extends Node {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     return false;
   }
 
@@ -3103,8 +3274,25 @@ class Value extends Node {
     this._value = value;
     return this;
   }
+
+  static makeWrap(fallbackType) {
+    return function(value, type) {
+      return {
+        __proto__: Value.prototype,
+        _type    : type || fallbackType,
+        _flags   : 0,
+        _as      : "",
+        _value   : value
+      };
+    };
+  }
+
 }
 xql$node.Value = Value;
+
+// ============================================================================
+// [xql.Sort]
+// ============================================================================
 
 /**
  * SQL sort expression.
@@ -3281,6 +3469,15 @@ class Sort extends Identifier {
 }
 xql$node.Sort = Sort;
 
+function SORT(column, direction, nulls) {
+  return new Sort(column, direction, nulls);
+}
+xql.SORT = SORT;
+
+// ============================================================================
+// [xql.Join]
+// ============================================================================
+
 /**
  * SQL join expression.
  *
@@ -3293,7 +3490,7 @@ class Join extends Binary {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     return false;
   }
 
@@ -3324,6 +3521,10 @@ class Join extends Binary {
   }
 }
 xql$node.Join = Join;
+
+// ============================================================================
+// [xql.Query]
+// ============================================================================
 
 /**
  * SQL query.
@@ -3409,8 +3610,8 @@ class Query extends Node {
   }
 
   /** @override */
-  mustWrap(ctx) {
-    return true;
+  mustWrap(ctx, parent) {
+    return parent != null;
   }
 
   /** @override */
@@ -3485,7 +3686,7 @@ class Query extends Node {
           }
 
           if (typeof def === "string")
-            def = COL(def);
+            def = IDENT(def);
 
           fields.push(def.AS(k));
         }
@@ -3561,7 +3762,7 @@ class Query extends Node {
         a = arguments[1];
         b = arguments[2];
         if (typeof a === "string")
-          a = COL(a);
+          a = IDENT(a);
         node = BINARY_OP(a, "=", b);
         break;
 
@@ -3570,7 +3771,7 @@ class Query extends Node {
         op = arguments[2];
         b  = arguments[3];
         if (typeof a === "string")
-          a = COL(a);
+          a = IDENT(a);
         node = BINARY_OP(a, op, b);
         break;
 
@@ -3756,6 +3957,10 @@ class Query extends Node {
 }
 xql$node.Query = Query;
 
+// ============================================================================
+// [xql.SelectQuery]
+// ============================================================================
+
 /**
  * SQL select.
  *
@@ -3775,10 +3980,10 @@ class SelectQuery extends Query {
   }
 
   /** @override */
-  mustWrap(ctx) {
+  mustWrap(ctx, parent) {
     // If this is a sub-select that will be compiled as `(SELECT ???) AS something` then we
     // will wrap it during compilation and return `false` here so it's not double-wrapped.
-    return this._as ? false : true;
+    return parent != null && !(parent instanceof CompoundQuery);
   }
 
   /** @override */
@@ -3795,7 +4000,7 @@ class SelectQuery extends Query {
     // Accept 1, 2 or 3 arguments.
     if (nArgs >= 2) {
       if (typeof a === "string")
-        a = COL(a);
+        a = IDENT(a);
       if (nArgs === 2)
         node = BINARY_OP(a, "=", op);
       else
@@ -3994,6 +4199,27 @@ xql$node.SelectQuery = alias(SelectQuery, {
 });
 
 /**
+ * Constructs a SELECT query.
+ *
+ * @param {...*} fields Fields can be specified in several ways. This parameter
+ *   is passed as is into `SelectQuery.FIELDS()` function.
+ * @return {SelectQuery}
+ *
+ * @alias xql.SELECT
+ */
+function SELECT(/* ... */) {
+  var q = new SelectQuery();
+  if (arguments.length)
+    q.FIELD.apply(q, arguments);
+  return q;
+}
+xql.SELECT = SELECT;
+
+// ============================================================================
+// [xql.InsertQuery]
+// ============================================================================
+
+/**
  * SQL insert.
  *
  * @alias xql.node.InsertQuery
@@ -4027,6 +4253,43 @@ xql$node.InsertQuery = alias(InsertQuery, {
 });
 
 /**
+ * Constructs an INSERT query.
+ *
+ * @param {...*} args
+ * @return {InsertQuery}
+ *
+ * @alias xql.INSERT
+ */
+function INSERT(/* ... */) {
+  var q = new InsertQuery();
+
+  var i = 0, len = arguments.length;
+  var arg;
+
+  // If the first parameter is a string or an identifier it is a table name.
+  if (i < len) {
+    arg = arguments[i];
+    if (typeof arg === "string" || arg instanceof Identifier) {
+      q._table = arg;
+      i++;
+    }
+  }
+
+  // Next arguments can contain data (array/object) to insert.
+  while (i < len) {
+    arg = arguments[i++];
+    q.VALUES(arg);
+  }
+
+  return q;
+}
+xql.INSERT = INSERT;
+
+// ============================================================================
+// [xql.UpdateQuery]
+// ============================================================================
+
+/**
  * SQL update.
  *
  * @alias xql.node.UpdateQuery
@@ -4056,6 +4319,45 @@ class UpdateQuery extends Query {
 xql$node.UpdateQuery = alias(UpdateQuery, {
   RETURNING: "_addFieldsOrReturning"
 });
+
+/**
+ * Constructs an UPDATE query.
+ *
+ * @param {...*} args
+ * @return {UpdateQuery}
+ *
+ * @alias xql.UPDATE
+ */
+function UPDATE(/* ... */) {
+  var q = new UpdateQuery();
+
+  var i = 0, len = arguments.length;
+  var arg;
+
+  // If the first parameter is a string or an identifier it is a table name.
+  if (i < len) {
+    arg = arguments[i];
+    if (typeof arg === "string" || arg instanceof Identifier) {
+      q._table = arg;
+      i++;
+    }
+  }
+
+  // Next argument can contain data to update.
+  if (i < len) {
+    arg = arguments[i];
+    q.VALUES(arg);
+  }
+
+  // TODO: What if more arguments are passed.
+
+  return q;
+}
+xql.UPDATE = UPDATE;
+
+// ============================================================================
+// [xql.DeleteQuery]
+// ============================================================================
 
 /**
  * SQL delete.
@@ -4096,6 +4398,26 @@ xql$node.DeleteQuery = alias(DeleteQuery, {
 });
 
 /**
+ * Constructs a DELETE query.
+ *
+ * @param {string} [from] SQL table where to delete records.
+ * @return {DeleteQuery}
+ *
+ * @alias xql.DELETE
+ */
+function DELETE(from) {
+  var q = new DeleteQuery();
+  if (from)
+    q._table = from;
+  return q;
+}
+xql.DELETE = DELETE;
+
+// ============================================================================
+// [xql.CompoundQuery]
+// ============================================================================
+
+/**
  * SQL combining query/operator (UNION, INTERSECT, EXCEPT).
  *
  * @alias xql.node.CompoundQuery
@@ -4109,8 +4431,8 @@ class CompoundQuery extends Query {
   }
 
   /** @override */
-  mustWrap(ctx) {
-    return true;
+  mustWrap(ctx, parent) {
+    return parent != null && parent._type !== this._type;
   }
 
   /** @override */
@@ -4151,155 +4473,6 @@ class CompoundQuery extends Query {
 }
 xql$node.CompoundQuery = CompoundQuery;
 
-// ============================================================================
-// [xql.SQL]
-// ============================================================================
-
-/**
- * Constructs a RAW query node.
- *
- * @param {string} raw Raw query string (won't be escaped).
- * @param {array} [bindings] Data that will be sustituted in `raw`.
- * @return {Raw}
- *
- * @alias xql.RAW
- */
-function RAW(raw, bindings) {
-  return new Raw(raw, bindings);
-}
-xql.RAW = RAW;
-
-/**
- * Constructs a SELECT query.
- *
- * @param {...*} fields Fields can be specified in several ways. This parameter
- *   is passed as is into `SelectQuery.FIELDS()` function.
- * @return {SelectQuery}
- *
- * @alias xql.SELECT
- */
-function SELECT(/* ... */) {
-  var q = new SelectQuery();
-  if (arguments.length)
-    q.FIELD.apply(q, arguments);
-  return q;
-}
-xql.SELECT = SELECT;
-
-/**
- * Constructs an INSERT query.
- *
- * @param {...*} args
- * @return {InsertQuery}
- *
- * @alias xql.INSERT
- */
-function INSERT(/* ... */) {
-  var q = new InsertQuery();
-
-  var i = 0, len = arguments.length;
-  var arg;
-
-  // If the first parameter is a string or an identifier it is a table name.
-  if (i < len) {
-    arg = arguments[i];
-    if (typeof arg === "string" || arg instanceof Identifier) {
-      q._table = arg;
-      i++;
-    }
-  }
-
-  // Next arguments can contain data (array/object) to insert.
-  while (i < len) {
-    arg = arguments[i++];
-    q.VALUES(arg);
-  }
-
-  return q;
-}
-xql.INSERT = INSERT;
-
-/**
- * Constructs an UPDATE query.
- *
- * @param {...*} args
- * @return {UpdateQuery}
- *
- * @alias xql.UPDATE
- */
-function UPDATE(/* ... */) {
-  var q = new UpdateQuery();
-
-  var i = 0, len = arguments.length;
-  var arg;
-
-  // If the first parameter is a string or an identifier it is a table name.
-  if (i < len) {
-    arg = arguments[i];
-    if (typeof arg === "string" || arg instanceof Identifier) {
-      q._table = arg;
-      i++;
-    }
-  }
-
-  // Next argument can contain data to update.
-  if (i < len) {
-    arg = arguments[i];
-    q.VALUES(arg);
-  }
-
-  // TODO: What if more arguments are passed.
-
-  return q;
-}
-xql.UPDATE = UPDATE;
-
-/**
- * Constructs a DELETE query.
- *
- * @param {string} [from] SQL table where to delete records.
- * @return {DeleteQuery}
- *
- * @alias xql.DELETE
- */
-function DELETE(from) {
-  var q = new DeleteQuery();
-  if (from)
-    q._table = from;
-  return q;
-}
-xql.DELETE = DELETE;
-
-/**
- * Constructs a logical AND expression.
- *
- * @param {...*} args Arguments passed as an array or as `...args`.
- *   Arguments must be SQL conditions that form the AND expression.
- * @return {Logical}
- *
- * @alias xql.AND
- */
-function AND(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Logical("AND", values);
-}
-xql.AND = AND;
-
-/**
- * Constructs a logical OR expression.
- *
- * @param {...*} args Arguments passed as an array or as `...args`.
- *   Arguments must be SQL conditions that form the OR expression.
- * @return {Logical}
- *
- * @alias xql.OR
- */
-function OR(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new Logical("OR", values);
-}
-xql.OR = OR;
-
 /**
  * Constructs an `EXCEPT` expression.
  *
@@ -4310,8 +4483,7 @@ xql.OR = OR;
  * @alias xql.EXCEPT
  */
 function EXCEPT(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CompoundQuery("EXCEPT", values);
+  return new CompoundQuery("EXCEPT", isArray(array) ? array : slice.call(arguments, 0));
 }
 xql.EXCEPT = EXCEPT;
 
@@ -4327,8 +4499,7 @@ xql.EXCEPT = EXCEPT;
  * @alias xql.EXCEPT_ALL
  */
 function EXCEPT_ALL(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CompoundQuery("EXCEPT", values).ALL();
+  return new CompoundQuery("EXCEPT", isArray(array) ? array : slice.call(arguments, 0)).ALL();
 }
 xql.EXCEPT_ALL = EXCEPT_ALL;
 
@@ -4342,8 +4513,7 @@ xql.EXCEPT_ALL = EXCEPT_ALL;
  * @alias xql.INTERSECT
  */
 function INTERSECT(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CompoundQuery("INTERSECT", values);
+  return new CompoundQuery("INTERSECT", isArray(array) ? array : slice.call(arguments, 0));
 }
 xql.INTERSECT = INTERSECT;
 
@@ -4359,8 +4529,7 @@ xql.INTERSECT = INTERSECT;
  * @alias xql.INTERSECT_ALL
  */
 function INTERSECT_ALL(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CompoundQuery("INTERSECT", values).ALL();
+  return new CompoundQuery("INTERSECT", isArray(array) ? array : slice.call(arguments, 0)).ALL();
 }
 xql.INTERSECT_ALL = INTERSECT_ALL;
 
@@ -4374,8 +4543,7 @@ xql.INTERSECT_ALL = INTERSECT_ALL;
  * @alias xql.UNION
  */
 function UNION(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CompoundQuery("UNION", values);
+  return new CompoundQuery("UNION", isArray(array) ? array : slice.call(arguments, 0));
 }
 xql.UNION = UNION;
 
@@ -4391,288 +4559,36 @@ xql.UNION = UNION;
  * @alias xql.UNION_ALL
  */
 function UNION_ALL(array) {
-  var values = isArray(array) ? array : slice.call(arguments, 0);
-  return new CompoundQuery("UNION", values).ALL();
+  return new CompoundQuery("UNION", isArray(array) ? array : slice.call(arguments, 0)).ALL();
 }
 xql.UNION_ALL = UNION_ALL;
 
-/**
- * Constructs a column's identifier.
- *
- * @param {string} column Column's name.
- * @param {string} [as] SQL alias.
- * @return {Identifier}
- *
- * @alias xql.COL
- */
-function COL(column, as) {
-  // High-performane version of:
-  //   `new Identifier(column, as)`
-  return {
-    __proto__: Identifier.prototype,
-    _type    : "",
-    _flags   : 0,
-    _as      : as || "",
-    _value   : column
-  };
-}
-xql.COL = COL;
+// ============================================================================
+// [xql.VALUE]
+// ============================================================================
 
-/**
- * Constructs a wrapped value.
- *
- * @param {*} value The value to wrap (any type).
- * @return {Value}
- *
- * @alias xql.VAL
- */
-function VAL(value, type) {
-  // High-performane version of:
-  //   `new Value(value, as)`
-  return {
-    __proto__: Value.prototype,
-    _type    : type ? String(type) : "",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.VAL = VAL;
+(function() {
 
-/**
- * Constructs a wrapped VALUES value.
- *
- * @param {*} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.VALUES
- */
-function VALUES(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "VALUES",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.VALUES = VALUES;
+const ValueTypes = {
+  VALUE      : "",
+  VALUES     : "VALUES",
+  DATE       : "DATE",
+  TIME       : "TIME",
+  TIMESTAMP  : "TIMESTAMP",
+  TIMESTAMPTZ: "TIMESTAMPTZ",
+  INTERVAL   : "INTERVAL",
+  ARRAY      : "ARRAY",
+  JSON       : "JSON",
+  JSONB      : "JSONB"
+};
 
-/**
- * Constructs a wrapped DATE value.
- *
- * @param {*} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.DATE_VAL
- */
-function DATE_VAL(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "DATE",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.DATE_VAL = DATE_VAL;
+for (var k in ValueTypes)
+  xql[k] = Value.makeWrap(ValueTypes[k]);
 
-/**
- * Constructs a wrapped TIME value.
- *
- * @param {*} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.TIME_VAL
- */
-function TIME_VAL(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "TIME",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.TIME_VAL = TIME_VAL;
+// Mostly backwards compatibility and some people's preference.
+xql.VAL = xql.VALUE;
 
-/**
- * Constructs a wrapped TIMESTAMP value.
- *
- * @param {*} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.TIMESTAMP_VAL
- */
-function TIMESTAMP_VAL(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "TIMESTAMP",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.TIMESTAMP_VAL = TIMESTAMP_VAL;
-
-/**
- * Constructs a wrapped TIMESTAMP value.
- *
- * @param {*} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.TIMESTAMPTZ_VAL
- */
-function TIMESTAMPTZ_VAL(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "TIMESTAMP",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.TIMESTAMPTZ_VAL = TIMESTAMPTZ_VAL;
-
-/**
- * Constructs a wrapped INTERVAL value.
- *
- * @param {*} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.INTERVAL_VAL
- */
-function INTERVAL_VAL(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "INTERVAL",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.INTERVAL_VAL = INTERVAL_VAL;
-
-/**
- * Constructs a wrapped ARRAY value.
- *
- * @param {array} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.ARRAY_VAL
- */
-function ARRAY_VAL(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "ARRAY",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.ARRAY_VAL = ARRAY_VAL;
-
-/**
- * Constructs a wrapped JSON value.
- *
- * @param {*} value The value to wrap.
- * @return {Value}
- *
- * @alias xql.JSON_VAL
- */
-function JSON_VAL(value) {
-  return {
-    __proto__: Value.prototype,
-    _type    : "JSON",
-    _flags   : 0,
-    _as      : "",
-    _value   : value
-  };
-}
-xql.JSON_VAL = JSON_VAL;
-
-function SORT(column, direction, nulls) {
-  return new Sort(column, direction, nulls);
-}
-xql.SORT = SORT;
-
-function UNARY_OP(op, child) {
-  // High-performane version of:
-  //   `new UnaryOp(op, x)`
-  return {
-    __proto__: UnaryOp.prototype,
-    _type    : op,
-    _flags   : 0,
-    _as      : "",
-    _value   : child,
-  };
-}
-
-function BINARY_OP(a, op, b) {
-  const info = OpInfo.get(op);
-  const flags = info ? info.nodeFlags : 0;
-
-  // High-performane version of:
-  //   `new BinaryOp(a, op, b)`
-  return {
-    __proto__: BinaryOp.prototype,
-    _type    : op,
-    _flags   : flags,
-    _as      : "",
-    _left    : a,
-    _right   : b
-  };
-}
-
-/**
- *
- * Constructs either unary or binary operator.
- *
- * Examples:
- *   OP(op, a) - Unary operator.
- *   OP(a, op, b) - Binary operator.
- */
-function OP() {
-  if (arguments.length === 2) {
-    const op = arguments[0];
-    const a = arguments[1];
-    return UNARY_OP(op, a);
-  }
-
-  if (arguments.length === 3) {
-    const a  = arguments[0];
-    const op = arguments[1];
-    const b  = arguments[2];
-    return BINARY_OP(a, op, b);
-  }
-
-  throwCompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed)");
-}
-xql.OP = OP;
-
-function EQ(a, b) { return BINARY_OP(a, "=" , b); }
-function NE(a, b) { return BINARY_OP(a, "!=", b); }
-function LT(a, b) { return BINARY_OP(a, "<" , b); }
-function LE(a, b) { return BINARY_OP(a, "<=", b); }
-function GT(a, b) { return BINARY_OP(a, ">" , b); }
-function GE(a, b) { return BINARY_OP(a, ">=", b); }
-
-xql.EQ = EQ;
-xql.NE = NE;
-xql.LT = LT;
-xql.LE = LE;
-xql.GT = GT;
-xql.GE = GE;
-
-function FUNC(name, ...args) {
-  return new Func(name, args);
-}
-xql.FUNC = FUNC;
-
-function CASE() {
-  return new Case();
-}
-xql.CASE = CASE;
+})();
 
 // ============================================================================
 // [xql.FUNC]
@@ -4719,13 +4635,22 @@ function register(defs, commons) {
     if (nameNot)
       formatNot = (opFlags & kSpaceSeparate) ? " " + nameNot + " " : nameNot;
 
+    var ctor = def.ctor;
+    if (!ctor)
+      ctor = (opFlags & kUnary   ) ? UnaryOp  :
+             (opFlags & kBinary  ) ? BinaryOp :
+             (opFlags & kFunction) ? Func     : null;
+
+    if (!ctor)
+      throwTypeError("Cannot guess constructor as nothing is specified in 'opFlags'");
+
     OpInfo.add({
       name      : name,
       nameNot   : nameNot,
       format    : format,
       formatNot : formatNot,
       doc       : def.doc || "",
-      ctor      : def.ctor || Func,
+      ctor      : ctor,
       opFlags   : opFlags,
       nodeFlags : 0,
       dialect   : dialect,
@@ -4873,18 +4798,21 @@ register([
 ], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
-  { name: "AND"                      , args: 2     , opFlags: 0           , dialect: "*"    },
-  { name: "OR"                       , args: 2     , opFlags: 0           , dialect: "*"    },
   { name: "IS"                       , args: 2     , opFlags: kNotAfterOp , dialect: "*"    },
-  { name: "IS DISTINCT FROM"         , args: 2     , opFlags: kNotMiddleOp, dialect: "*"     , nameNot: "IS NOT DISTINCT FROM" }
+  { name: "IS DISTINCT FROM"         , args: 2     , opFlags: kNotMiddleOp, dialect: "*"     , nameNot: "IS NOT DISTINCT FROM" },
+  { name: "LIKE"                     , args: 2     , opFlags: kNotBeforeOp, dialect: "*"    },
+  { name: "ILIKE"                    , args: 2     , opFlags: kNotBeforeOp, dialect: "*"    },
+  { name: "SIMILAR TO"               , args: 2     , opFlags: kNotBeforeOp, dialect: "*"    }
 ], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
-  { name: "LIKE"                     , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "ILIKE"                    , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "SIMILAR TO"               , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "IN"                       , args: 2     , opFlags: kRightValues, dialect: "*"      , doc: "$1 IN ($2)" }
+  { name: "IN"                       , args: 2     , opFlags: kRightValues, dialect: "*"    }
 ], { category: "general", opFlags: kBinary | kSpaceSeparate | kNotBeforeOp });
+
+register([
+  { name: "AND"                      , args: 2     , opFlags: 0           , dialect: "*"    },
+  { name: "OR"                       , args: 2     , opFlags: 0           , dialect: "*"    }
+], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
   { name: "BETWEEN"                  , args: 3     , opFlags: 0           , dialect: "*"      , compile: compileBetween },
@@ -5181,32 +5109,79 @@ OpInfo.addNegation("~*", "!~*");
 
 // Add all known functions to `xql` namespace.
 OpInfo.forEach(function(_alias, info) {
-  if (info.opFlags & (kUnary | kFunction) && reFunctionOrOp.test(info.name)) {
+  if (info.opFlags & (kUnary | kBinary | kFunction) && reUpperCasedWithSpaces.test(info.name)) {
     const alias = _alias.replace(/ /g, "_");
-    const ctor = info.ctor;
-    const name = info.name;
-    const nodeFlags = info.nodeFlags;
-
-    var fn;
-    if (info.opFlags & kUnary) {
-      fn = function(child) {
-        const node = new UnaryOp(name, child);
-        node._flags |= nodeFlags;
-        return node;
-      };
+    if (!xql[alias]) {
+      if (info.opFlags & kUnary)
+        xql[alias] = UnaryOp.makeWrap(info.name, info.nodeFlags, info.ctor);
+      else if (info.opFlags & kBinary)
+        xql[alias] = BinaryOp.makeWrap(info.name, info.nodeFlags, info.ctor);
+      else
+        xql[alias] = Func.makeWrap(info.name, info.nodeFlags, info.ctor);
     }
-    else {
-      fn = function(...args) {
-        const node = new ctor(name, args);
-        node._flags |= nodeFlags;
-        return node;
-      };
-    }
-    xql[alias] = fn;
   }
 });
 
 })();
+
+// ============================================================================
+// [xql.SQL]
+// ============================================================================
+
+xql.EQ = BinaryOp.makeWrap("=" , OpInfo.get("=" ).nodeFlags);
+xql.NE = BinaryOp.makeWrap("<>", OpInfo.get("<>").nodeFlags);
+xql.LT = BinaryOp.makeWrap("<" , OpInfo.get("<" ).nodeFlags);
+xql.LE = BinaryOp.makeWrap("<=", OpInfo.get("<=").nodeFlags);
+xql.GT = BinaryOp.makeWrap(">" , OpInfo.get(">" ).nodeFlags);
+xql.GE = BinaryOp.makeWrap(">=", OpInfo.get(">=").nodeFlags);
+
+/**
+ * Constructs a logical AND expression.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ *   Arguments must be SQL conditions that form the AND expression.
+ * @return {Logical}
+ *
+ * @alias xql.AND
+ */
+xql.AND = NodeArray.makeWrap("AND", OpInfo.get("AND").nodeFlags, Logical);
+
+/**
+ * Constructs a logical OR expression.
+ *
+ * @param {...*} args Arguments passed as an array or as `...args`.
+ *   Arguments must be SQL conditions that form the OR expression.
+ * @return {Logical}
+ *
+ * @alias xql.OR
+ */
+xql.OR = NodeArray.makeWrap("OR", OpInfo.get("OR").nodeFlags, Logical);
+
+/**
+ *
+ * Constructs either unary or binary operator.
+ *
+ * Examples:
+ *   OP(op, a) - Unary operator.
+ *   OP(a, op, b) - Binary operator.
+ */
+function OP() {
+  if (arguments.length === 2) {
+    const op = arguments[0];
+    const a = arguments[1];
+    return UNARY_OP(op, a);
+  }
+
+  if (arguments.length === 3) {
+    const a  = arguments[0];
+    const op = arguments[1];
+    const b  = arguments[2];
+    return BINARY_OP(a, op, b);
+  }
+
+  throwCompileError("OP() - Illegal number or parameters '" + len + "' (2 or 3 allowed)");
+}
+xql.OP = OP;
 
 }).apply(this, typeof module === "object" && module && module.exports
   ? [module, "exports"] : [this, "xql"]);
