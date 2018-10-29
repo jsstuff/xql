@@ -355,8 +355,8 @@ function typeOf(value) {
 xql$misc.typeOf = typeOf;
 
 function parseVersion(s) {
-  var parts = s.split(".");
-  var re = /^[0-9]+$/g;
+  const parts = s.split(".");
+  const re = /^[0-9]+$/g;
 
   var major = 0;
   var minor = 0;
@@ -392,11 +392,9 @@ function indent(s, indentation) {
 xql$misc.indent = indent;
 
 function alias(classobj, spec) {
-  var p = classobj.prototype;
-  for (var member in spec) {
-    var from = spec[member];
-    p[member] = p[from];
-  }
+  const p = classobj.prototype;
+  for (var member in spec)
+    p[member] = p[spec[member]];
   return classobj;
 }
 

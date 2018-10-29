@@ -38,12 +38,12 @@ Basic Usage
 To use xql.js in node.js add `"xql"` library to your `package.json` and then `require("xql")` it. You need to create a context before you compile your expressions:
 
 ```js
-var xql = require("xql");
+const xql = require("xql");
 
 // Create your context - context is used to hold database dialect and some
 // options. It doesn't hold any intermediate data. It's perfectly fine to
 // use one context for all your queries (and it's designed this way).
-var ctx = xql.dialect.newContext({ dialect: "pgsql" /* [more options]*/ });
+const ctx = xql.dialect.newContext({ dialect: "pgsql" /* [more options]*/ });
 
 // Create some query.
 var query = xql.SELECT("*")
@@ -59,8 +59,8 @@ console.log(query.compileQuery(ctx));
 If you plan to pretty-print your queries for debugging purposes, use `pretty` and optionally `indentation` (default 2) option:
 
 ```js
-var xql = require("xql");
-var ctx = xql.dialect.newContext({
+const xql = require("xql");
+const ctx = xql.dialect.newContext({
   dialect: "pgsql"
   pretty: true
 });
@@ -86,80 +86,93 @@ API Overview
 
 xql.js library consists of several nested namespaces, however, they are rarely used outside of `xql` implementation:
 
-Namespace                  | Description
-:------------------------- | :------------------------------------
-`xql`                      | Main API and high-level SQL builder interface (both UPPERCASED and camelCased versions of the same APIs)
-`xql.error`                | Custom errors xql.js uses
-`xql.misc`                 | SQL utilities xql is using made public, contains also a `VERSION` key in a `"major.minor.patch"` form
-`xql.node`                 | Expression tree, contains `xql.node.Node` and all nodes that inherit from it
+Namespace                   | Description
+:-------------------------- | :------------------------------------
+`xql`                       | High-level SQL builder interface targeting end-users
+`xql.error`                 | Namespace that provides custom errors used by xql.js
+`xql.misc`                  | SQL utilities made public, contains also a `VERSION` member in a `"major.minor.patch"` form
+`xql.node`                  | SQL expression tree, contains `xql.node.Node` and all nodes that inherit from it
 
 Error classes:
 
-Error                      | Description
-:------------------------- | :------------------------------------
-`xql.error.ValueError`     | Error thrown if data is wrong
-`xql.error.CompileError`   | Error thrown if query is wrong
+Error                       | Description
+:-------------------------- | :------------------------------------
+`xql.error.ValueError`      | Error thrown if data is wrong
+`xql.error.CompileError`    | Error thrown if query is wrong
 
-Expression tree:
+SQL expression tree:
 
-Node                       | Description
-:------------------------- | :------------------------------------
-`xql.node.Node`            | Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `xql.node.Node`
-`xql.node.Raw`             | Raw SQL expression
-`xql.node.Unary`           | SQL unary node (can contain a single child)
-`xql.node.UnaryOp`         | SQL unary operator, like `-`, `NOT`, etc...
-`xql.node.Binary`          | SQL binary node (can contain two children, left and right)
-`xql.node.NodeArray`       | Contains array of nodes or values
-`xql.node.Logical`         | Logical operator like `AND` and `OR`, which is based on `NodeArray` and can contain more than two expressions
-`xql.node.ConditionalMap`  | Special node that contains key/value interface that can be used to construct `WHERE` like expressions
-`xql.node.Identifier`      | SQL identifier, like table or column
-`xql.node.Join`            | SQL `JOIN` construct
-`xql.node.Sort`            | SQL `ORDER BY` construct
-`xql.node.Func`            | SQL function or aggregate expression
-`xql.node.Value`           | SQL value base class
-`xql.node.Query`           | SQL query base class
-`xql.node.SelectQuery`     | SQL `SELECT` query
-`xql.node.InsertQuery`     | SQL `INSERT` query
-`xql.node.UpdateQuery`     | SQL `UPDATE` query
-`xql.node.DeleteQuery`     | SQL `DELETE` query
-`xql.node.CompoundQuery`   | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
+Node                        | Description
+:-------------------------- | :------------------------------------
+`xql.node.Node`             | Base node, all SQL nodes inherit from it, it's safe to use `instanceof` operator to check whether an object is a `xql.node.Node`
+`xql.node.NodeArray`        | Contains array of SQL nodes or values
+`xql.node.Raw`              | Raw SQL expression intended to be used unescaped (the only way to pass something, which will not be escaped)
+`xql.node.Value`            | SQL value base class
+`xql.node.Identifier`       | SQL identifier, like table or column
+`xql.node.Unary`            | SQL unary node (can contain a single child)
+`xql.node.Binary`           | SQL binary node (can contain two children, left and right)
+`xql.node.Func`             | SQL function or aggregate
+`xql.node.Case`             | SQL `CASE` construct
+`xql.node.When`             | SQL `WHEN` construct
+`xql.node.Logical`          | Logical operator like `AND` and `OR`, which is based on `NodeArray` and can contain more than two expressions
+`xql.node.ConditionalMap`   | Special node that contains key/value interface that can be used to construct `WHERE` like expressions without constructing `xql.node.Logical` nodes.
+`xql.node.Join`             | SQL `JOIN` construct
+`xql.node.Sort`             | SQL `ORDER BY` construct
+`xql.node.Query`            | Base class for implementing SQL query statements
+`xql.node.SelectQuery`      | SQL `SELECT` query
+`xql.node.InsertQuery`      | SQL `INSERT` query
+`xql.node.UpdateQuery`      | SQL `UPDATE` query
+`xql.node.DeleteQuery`      | SQL `DELETE` query
+`xql.node.CompoundQuery`    | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
 
 High-level SQL builder concepts:
 
-SQL-Builder API            | Description
-:------------------------- | :------------------------------------
-`xql.TABLE(...)`           | Create a `xql.node.Identifier` wrapping a table name
-`xql.COLUMN(...)`          | Create a `xql.node.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
-`xql.COL(...)`             | Alias to `xql.COLUMN`
-`xql.VALUE(...)`           | Create a `xql.node.Value` wrapping a value like `null`, `boolean`, `number`, or `string`
-`xql.VAL(...)`             | Alias to `xql.VALUE`.
-`xql.DATE(...)`            | Create a `xql.node.Value` wrapping a DATE value
-`xql.TIME(...)`            | Create a `xql.node.Value` wrapping a TIME value
-`xql.TIMESTAMP(...)`       | Create a `xql.node.Value` wrapping a TIMESTAMP value
-`xql.ARRAY(...)`           | Create a `xql.node.Value` wrapping an ARRAY value
-`xql.JSON_(...)`           | Create a `xql.node.Value` wrapping a JSON value
-`xql.RAW(s, bindings)`     | Create a RAW query `xql.node.Raw` node based on query string `s` and optional `bindings`
-`xql.OP(...)`              | Create a `xql.node.Unary` or `xql.node.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `xql.node.Logical` as xql.js can construct queries containing multiple `AND` and `OR` leaves
-`xql.EQ(a, b)`             | Create a `xql.node.Binary` node describing `a = b` expression
-`xql.NE(a, b)`             | Create a `xql.node.Binary` node describing `a <> b` expression
-`xql.LT(a, b)`             | Create a `xql.node.Binary` node describing `a < b` expression
-`xql.LE(a, b)`             | Create a `xql.node.Binary` node describing `a <= b` expression
-`xql.GT(a, b)`             | Create a `xql.node.Binary` node describing `a > b` expression
-`xql.GE(a, b)`             | Create a `xql.node.Binary` node describing `a >= b` expression
-`xql.FUNCTION_NAME(...)`   | Create a `xql.node.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `xql.SIN(...)` describes `SIN()` function and `xql.COUNT(...)` describes `COUNT()` aggregate
-`xql.AND(...)`             | Create a `xql.node.Logical` expression describing `AND` expression
-`xql.OR(...)`              | Create a `xql.node.Logical` expression describing `OR` expression
-`xql.SELECT(...)`          | Create a `xql.node.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
-`xql.INSERT(...)`          | Create a `xql.node.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
-`xql.UPDATE(...)`          | Create a `xql.node.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
-`xql.DELETE(...)`          | Create a `xql.node.DeleteQuery` and use an optional first argument as a table name
-`xql.EXCEPT(...)`          | Create a `xql.node.CompoundQuery` describing `EXCEPT` expression
-`xql.EXCEPT_ALL(...)`      | Create a `xql.node.CompoundQuery` describing `EXCEPT ALL` query
-`xql.INTERSECT(...)`       | Create a `xql.node.CompoundQuery` describing `INTERSECT` query
-`xql.INTERSECT_ALL(...)`   | Create a `xql.node.CompoundQuery` describing `INTERSECT ALL` query
-`xql.UNION(...)`           | Create a `xql.node.CompoundQuery` describing `UNION` query
-`xql.UNION_ALL(...)`       | Create a `xql.node.CompoundQuery` describing `UNION ALL` query
-`xql.SORT(c, sort, nulls)` | Create a `xql.node.Sort` node wrapping an `ORDER BY` clause
+SQL-Builder API             | Description
+:-------------------------- | :------------------------------------
+`xql.TABLE(...)`            | Create a `xql.node.Identifier` wrapping a table name
+`xql.COLUMN(...)`           | Create a `xql.node.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
+`xql.COL(...)`              | Alias to `xql.COLUMN`
+`xql.VALUE(...)`            | Create a `xql.node.Value` wrapping a value like `null`, `boolean`, `number`, or `string`
+`xql.VAL(...)`              | Alias to `xql.VALUE`.
+`xql.VALUES(...)`           | Create a `xql.node.Value` wrapping an array into SQL `VALUES`
+`xql.DATE(...)`             | Create a `xql.node.Value` wrapping a `DATE` value
+`xql.TIME(...)`             | Create a `xql.node.Value` wrapping a `TIME` value
+`xql.TIMESTAMP(...)`        | Create a `xql.node.Value` wrapping a `TIMESTAMP` value
+`xql.TIMESTAMPTZ(...)`      | Create a `xql.node.Value` wrapping a `TIMESTAMPTZ` value
+`xql.INTERVAL(...)`         | Create a `xql.node.Value` wrapping a `INTERVAL` value
+`xql.ARRAY(...)`            | Create a `xql.node.Value` wrapping an `ARRAY` value
+`xql.JSON_(...)`            | Create a `xql.node.Value` wrapping a `JSON` value
+`xql.RAW(s, bindings)`      | Create a RAW query `xql.node.Raw` node based on query string `s` and optional `bindings`
+`xql.OP(...)`               | Create a `xql.node.Unary` or `xql.node.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `xql.node.Logical` as xql.js can construct queries containing multiple `AND` and `OR` leaves
+`xql.EQ(a, b)`              | Create a `xql.node.Binary` node describing `a = b` expression
+`xql.NE(a, b)`              | Create a `xql.node.Binary` node describing `a <> b` expression
+`xql.LT(a, b)`              | Create a `xql.node.Binary` node describing `a < b` expression
+`xql.LE(a, b)`              | Create a `xql.node.Binary` node describing `a <= b` expression
+`xql.GT(a, b)`              | Create a `xql.node.Binary` node describing `a > b` expression
+`xql.GE(a, b)`              | Create a `xql.node.Binary` node describing `a >= b` expression
+`xql.IS(a, b)`              | Create a `xql.node.Binary` node describing `a IS b` expression (you can use EQ as well which would detect IS case)
+`xql.IS_DISTINCT_FROM(a, b)`| Create a `xql.node.Binary` node describing `a IS DISTINCT FROM b` expression
+`xql.LIKE(a, b)`            | Create a `xql.node.Binary` node describing `a LIKE b` expression
+`xql.ILIKE(a, b)`           | Create a `xql.node.Binary` node describing `a ILIKE b` expression
+`xql.SIMILAR_TO(a, b)`      | Create a `xql.node.Binary` node describing `a SIMILAR TO b` expression
+`xql.IN(a, b)`              | Create a `xql.node.Binary` node describing `a IN (b)` expression
+`xql.NOT_IN(a, b)`          | Create a `xql.node.Binary` node describing `a NOT IN (b)` expression
+`xql.BETWEEN(x, a, b)`      | Create a `xql.node.Func` node describing `x BETWEEN a AND b` expression
+`xql.NOT_BETWEEN(x, a, b)`  | Create a `xql.node.Func` node describing `x NOT BETWEEN a AND b` expression
+`xql.FUNCTION_NAME(...)`    | Create a `xql.node.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `xql.SIN(...)` describes `SIN()` function and `xql.COUNT(...)` describes `COUNT()` aggregate
+`xql.AND(...)`              | Create a `xql.node.Logical` expression describing `AND` expression
+`xql.OR(...)`               | Create a `xql.node.Logical` expression describing `OR` expression
+`xql.SELECT(...)`           | Create a `xql.node.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
+`xql.INSERT(...)`           | Create a `xql.node.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
+`xql.UPDATE(...)`           | Create a `xql.node.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
+`xql.DELETE(...)`           | Create a `xql.node.DeleteQuery` and use an optional first argument as a table name
+`xql.EXCEPT(...)`           | Create a `xql.node.CompoundQuery` describing `EXCEPT` expression
+`xql.EXCEPT_ALL(...)`       | Create a `xql.node.CompoundQuery` describing `EXCEPT ALL` query
+`xql.INTERSECT(...)`        | Create a `xql.node.CompoundQuery` describing `INTERSECT` query
+`xql.INTERSECT_ALL(...)`    | Create a `xql.node.CompoundQuery` describing `INTERSECT ALL` query
+`xql.UNION(...)`            | Create a `xql.node.CompoundQuery` describing `UNION` query
+`xql.UNION_ALL(...)`        | Create a `xql.node.CompoundQuery` describing `UNION ALL` query
+`xql.SORT(c, sort, nulls)`  | Create a `xql.node.Sort` node wrapping an `ORDER BY` clause
 
 Generic Interface
 -----------------
