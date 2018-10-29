@@ -128,6 +128,27 @@ High-level SQL builder concepts:
 
 SQL-Builder API            | Description
 :------------------------- | :------------------------------------
+`xql.TABLE(...)`           | Create a `xql.node.Identifier` wrapping a table name
+`xql.COLUMN(...)`          | Create a `xql.node.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
+`xql.COL(...)`             | Alias to `xql.COLUMN`
+`xql.VALUE(...)`           | Create a `xql.node.Value` wrapping a value like `null`, `boolean`, `number`, or `string`
+`xql.VAL(...)`             | Alias to `xql.VALUE`.
+`xql.DATE(...)`            | Create a `xql.node.Value` wrapping a DATE value
+`xql.TIME(...)`            | Create a `xql.node.Value` wrapping a TIME value
+`xql.TIMESTAMP(...)`       | Create a `xql.node.Value` wrapping a TIMESTAMP value
+`xql.ARRAY(...)`           | Create a `xql.node.Value` wrapping an ARRAY value
+`xql.JSON_(...)`           | Create a `xql.node.Value` wrapping a JSON value
+`xql.RAW(s, bindings)`     | Create a RAW query `xql.node.Raw` node based on query string `s` and optional `bindings`
+`xql.OP(...)`              | Create a `xql.node.Unary` or `xql.node.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `xql.node.Logical` as xql.js can construct queries containing multiple `AND` and `OR` leaves
+`xql.EQ(a, b)`             | Create a `xql.node.Binary` node describing `a = b` expression
+`xql.NE(a, b)`             | Create a `xql.node.Binary` node describing `a <> b` expression
+`xql.LT(a, b)`             | Create a `xql.node.Binary` node describing `a < b` expression
+`xql.LE(a, b)`             | Create a `xql.node.Binary` node describing `a <= b` expression
+`xql.GT(a, b)`             | Create a `xql.node.Binary` node describing `a > b` expression
+`xql.GE(a, b)`             | Create a `xql.node.Binary` node describing `a >= b` expression
+`xql.FUNCTION_NAME(...)`   | Create a `xql.node.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `xql.SIN(...)` describes `SIN()` function and `xql.COUNT(...)` describes `COUNT()` aggregate
+`xql.AND(...)`             | Create a `xql.node.Logical` expression describing `AND` expression
+`xql.OR(...)`              | Create a `xql.node.Logical` expression describing `OR` expression
 `xql.SELECT(...)`          | Create a `xql.node.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
 `xql.INSERT(...)`          | Create a `xql.node.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
 `xql.UPDATE(...)`          | Create a `xql.node.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
@@ -139,21 +160,6 @@ SQL-Builder API            | Description
 `xql.UNION(...)`           | Create a `xql.node.CompoundQuery` describing `UNION` query
 `xql.UNION_ALL(...)`       | Create a `xql.node.CompoundQuery` describing `UNION ALL` query
 `xql.SORT(c, sort, nulls)` | Create a `xql.node.Sort` node wrapping an `ORDER BY` clause
-`xql.RAW(s, bindings)`     | Create a RAW query `xql.node.Raw` node based on query string `s` and optional `bindings`
-`xql.AND(...)`             | Create a `xql.node.Logical` expression describing `AND` expression
-`xql.OR(...)`              | Create a `xql.node.Logical` expression describing `OR` expression
-`xql.COL(...)`             | Create a `xql.node.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
-`xql.VAL(...)`             | Create a `xql.node.PrimitiveValue` wrapping a primitive value like `null`, `boolean`, `number`, or `string`
-`xql.ARRAY(...)`           | Create a `xql.node.Value` wrapping an array
-`xql.JSON_(...)`           | Create a `xql.node.Value` wrapping an object (JSON)
-`xql.OP(...)`              | Create a `xql.node.Unary` or `xql.node.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `xql.node.Logical` as xql.js can construct queries containing multiple `AND` and `OR` leaves
-`xql.EQ(a, b)`             | Create a `xql.node.Binary` node describing `a = b` expression
-`xql.NE(a, b)`             | Create a `xql.node.Binary` node describing `a <> b` expression
-`xql.LT(a, b)`             | Create a `xql.node.Binary` node describing `a < b` expression
-`xql.LE(a, b)`             | Create a `xql.node.Binary` node describing `a <= b` expression
-`xql.GT(a, b)`             | Create a `xql.node.Binary` node describing `a > b` expression
-`xql.GE(a, b)`             | Create a `xql.node.Binary` node describing `a >= b` expression
-`xql.FUNCTION_NAME(...)`   | Create a `xql.node.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `xql.SIN(...)` describes `SIN()` function and `xql.COUNT(...)` describes `COUNT()` aggregate
 
 Generic Interface
 -----------------

@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.5";
+const VERSION = "1.4.6";
 
 // ============================================================================
 // [internal]
@@ -1030,7 +1030,7 @@ class Context {
     }
   }
 
-  _compileUnaryOp(node) {
+  _compileUnary(node) {
     var type = node._type;
     var out = this._compile(node._value);
 
@@ -1049,14 +1049,14 @@ class Context {
         break;
     }
 
-    var as = node._as;
-    if (as)
-      out += " AS " + this.escapeIdentifier(as);
+    var alias = node._alias;
+    if (alias)
+      out += " AS " + this.escapeIdentifier(alias);
 
     return out;
   }
 
-  _compileBinaryNode(node) {
+  _compileBinary(node) {
     var type = node._type;
     var out = "";
 
@@ -1070,7 +1070,7 @@ class Context {
     var right = "";
 
     if (!type)
-      throwCompileError("_compileBinaryNode.compileNode() - No operator specified");
+      throwCompileError("_compileBinary.compileNode() - No operator specified");
 
     var opInfo = OpInfo.get(type);
     var opFlags = opInfo ? opInfo.opFlags : 0;
@@ -1113,9 +1113,9 @@ class Context {
 
     out = left + keyword + right;
 
-    var as = node._as;
-    if (as)
-      out += " AS " + this.escapeIdentifier(as);
+    var alias = node._alias;
+    if (alias)
+      out += " AS " + this.escapeIdentifier(alias);
 
     return out;
   }
@@ -1136,10 +1136,10 @@ class Context {
     if (info !== null && info.compile !== null)
       return info.compile(this, node);
     else
-      return this._compileFuncImpl(name, node._values, node._flags, node._as);
+      return this._compileFuncImpl(name, node._values, node._flags, node._alias);
   }
 
-  _compileFuncImpl(name, args, flags, as) {
+  _compileFuncImpl(name, args, flags, alias) {
     var out = "";
 
     for (var i = 0, len = args.length; i < len; i++) {
@@ -1155,15 +1155,15 @@ class Context {
       out = "DISTINCT " + out;
 
     // Form the function including an alias.
-    return this._compileFuncAs(name + "(" + out + ")", as, flags);
+    return this._compileFuncAs(name + "(" + out + ")", alias, flags);
   }
 
-  _compileFuncAs(body, as) {
-    return as ? body + " AS " + this.escapeIdentifier(as) : body;
+  _compileFuncAs(body, alias) {
+    return alias ? body + " AS " + this.escapeIdentifier(alias) : body;
   }
 
-  _compileAs(exp, as) {
-    return as ? "(" + exp +") AS " + this.escapeIdentifier(as) : exp;
+  _compileAs(exp, alias) {
+    return alias ? "(" + exp +") AS " + this.escapeIdentifier(alias) : exp;
   }
 
   /**
@@ -1231,9 +1231,9 @@ class Context {
     // TODO: Compile `FOR ...`.
 
     // Compile `(...) AS identifier`.
-    const as = node._as;
-    if (as)
-      out = this._wrapQuery(out) + " AS " + this.escapeIdentifier(as);
+    const alias = node._alias;
+    if (alias)
+      out = this._wrapQuery(out) + " AS " + this.escapeIdentifier(alias);
 
     return out;
   }
@@ -1541,9 +1541,9 @@ class Context {
       out += " ON " + condition.compileNode(this);
     }
 
-    var as = node._as;
-    if (as)
-      out += " AS " + this.escapeIdentifier(as);
+    var alias = node._alias;
+    if (alias)
+      out += " AS " + this.escapeIdentifier(alias);
 
     return out;
   }
@@ -2290,20 +2290,20 @@ const xql$node = xql.node = {};
  * SQL node - basic building block that implements the SQL's expression tree.
  *
  * `Node` doesn't have any functionality and basically only initializes `_type`,
- * `_flags` and `_as` members. Classes that inherit `Node` can omit calling
+ * `_flags` and `_alias` members. Classes that inherit `Node` can omit calling
  * `Node`'s constructor for performance reasons, but if you do so, please
- * always initialize members in a `[_type, _flags, _as]` order.
+ * always initialize members in a `[_type, _flags, _alias]` order.
  *
  * @param {string} type Type of the node.
- * @param {as} as Node alias as specified by SQL's `AS` keyword.
+ * @param {string} |alias| Node alias as specified by SQL's `AS` keyword.
  *
  * @alias xql.node.Node
  */
 class Node {
-  constructor(type, as) {
+  constructor(type, alias) {
     this._type = type || "";
     this._flags = 0;
-    this._as = as || "";
+    this._alias = alias || "";
 
     const opInfo = OpInfo.get(type);
     if (opInfo) {
@@ -2452,7 +2452,7 @@ class Node {
    * @return {string} SQL alias.
    */
   getAlias() {
-    return this._as;
+    return this._alias;
   }
 
   /**
@@ -2460,11 +2460,11 @@ class Node {
    *
    * @note Not all SQL nodes support aliases. It's mostly for SELECT columns.
    *
-   * @param {string} as SQL alias.
+   * @param {string} |alias| SQL alias.
    * @return {this}
    */
-  setAlias(as) {
-    this._as = as;
+  setAlias(alias) {
+    this._alias = alias;
     return this;
   }
 
@@ -2489,13 +2489,13 @@ class Node {
   }
 
   /**
-   * The same as calling `setAlias(as)`.
+   * The same as calling `setAlias(alias)`.
    *
-   * @param {string} as SQL alias.
+   * @param {string} |alias| SQL alias.
    * @return {this}
    */
-  AS(as) {
-    this._as = as;
+  AS(alias) {
+    this._alias = alias;
     return this;
   }
 
@@ -2557,9 +2557,9 @@ class Raw extends Node {
     if (bindings)
       out = ctx.substitute(out, bindings);
 
-    var as = this._as;
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
+    var alias = this._alias;
+    if (alias)
+      out += " AS " + ctx.escapeIdentifier(alias);
 
     return out;
   }
@@ -2627,7 +2627,7 @@ xql.RAW = RAW;
 /**
  * SQL unary node.
  *
- * @alias xql.node.UnaryOp
+ * @alias xql.node.Unary
  */
 class Unary extends Node {
   constructor(type, value) {
@@ -2638,6 +2638,11 @@ class Unary extends Node {
   /** @override */
   mustWrap(ctx, parent) {
     return false;
+  }
+
+  /** @override */
+  compileNode(ctx) {
+    return ctx._compileUnary(this);
   }
 
   /**
@@ -2659,48 +2664,31 @@ class Unary extends Node {
     this._value = value;
     return this;
   }
-}
-xql$node.Unary = Unary;
-
-// ============================================================================
-// [xql.UnaryOp]
-// ============================================================================
-
-/**
- * SQL unary operator.
- *
- * @alias xql.node.UnaryOp
- */
-class UnaryOp extends Unary {
-  /** @override */
-  compileNode(ctx) {
-    return ctx._compileUnaryOp(this);
-  }
 
   static makeWrap(type, flags, ctor) {
     if (!ctor)
-      ctor = UnaryOp;
+      ctor = Unary;
 
     return function(value) {
       return {
         __proto__: ctor.prototype,
         _type    : type,
         _flags   : flags,
-        _as      : "",
+        _alias   : "",
         _value   : value
       };
     }
   }
 }
-xql$node.UnaryOp = UnaryOp;
+xql$node.Unary = Unary;
 
-function UNARY_OP(op, child) {
+function UNARY_OP(op, value) {
   return {
-    __proto__: UnaryOp.prototype,
+    __proto__: Unary.prototype,
     _type    : op,
     _flags   : 0,
-    _as      : "",
-    _value   : child,
+    _alias   : "",
+    _value   : value
   };
 }
 
@@ -2714,8 +2702,8 @@ function UNARY_OP(op, child) {
  * @alias xql.node.Binary
  */
 class Binary extends Node {
-  constructor(left, type, right, as) {
-    super(type, as);
+  constructor(left, type, right, alias) {
+    super(type, alias);
     this._left = left;
     this._right = right;
   }
@@ -2733,7 +2721,7 @@ class Binary extends Node {
 
   /** @override */
   compileNode(ctx) {
-    return ctx._compileBinaryNode(this);
+    return ctx._compileBinary(this);
   }
 
   /**
@@ -2815,7 +2803,7 @@ class Binary extends Node {
         __proto__: ctor.prototype,
         _type    : type,
         _flags   : flags,
-        _as      : "",
+        _alias   : "",
         _left    : left,
         _right   : right
       };
@@ -2832,7 +2820,7 @@ function BINARY_OP(a, op, b) {
     __proto__: Binary.prototype,
     _type    : op,
     _flags   : flags,
-    _as      : "",
+    _alias   : "",
     _left    : a,
     _right   : b
   };
@@ -2884,7 +2872,7 @@ class NodeArray extends Node {
         __proto__: ctor.prototype,
         _type    : type,
         _flags   : flags,
-        _as      : "",
+        _alias   : "",
         _values  : args
       };
     }
@@ -2985,8 +2973,8 @@ xql$node.ConditionMap = ConditionMap;
  * @alias xql.node.Identifier
  */
 class Identifier extends Node {
-  constructor(value, as) {
-    super("IDENTIFIER", as);
+  constructor(value, alias) {
+    super("IDENTIFIER", alias);
     this._value = value;
   }
 
@@ -2998,9 +2986,9 @@ class Identifier extends Node {
   /** @override */
   compileNode(ctx) {
     var out = ctx.escapeIdentifier(this._value);
-    var as = this._as;
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
+    var alias = this._alias;
+    if (alias)
+      out += " AS " + ctx.escapeIdentifier(alias);
     return out;
   }
 
@@ -3012,18 +3000,18 @@ class Identifier extends Node {
    *
    * @return {string} Identifier's name.
    */
-  getName() {
+  getValue() {
     return this._value;
   }
 
   /**
    * Sets the name of the identifier.
    *
-   * @param {string} name The new name of the identifier.
+   * @param {string} value The new name of the identifier.
    * @return {this}
    */
-  setName(name) {
-    this._value = name;
+  setValue(value) {
+    this._value = value;
     return this;
   }
 }
@@ -3033,17 +3021,17 @@ xql$node.Identifier = Identifier;
  * Constructs SQL identifier.
  *
  * @param {string} value SQL identifier.
- * @param {string} [as] SQL alias.
+ * @param {string} [alias] SQL alias.
  * @return {Identifier}
  *
  * @alias xql.IDENT
  */
-function IDENT(value, as) {
+function IDENT(value, alias) {
   return {
     __proto__: Identifier.prototype,
     _type    : "",
     _flags   : 0,
-    _as      : as || "",
+    _alias   : alias || "",
     _value   : String(value)
   };
 }
@@ -3164,7 +3152,7 @@ class Case extends NodeArray {
   /** @override */
   compileNode(ctx) {
     var out = "CASE";
-    var as = this._as;
+    var alias = this._alias;
 
     var whens = this._values;
     var else_ = this._else;
@@ -3176,8 +3164,8 @@ class Case extends NodeArray {
       out += " ELSE " + ctx._compile(else_);
 
     out += " END";
-    if (as)
-      out = out + " AS " + ctx.escapeIdentifier(as);
+    if (alias)
+      out = out + " AS " + ctx.escapeIdentifier(alias);
     return out;
   }
 
@@ -3220,8 +3208,8 @@ xql.CASE = function CASE() { return new Case(); }
  * @alias xql.node.Value
  */
 class Value extends Node {
-  constructor(value, type, as) {
-    super(type, as);
+  constructor(value, type, alias) {
+    super(type, alias);
     this._value = value;
   }
 
@@ -3233,9 +3221,9 @@ class Value extends Node {
   /** @override */
   compileNode(ctx) {
     var out = ctx.escapeValue(this._value, this._type);
-    var as = this._as;
-    if (as)
-      out += " AS " + ctx.escapeIdentifier(as);
+    var alias = this._alias;
+    if (alias)
+      out += " AS " + ctx.escapeIdentifier(alias);
     return out;
   }
 
@@ -3265,7 +3253,7 @@ class Value extends Node {
         __proto__: Value.prototype,
         _type    : type || fallbackType,
         _flags   : 0,
-        _as      : "",
+        _alias   : "",
         _value   : value
       };
     };
@@ -4621,7 +4609,7 @@ function register(defs, commons) {
 
     var ctor = def.ctor;
     if (!ctor)
-      ctor = (opFlags & kUnary   ) ? UnaryOp  :
+      ctor = (opFlags & kUnary   ) ? Unary  :
              (opFlags & kBinary  ) ? Binary :
              (opFlags & kFunction) ? Func   : null;
 
@@ -4676,28 +4664,28 @@ function compileBetween(ctx, $) {
 
 function compileAtan(ctx, $) {
   const args = $._values;
-  return ctx._compileFuncImpl(args.length <= 1 ? "ATAN" : "ATAN2", args, $._flags, $._as);
+  return ctx._compileFuncImpl(args.length <= 1 ? "ATAN" : "ATAN2", args, $._flags, $._alias);
 }
 
 function compileLog10(ctx, $) {
   if (ctx.dialect !== "mysql")
-    return ctx._compileFuncImpl("LOG", [10, $._values[0]], $._flags, $._as);
+    return ctx._compileFuncImpl("LOG", [10, $._values[0]], $._flags, $._alias);
   else
-    return ctx._compileFuncImpl("LOG10", $._values, $._flags, $._as);
+    return ctx._compileFuncImpl("LOG10", $._values, $._flags, $._alias);
 }
 
 function compileLog2(ctx, $) {
   if (ctx.dialect !== "mysql")
-    return ctx._compileFuncImpl("LOG", [2, $._values[0], $._flags, $._as]);
+    return ctx._compileFuncImpl("LOG", [2, $._values[0], $._flags, $._alias]);
   else
-    return ctx._compileFuncImpl("LOG2", $._values, $._flags, $._as);
+    return ctx._compileFuncImpl("LOG2", $._values, $._flags, $._alias);
 }
 
 function compileRandom(ctx, $) {
   if (ctx.dialect === "mysql")
-    return ctx._compileFuncImpl("RAND", $._values, $._flags, $._as);
+    return ctx._compileFuncImpl("RAND", $._values, $._flags, $._alias);
   else
-    return ctx._compileFuncImpl("RANDOM", $._values, $._flags, $._as);
+    return ctx._compileFuncImpl("RANDOM", $._values, $._flags, $._alias);
 }
 
 function compileTrunc(ctx, $) {
@@ -4710,7 +4698,7 @@ function compileTrunc(ctx, $) {
       args = args.concat(0);
   }
 
-  return ctx._compileFuncImpl(name, args, $._flags, $._as);
+  return ctx._compileFuncImpl(name, args, $._flags, $._alias);
 }
 
 function compileChr(ctx, $) {
@@ -4718,9 +4706,9 @@ function compileChr(ctx, $) {
   var args = $._values;
 
   if (ctx.dialect === "mysql")
-    return ctx._compileFuncImpl("CHAR", args, $._flags, $._as);
+    return ctx._compileFuncImpl("CHAR", args, $._flags, $._alias);
   else
-    return ctx._compileFuncImpl(name, args, $._flags, $._as);
+    return ctx._compileFuncImpl(name, args, $._flags, $._alias);
 }
 
 function compileCurrentDateTime(ctx, $) {
@@ -4730,7 +4718,7 @@ function compileCurrentDateTime(ctx, $) {
   if (args.length === 0 && ctx.dialect !== "mysql")
     return name;
 
-  return ctx._compileFuncImpl(name, args, $._flags, $._as);
+  return ctx._compileFuncImpl(name, args, $._flags, $._alias);
 }
 
 function compileExtract(ctx, $) {
@@ -4742,7 +4730,7 @@ function compileExtract(ctx, $) {
 
   var part = asDateTimePartName(ctx, args[0]);
   var body = name + "(" + part + " FROM " + ctx._compile(args[1]) + ")";
-  return ctx._compileFuncAs(body, $._as);
+  return ctx._compileFuncAs(body, $._alias);
 }
 
 register([
@@ -5097,7 +5085,7 @@ OpInfo.forEach(function(_alias, info) {
     const alias = _alias.replace(/ /g, "_");
     if (!xql[alias]) {
       if (info.opFlags & kUnary)
-        xql[alias] = UnaryOp.makeWrap(info.name, info.nodeFlags, info.ctor);
+        xql[alias] = Unary.makeWrap(info.name, info.nodeFlags, info.ctor);
       else if (info.opFlags & kBinary)
         xql[alias] = Binary.makeWrap(info.name, info.nodeFlags, info.ctor);
       else
