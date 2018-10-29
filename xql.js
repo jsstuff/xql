@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.4";
+const VERSION = "1.4.5";
 
 // ============================================================================
 // [internal]
@@ -1056,7 +1056,7 @@ class Context {
     return out;
   }
 
-  _compileBinaryOp(node) {
+  _compileBinaryNode(node) {
     var type = node._type;
     var out = "";
 
@@ -1070,7 +1070,7 @@ class Context {
     var right = "";
 
     if (!type)
-      throwCompileError("BinaryOp.compileNode() - No operator specified");
+      throwCompileError("_compileBinaryNode.compileNode() - No operator specified");
 
     var opInfo = OpInfo.get(type);
     var opFlags = opInfo ? opInfo.opFlags : 0;
@@ -2720,6 +2720,22 @@ class Binary extends Node {
     this._right = right;
   }
 
+  /** @override */
+  mustWrap(ctx, parent) {
+    if (!parent)
+      return false;
+
+    if (parent._type === this._type)
+      return false;
+
+    return true;
+  }
+
+  /** @override */
+  compileNode(ctx) {
+    return ctx._compileBinaryNode(this);
+  }
+
   /**
    * Gets the left node or value.
    *
@@ -2792,7 +2808,7 @@ class Binary extends Node {
 
   static makeWrap(type, flags, ctor) {
     if (!ctor)
-      ctor = UnaryOp;
+      ctor = Binary;
 
     return function(left, right) {
       return {
@@ -2813,7 +2829,7 @@ function BINARY_OP(a, op, b) {
   const flags = info ? info.nodeFlags : 0;
 
   return {
-    __proto__: BinaryOp.prototype,
+    __proto__: Binary.prototype,
     _type    : op,
     _flags   : flags,
     _as      : "",
@@ -2821,38 +2837,6 @@ function BINARY_OP(a, op, b) {
     _right   : b
   };
 }
-
-// ============================================================================
-// [xql.BinaryOp]
-// ============================================================================
-
-/**
- * SQL binary operator.
- *
- * @alias xql.node.BinaryOp
- */
-class BinaryOp extends Binary {
-  constructor(left, type, right, as) {
-    super(left, type, right, as);
-  }
-
-  /** @override */
-  mustWrap(ctx, parent) {
-    if (!parent)
-      return false;
-
-    if (parent._type === this._type)
-      return false;
-
-    return true;
-  }
-
-  /** @override */
-  compileNode(ctx) {
-    return ctx._compileBinaryOp(this);
-  }
-}
-xql$node.BinaryOp = BinaryOp;
 
 // ============================================================================
 // [xql.NodeArray]
@@ -4578,7 +4562,7 @@ const ValueTypes = {
   TIMESTAMPTZ: "TIMESTAMPTZ",
   INTERVAL   : "INTERVAL",
   ARRAY      : "ARRAY",
-  JSON       : "JSON",
+  JSON_      : "JSON",
   JSONB      : "JSONB"
 };
 
@@ -4638,8 +4622,8 @@ function register(defs, commons) {
     var ctor = def.ctor;
     if (!ctor)
       ctor = (opFlags & kUnary   ) ? UnaryOp  :
-             (opFlags & kBinary  ) ? BinaryOp :
-             (opFlags & kFunction) ? Func     : null;
+             (opFlags & kBinary  ) ? Binary :
+             (opFlags & kFunction) ? Func   : null;
 
     if (!ctor)
       throwTypeError("Cannot guess constructor as nothing is specified in 'opFlags'");
@@ -5115,7 +5099,7 @@ OpInfo.forEach(function(_alias, info) {
       if (info.opFlags & kUnary)
         xql[alias] = UnaryOp.makeWrap(info.name, info.nodeFlags, info.ctor);
       else if (info.opFlags & kBinary)
-        xql[alias] = BinaryOp.makeWrap(info.name, info.nodeFlags, info.ctor);
+        xql[alias] = Binary.makeWrap(info.name, info.nodeFlags, info.ctor);
       else
         xql[alias] = Func.makeWrap(info.name, info.nodeFlags, info.ctor);
     }
@@ -5128,12 +5112,12 @@ OpInfo.forEach(function(_alias, info) {
 // [xql.SQL]
 // ============================================================================
 
-xql.EQ = BinaryOp.makeWrap("=" , OpInfo.get("=" ).nodeFlags);
-xql.NE = BinaryOp.makeWrap("<>", OpInfo.get("<>").nodeFlags);
-xql.LT = BinaryOp.makeWrap("<" , OpInfo.get("<" ).nodeFlags);
-xql.LE = BinaryOp.makeWrap("<=", OpInfo.get("<=").nodeFlags);
-xql.GT = BinaryOp.makeWrap(">" , OpInfo.get(">" ).nodeFlags);
-xql.GE = BinaryOp.makeWrap(">=", OpInfo.get(">=").nodeFlags);
+xql.EQ = Binary.makeWrap("=" , OpInfo.get("=" ).nodeFlags);
+xql.NE = Binary.makeWrap("<>", OpInfo.get("<>").nodeFlags);
+xql.LT = Binary.makeWrap("<" , OpInfo.get("<" ).nodeFlags);
+xql.LE = Binary.makeWrap("<=", OpInfo.get("<=").nodeFlags);
+xql.GT = Binary.makeWrap(">" , OpInfo.get(">" ).nodeFlags);
+xql.GE = Binary.makeWrap(">=", OpInfo.get(">=").nodeFlags);
 
 /**
  * Constructs a logical AND expression.

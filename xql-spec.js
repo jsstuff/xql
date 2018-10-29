@@ -26,6 +26,12 @@ const JSON_VAL         = xql.JSON_VAL;
 const NOT              = xql.NOT;
 const AND              = xql.AND;
 const OR               = xql.OR;
+const EQ               = xql.EQ;
+const NE               = xql.NE;
+const GT               = xql.GT;
+const GE               = xql.GE;
+const LT               = xql.LT;
+const LE               = xql.LE;
 const OP               = xql.OP;
 const MIN              = xql.MIN;
 const MAX              = xql.MAX;
@@ -196,6 +202,12 @@ describe("xql", function() {
 
   // OPERATORS.
   it("should test common operators", function() {
+    shouldMatch(EQ(0, 1), '0 = 1');
+    shouldMatch(NE(0, 1), '0 <> 1');
+    shouldMatch(GT(0, 1), '0 > 1');
+    shouldMatch(GE(0, 1), '0 >= 1');
+    shouldMatch(LT(0, 1), '0 < 1');
+    shouldMatch(LE(0, 1), '0 <= 1');
     shouldMatch(AND(0, 1), '0 AND 1');
     shouldMatch(OR(0, 1), '0 OR 1');
     shouldMatch(NOT(OR(0, 1)), 'NOT (0 OR 1)');

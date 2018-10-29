@@ -109,10 +109,9 @@ Node                       | Description
 `xql.node.Unary`           | SQL unary node (can contain a single child)
 `xql.node.UnaryOp`         | SQL unary operator, like `-`, `NOT`, etc...
 `xql.node.Binary`          | SQL binary node (can contain two children, left and right)
-`xql.node.BinaryOp`        | SQL binary operator, like `=`, `+`, `-`, etc...
 `xql.node.NodeArray`       | Contains array of nodes or values
 `xql.node.Logical`         | Logical operator like `AND` and `OR`, which is based on `NodeArray` and can contain more than two expressions
-`xql.node.ObjectOp`        | Special node that contains key/value interface that can be used to construct `WHERE` like expressions
+`xql.node.ConditionalMap`  | Special node that contains key/value interface that can be used to construct `WHERE` like expressions
 `xql.node.Identifier`      | SQL identifier, like table or column
 `xql.node.Join`            | SQL `JOIN` construct
 `xql.node.Sort`            | SQL `ORDER BY` construct
@@ -145,8 +144,8 @@ SQL-Builder API            | Description
 `xql.OR(...)`              | Create a `xql.node.Logical` expression describing `OR` expression
 `xql.COL(...)`             | Create a `xql.node.Identifier` wrapping a column name (in a format `"column"` or `"table"."column"` or `"namespace"."table"."column"`)
 `xql.VAL(...)`             | Create a `xql.node.PrimitiveValue` wrapping a primitive value like `null`, `boolean`, `number`, or `string`
-`xql.ARRAY_VAL(...)`       | Create a `xql.node.ArrayValue` wrapping an array
-`xql.JSON_VAL(...)`        | Create a `xql.node.ArrayValue` wrapping an object (JSON)
+`xql.ARRAY(...)`           | Create a `xql.node.Value` wrapping an array
+`xql.JSON_(...)`           | Create a `xql.node.Value` wrapping an object (JSON)
 `xql.OP(...)`              | Create a `xql.node.Unary` or `xql.node.Binary` node depending on the count of parameters. The most used form is a 3 operand form, which is used to describe a binary expression. <br><br>For example `OP(COL("salary"), "+", 500).AS("newSalary")` can be used to describe an expression like `"salary" + 500 AS "newSalary"`. Please note that `AND` and `OR` operators should always use `xql.node.Logical` as xql.js can construct queries containing multiple `AND` and `OR` leaves
 `xql.EQ(a, b)`             | Create a `xql.node.Binary` node describing `a = b` expression
 `xql.NE(a, b)`             | Create a `xql.node.Binary` node describing `a <> b` expression
@@ -178,6 +177,7 @@ xql.node.Node              | Description
 `.GT(b)`                   | Returns `this > b` expression.
 `.GE(b)`                   | Returns `this >= b` expression.
 `.IN(b)`                   | Returns `this IN b` expression.
+`.NOT_IN(b)`               | Returns `this NOT IN b` expression.
 
 For example `COL("a").EQ(1)` yields the same tree as `OP(COL("a"), "=", 1)`
 
