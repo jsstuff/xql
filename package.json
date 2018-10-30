@@ -1,6 +1,6 @@
 {
   "name": "xql",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "license": "Unlicense",
   "engines": {
     "node": ">=6"

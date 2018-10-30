@@ -10,10 +10,10 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.6";
+const VERSION = "1.4.7";
 
 // ============================================================================
-// [internal]
+// [Internal Utilities]
 // ============================================================================
 
 // Always returns false, used internally for browser support.
@@ -26,6 +26,10 @@ const slice    = Array.prototype.slice;
 
 const isArray  = Array.isArray;
 const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
+
+// ============================================================================
+// [Internal Constants]
+// ============================================================================
 
 // Empty object/array used as an replacement for null/undefined in some cases.
 const NoObject = freeze(Object.create(null));
@@ -50,89 +54,138 @@ const reUpperCasedWithSpaces = /^[A-Z_][A-Z_0-9 ]*(?: [A-Z_][A-Z_0-9 ]*)*$/;
 const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
 
 // Map of identifiers that are not escaped.
-const IdentifierMap = {
-  "*"       : true
-};
+const IdentifierMap = { "*": true };
 
 // Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
 const BoolMap = (function() {
   const map = {
-    "0"     : false,
-    "f"     : false,
-    "false" : false,
-    "n"     : false,
-    "no"    : false,
-    "off"   : false,
-
-    "1"     : true,
-    "t"     : true,
-    "true"  : true,
-    "y"     : true,
-    "yes"   : true,
-    "on"    : true
+    "0"            : false,
+    "f"            : false,
+    "false"        : false,
+    "n"            : false,
+    "no"           : false,
+    "off"          : false,
+    "1"            : true,
+    "t"            : true,
+    "true"         : true,
+    "y"            : true,
+    "yes"          : true,
+    "on"           : true
   };
   Object.keys(map).forEach(function(key) { map[key.toUpperCase()] = map[key]; });
   return freeze(map);
 })();
 
 const DateFieldMap = {
-  "CENTURY": true,
-  "DAY": true,
-  "DECADE": true,
-  "DOW": true,
-  "DOY": true,
-  "EPOCH": true,
-  "HOUR": true,
-  "ISODOW": true,
-  "ISOYEAR": true,
-  "MICROSECONDS": true,
-  "MILLENIUM": true,
-  "MILLISECONDS": true,
-  "MINUTE": true,
-  "MONTH": true,
-  "QUARTER": true,
-  "SECOND": true,
-  "TIMEZONE": true,
-  "TIMEZONE_HOUR": true,
+  "CENTURY"        : true,
+  "DAY"            : true,
+  "DECADE"         : true,
+  "DOW"            : true,
+  "DOY"            : true,
+  "EPOCH"          : true,
+  "HOUR"           : true,
+  "ISODOW"         : true,
+  "ISOYEAR"        : true,
+  "MICROSECONDS"   : true,
+  "MILLENIUM"      : true,
+  "MILLISECONDS"   : true,
+  "MINUTE"         : true,
+  "MONTH"          : true,
+  "QUARTER"        : true,
+  "SECOND"         : true,
+  "TIMEZONE"       : true,
+  "TIMEZONE_HOUR"  : true,
   "TIMEZONE_MINUTE": true,
-  "WEEK": true,
-  "YEAR": true
+  "WEEK"           : true,
+  "YEAR"           : true
 };
 
 const TypeMap = {
-  "bool"       : "boolean",
-  "boolean"    : "boolean",
+  "bool"           : "boolean",
+  "boolean"        : "boolean",
 
-  "bigint"     : "integer",
-  "int"        : "integer",
-  "integer"    : "integer",
-  "smallint"   : "integer",
+  "bigint"         : "integer",
+  "int"            : "integer",
+  "integer"        : "integer",
+  "smallint"       : "integer",
 
-  "real"       : "number",
-  "float"      : "number",
-  "number"     : "number",
-  "numeric"    : "number",
+  "real"           : "number",
+  "float"          : "number",
+  "number"         : "number",
+  "numeric"        : "number",
 
-  "char"       : "string",
-  "varchar"    : "string",
-  "string"     : "string",
-  "text"       : "string",
+  "char"           : "string",
+  "varchar"        : "string",
+  "string"         : "string",
+  "text"           : "string",
 
-  "array"      : "array",
-  "json"       : "json",
-  "jsonb"      : "json",
-  "object"     : "json",
-  "raw"        : "raw",
+  "array"          : "array",
+  "json"           : "json",
+  "jsonb"          : "json",
+  "object"         : "json",
+  "raw"            : "raw",
 
-  "values"     : "values",
-  "date"       : "date",
-  "time"       : "time",
-  "timestamp"  : "timestamp",
-  "timestamptz": "timestamptz",
-  "interval"   : "interval"
+  "values"         : "values",
+  "date"           : "date",
+  "time"           : "time",
+  "timestamp"      : "timestamp",
+  "timestamptz"    : "timestamptz",
+  "interval"       : "interval"
 };
 Object.keys(TypeMap).forEach(function(key) {
   TypeMap[key.toUpperCase()] = TypeMap[key];
+});
+
+// ============================================================================
+// [Public Constants]
+// ============================================================================
+
+/**
+ * Identifier's quote style.
+ *
+ * @alias xql.QuoteStyle
+ */
+const QuoteStyle = freeze({
+  kDouble        : 0,          // Double quotes, for example "identifier".
+  kGrave         : 1,          // Grave quotes, for example `identifier`.
+  kBrackets      : 2           // Brackets, for example [identifier].
+});
+xql.QuoteStyle = QuoteStyle;
+
+/**
+ * Node flags.
+ *
+ * @alias xql.NodeFlags
+ */
+const NodeFlags = freeze({
+  kImmutable     : 0x00000001, // Node is immutable (cannot be changed).
+  kNot           : 0x00000002, // Expression is negated (NOT).
+  kAscending     : 0x00000010, // Sort ascending (ASC).
+  kDescending    : 0x00000020, // Sort descending (DESC).
+  kNullsFirst    : 0x00000040, // Sort nulls first (NULLS FIRST).
+  kNullsLast     : 0x00000080, // Sort nulls last (NULLS LAST).
+  kAll           : 0x00000100, // ALL flag.
+  kDistinct      : 0x00000200, // DISTINCT flag.
+  kQueryStatement: 0x10000000  // This node represents a query statement (like SELECT, UPDATE, etc).
+});
+xql.NodeFlags = NodeFlags;
+
+// Sort directions.
+const SortDirection = freeze({
+  ""             : 0,
+  "0"            : 0,
+
+  "1"            : NodeFlags.kAscending,
+  "-1"           : NodeFlags.kDescending,
+
+  "ASC"          : NodeFlags.kAscending,
+  "DESC"         : NodeFlags.kDescending
+});
+
+// Sort nulls.
+const SortNulls = freeze({
+  "NULLS FIRST"  : NodeFlags.kNullsFirst,
+  "NULLS LAST"   : NodeFlags.kNullsLast
 });
 
 /**
@@ -141,19 +194,20 @@ Object.keys(TypeMap).forEach(function(key) {
  * @alias xql.OpFlags
  */
 const OpFlags = freeze({
-  kUnary        : 0x00000001, // Operator is unary (has one child node - `value`).
-  kBinary       : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
-  kFunction     : 0x00000004, // Operator is a function.
-  kAggregate    : 0x00000008, // Operator is an aggregation function.
-  kVoid         : 0x00000010, // Operator has no return value.
-  kNotBeforeOp  : 0x00000020, // Operator allows in-place NOT (a NOT OP b).
-  kNotAfterOp   : 0x00000040, // Operator allows in-place NOT (a OP NOT b).
-  kNotMiddleOp  : 0x00000080, // Operator allows in-place NOT (a OP NOT b).
-  kLeftValues   : 0x00000100, // Operator expects left  values as (a, b[, ...]).
-  kRightValues  : 0x00000200, // Operator expects right values as (a, b[, ...]).
-  kSpaceSeparate: 0x00000400  // Separate the function or operator by spaces before and after.
+  kUnary         : 0x00000001, // Operator is unary (has one child node - `value`).
+  kBinary        : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
+  kFunction      : 0x00000004, // Operator is a function.
+  kAggregate     : 0x00000008, // Operator is an aggregation function.
+  kVoid          : 0x00000010, // Operator has no return value.
+  kLeftValues    : 0x00000100, // Operator expects left  values as (a, b[, ...]).
+  kRightValues   : 0x00000200, // Operator expects right values as (a, b[, ...]).
+  kSpaceSeparate : 0x00000400  // Separate the function or operator by spaces before and after.
 });
 xql.OpFlags = OpFlags;
+
+// ============================================================================
+// [xql.OpInfo]
+// ============================================================================
 
 /**
  * Operator and function information.
@@ -206,54 +260,6 @@ const OpInfo = new class OpInfo {
   }
 };
 xql.OpInfo = OpInfo;
-
-/**
- * Identifier's quote style.
- *
- * @alias xql.QuoteStyle
- */
-const QuoteStyle = freeze({
-  kDouble        : 0,          // Double quotes, for example "identifier".
-  kGrave         : 1,          // Grave quotes, for example `identifier`.
-  kBrackets      : 2           // Brackets, for example [identifier].
-});
-xql.QuoteStyle = QuoteStyle;
-
-/**
- * Node flags.
- *
- * @alias xql.NodeFlags
- */
-const NodeFlags = freeze({
-  kImmutable     : 0x00000001, // Node is immutable (cannot be changed).
-  kNot           : 0x00000002, // Expression is negated (NOT).
-  kAscending     : 0x00000010, // Sort ascending (ASC).
-  kDescending    : 0x00000020, // Sort descending (DESC).
-  kNullsFirst    : 0x00000040, // Sort nulls first (NULLS FIRST).
-  kNullsLast     : 0x00000080, // Sort nulls last (NULLS LAST).
-  kAll           : 0x00000100, // ALL flag.
-  kDistinct      : 0x00000200, // DISTINCT flag.
-  kQueryStatement: 0x10000000  // This node represents a query statement (like SELECT, UPDATE, etc).
-});
-xql.NodeFlags = NodeFlags;
-
-// Sort directions.
-const SortDirection = freeze({
-  ""             : 0,
-  "0"            : 0,
-
-  "1"            : NodeFlags.kAscending,
-  "-1"           : NodeFlags.kDescending,
-
-  "ASC"          : NodeFlags.kAscending,
-  "DESC"         : NodeFlags.kDescending
-});
-
-// Sort nulls.
-const SortNulls = freeze({
-  "NULLS FIRST"  : NodeFlags.kNullsFirst,
-  "NULLS LAST"   : NodeFlags.kNullsLast
-});
 
 // ============================================================================
 // [xql.error]
@@ -522,12 +528,16 @@ class Context {
     // Dialect features (these are modified by a dialect-specific `Context`).
     this.features = {
       quoteStyle       : QuoteStyle.kDouble, // The default SQL quotes are "".
-      nativeBoolean    : false,              // Supports `BOOLEAN`.
-      nativeArray      : false,              // Supports `ARRAY`.
-      nullsFirstLast   : false,              // Supports `NULLS FIRST` & `NULLS LAST`.
+      nativeBoolean    : false,              // Supports BOOLEAN.
+      nativeRange      : false,              // Supports RANGE.
+      nativeArray      : false,              // Supports ARRAY.
+      nativeJSON       : false,              // Supports JSON.
+      nativeJSONB      : false,              // Supports JSONB.
+      nativeHSTORE     : false,              // Supports HSTORE.
+      nullsOrdering    : false,              // Supports NULLS FIRST and NULLS LAST.
       nullsSortBottom  : false,              // NULLs are sorted last by default.
-      returning        : false,              // If `RETURNING` or `OUTPUT` is supported.
-      returningAsOutput: false,              // Use `OUTPUT` instead of `RETURNING`.
+      returning        : false,              // If RETURNING or OUTPUT is supported.
+      returningAsOutput: false,              // Use OUTPUT instead of RETURNING.
       specialNumbers   : false               // No special numbers by default.
     };
 
@@ -537,22 +547,21 @@ class Context {
 
     // Computed properties based on configuration and dialect features. These
     // require `_update()` to be called after one or more property is changed.
-    this._DB_POS_INF   = "";   // Positive infinity value or keyword.
-    this._DB_NEG_INF   = "";   // Negative infinity value or keyword.
-    this._DB_NAN       = "";   // NaN value or keyword.
+    this._DB_TRUE        = "";   // Dialect-specific TRUE value.
+    this._DB_FALSE       = "";   // Dialect-specific FALSE value.
+    this._DB_NAN         = "";   // Dialect-specific NaN value.
+    this._DB_POS_INF     = "";   // Dialect-specific Positive infinity value.
+    this._DB_NEG_INF     = "";   // Dialect-specific Negative infinity value.
+    this._DB_IDENT_OPEN  = "";   // Escape character inserted before SQL identifier.
+    this._DB_IDENT_CLOSE = "";   // Escape character inserted after SQL identifier.
 
-    this._DB_TRUE      = "";   // Dialect-specific TRUE value.
-    this._DB_FALSE     = "";   // Dialect-specific FALSE value.
+    this._STR_NL         = "";   // Space character, either " " or "\n" (pretty).
+    this._STR_COMMA      = "";   // Comma separator, either ", " or ",\n" (pretty).
+    this._STR_INDENT     = "";   // Indentation string.
+    this._STR_CONCAT     = "";   // Concatenation string, equals to `space + _STR_INDENT`.
 
-    this._NL           = "";   // Space character, either " " or "\n" (pretty).
-    this._COMMA        = "";   // Comma separator, either ", " or ",\n" (pretty).
-    this._INDENT       = "";   // Indentation string.
-    this._CONCAT_STR   = "";   // Concatenation string, equals to `space + _INDENT`.
-
-    this._IDENT_BEFORE = "";   // Escape character inserted before identifiers.
-    this._IDENT_AFTER  = "";   // Escape character inserted after identifiers.
-    this._IDENT_CHECK  = null; // Regular expression that checks if the identifier
-                               // needs escaping or contains or contains ill chars.
+    // Regular expression that checks if the identifier needs escaping.
+    this._RE_IDENT_CHECK = null;
   }
 
   /**
@@ -619,7 +628,7 @@ class Context {
       input = ident;
     }
 
-    var re = this._IDENT_CHECK;
+    const re = this._RE_IDENT_CHECK;
     for (;;) {
       // Apply escaping to all parts of the identifier (if any).
       for (;;) {
@@ -665,7 +674,7 @@ class Context {
         if (hasOwn.call(IdentifierMap, p))
           output += p;
         else
-          output += this._IDENT_BEFORE + p + this._IDENT_AFTER;
+          output += this._DB_IDENT_OPEN + p + this._DB_IDENT_CLOSE;
 
         if (m === -1) break;
         input = input.substr(m + 1);
@@ -676,14 +685,14 @@ class Context {
     }
 
     // Return an empty identifier (allowed) in case the output is an empty string.
-    return output ? output : this._IDENT_BEFORE + this._IDENT_AFTER;
+    return output ? output : this._DB_IDENT_OPEN + this._DB_IDENT_CLOSE;
   }
 
   /**
    * Escapes a single identifier.
    *
    * Please do not use this function directly. It's called by `escapeIdentifier`
-   * to escape an identifier (or part of it) in a dialect-specific way.
+   * to escape an identifier (or some part of it) in a dialect-specific way.
    *
    * @param {string} ident Identifier to escape, which should be already
    *   checked (for example it shouldn't contain NULL characters).
@@ -1175,7 +1184,7 @@ class Context {
   _compileSelect(node) {
     var out = "SELECT";
 
-    const space = this._NL;
+    const space = this._STR_NL;
     const flags = node._flags;
 
     const offset = node._offset;
@@ -1251,7 +1260,7 @@ class Context {
     var k;
     var i, len;
 
-    const NL = this._NL;
+    const NL = this._STR_NL;
 
     const table = node._table;
     const columns = node._columns;
@@ -1278,7 +1287,7 @@ class Context {
 
     // Compile `VALUES (...)[, (...)]`.
     const objects = node._values;
-    const prefix = (this.pretty ? this._CONCAT_STR : " ") + "(";
+    const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
 
     out += NL + "VALUES";
     for (i = 0, len = objects.length; i < len; i++) {
@@ -1316,8 +1325,8 @@ class Context {
     var out = "";
     var t = "";
 
-    const NL = this._NL;
-    const COMMA = this._COMMA;
+    const NL = this._STR_NL;
+    const COMMA = this._STR_COMMA;
 
     const table = node._table;
     const returning = node._fieldsOrReturning || NoArray;
@@ -1393,7 +1402,7 @@ class Context {
     var out = "";
     var t = "";
 
-    const NL = this._NL;
+    const NL = this._STR_NL;
 
     const table = node._table;
     const returning = node._fieldsOrReturning || NoArray;
@@ -1447,7 +1456,7 @@ class Context {
   _compileCompound(node) {
     var out = "";
 
-    const space = this._NL;
+    const space = this._STR_NL;
 
     const flags = node._flags;
     var combineOp = node._type;
@@ -1574,7 +1583,7 @@ class Context {
     const features = this.features;
     const nullsFirst = flags & NodeFlags.kNullsFirst ? true : false;
 
-    if (features.nullsFirstLast)
+    if (features.nullsOrdering)
       return out + sortOrder + (nullsFirst ? " NULLS FIRST" : " NULLS LAST");
 
     // Unsupported `NULLS FIRST` and `NULLS LAST`. The best we can do is to omit
@@ -1589,14 +1598,14 @@ class Context {
     // Okay, we want the opposite of what DB does, one more expression
     // that precedes the current one is needed: `<column> IS [NOT] NULL`.
     if (nullsFirst)
-      return "(" + out + " IS NOT NULL)" + this._COMMA + out + sortOrder;
+      return "(" + out + " IS NOT NULL)" + this._STR_COMMA + out + sortOrder;
     else
-      return "(" + out + " IS NULL)"     + this._COMMA + out + sortOrder;
+      return "(" + out + " IS NULL)"     + this._STR_COMMA + out + sortOrder;
   }
 
   _compileGroupBy(groupBy) {
     var out = "";
-    var COMMA = this._COMMA;
+    var COMMA = this._STR_COMMA;
 
     for (var i = 0, len = groupBy.length; i < len; i++) {
       var group = groupBy[i];
@@ -1614,7 +1623,7 @@ class Context {
 
   _compileOrderBy(orderBy) {
     var out = "";
-    var COMMA = this._COMMA;
+    var COMMA = this._STR_COMMA;
 
     for (var i = 0, len = orderBy.length; i < len; i++) {
       var sort = orderBy[i];
@@ -1627,7 +1636,7 @@ class Context {
 
   _compileFields(list) {
     var out = "";
-    var COMMA = this._COMMA;
+    var COMMA = this._STR_COMMA;
 
     for (var i = 0, len = list.length; i < len; i++) {
       var column = list[i];
@@ -1712,39 +1721,41 @@ class Context {
    * @private
    */
   _update() {
-    const compact = !this.pretty;
+    const pretty = this.pretty;
     const features = this.features;
+    const qs = this.features.quoteStyle;
 
+    // Update everything sensitive to DB dialect and dialect-based options.
     this._DB_TRUE    = features.nativeBoolean ? "TRUE"  : "1";
     this._DB_FALSE   = features.nativeBoolean ? "FALSE" : "0";
 
-    this._NL         = compact ? " "  : "\n";
-    this._COMMA      = compact ? ", " : ",\n";
-    this._INDENT     = compact ? ""   : " ".repeat(this.indentation);
-    this._CONCAT_STR = compact ? " "  : this._NL + this._INDENT;
-
-    this.indent    = compact ? this._indent$none : this._indent$pretty;
-    this.concat    = compact ? this._concat$none : this._concat$pretty;
-
-    var qs = this.features.quoteStyle;
-
     if (qs === QuoteStyle.kDouble) {
-      this._IDENT_CHECK  = /[\.\"\x00]/g;
-      this._IDENT_BEFORE = "\"";
-      this._IDENT_AFTER  = "\"";
+      this._DB_IDENT_OPEN = "\"";
+      this._DB_IDENT_CLOSE = "\"";
+      this._RE_IDENT_CHECK = /[\.\"\x00]/g;
     }
 
     if (qs === QuoteStyle.kGrave) {
-      this._IDENT_CHECK  = /[\.\`\x00]/g;
-      this._IDENT_BEFORE = "`";
-      this._IDENT_AFTER  = "`";
+      this._DB_IDENT_OPEN = "`";
+      this._DB_IDENT_CLOSE = "`";
+      this._RE_IDENT_CHECK = /[\.\`\x00]/g;
     }
 
     if (qs === QuoteStyle.kBrackets) {
-      this._IDENT_CHECK  = /[\.\[\]\x00]/g;
-      this._IDENT_BEFORE = "[";
-      this._IDENT_AFTER  = "]";
+      this._DB_IDENT_OPEN = "[";
+      this._DB_IDENT_CLOSE = "]";
+      this._RE_IDENT_CHECK = /[\.\[\]\x00]/g;
     }
+
+    // Update members that are not DB dialect sensitive (pretty print).
+    this._STR_NL     = !pretty ? " "  : "\n";
+    this._STR_COMMA  = !pretty ? ", " : ",\n";
+    this._STR_INDENT = !pretty ? ""   : " ".repeat(this.indentation);
+    this._STR_CONCAT = !pretty ? " "  : this._STR_NL + this._STR_INDENT;
+
+    // Update the implementation of the most important building functions.
+    this.indent      = !pretty ? this._indent$none : this._indent$pretty;
+    this.concat      = !pretty ? this._concat$none : this._concat$pretty;
   }
 
   /**
@@ -1762,7 +1773,7 @@ class Context {
   }
 
   _indent$pretty(s) {
-    var INDENT = this._INDENT;
+    var INDENT = this._STR_INDENT;
     return INDENT + s.replace(reNewLine, "\n" + INDENT);
   }
 
@@ -1784,8 +1795,8 @@ class Context {
   }
 
   _concat$pretty(s) {
-    var _CONCAT_STR = this._CONCAT_STR;
-    return _CONCAT_STR + s.replace(reNewLine, _CONCAT_STR);
+    var _STR_CONCAT = this._STR_CONCAT;
+    return _STR_CONCAT + s.replace(reNewLine, _STR_CONCAT);
   }
 }
 xql$dialect.Context = Context;
@@ -1802,7 +1813,7 @@ const reSubstituteChars = /[\"\$\'\?]/g;
 function fnEscapeString(s) {
   const c = s.charCodeAt(0);
   switch (c) {
-    case  0: throwCompileError("String can't contain NULL character");
+    case  0: return "\\x00"; // Only works for BYTEA.
     case  8: return "\\b";
     case  9: return "\\t";
     case 10: return "\\n";
@@ -1825,20 +1836,25 @@ class PGSQLContext extends Context {
 
     // Setup Postgres features.
     Object.assign(this.features, {
-      nativeBoolean  : true,
-      nativeArray    : true,
-      nullsFirstLast : true,
-      nullsSortBottom: true,
-      returning      : true,
-      specialNumbers : true
+      nativeBoolean    : true,
+      nativeRange      : true,
+      nativeArray      : true,
+      nativeJSON       : true,
+      nativeJSONB      : true,
+      nativeHSTORE     : true,
+      nullsOrdering    : true,
+      nullsSortBottom  : true,
+      returning        : true,
+      specialNumbers   : true
     });
 
-    // Setup Postgres specific.
+    // Update everything the base Context understands.
+    this._update();
+
+    // Override everything, which is Postgres specific.
     this._DB_POS_INF = "'Infinity'";
     this._DB_NEG_INF = "'-Infinity'";
     this._DB_NAN     = "'NaN'";
-
-    this._update();
   }
 
   /** @override */
@@ -2180,6 +2196,66 @@ class MySQLContext extends Context {
   }
 }
 xql$dialect.add("mysql", MySQLContext);
+
+})();
+
+// ============================================================================
+// [xql.dialect.mssql]
+// ============================================================================
+
+(function() {
+
+const reOkayString = /^[\x01-\x26\x28-\x7F]*$/;
+const reEscapeChars = /[\x00\']/g;
+
+function fnEscapeString(s) {
+  const c = s.charCodeAt(0);
+  switch (c) {
+    case 0: return "'+CODE(0)+N'";
+    case 39: return "''";
+  }
+}
+
+/**
+ * MSSQL context.
+ *
+ * @private
+ */
+class MSSQLContext extends Context {
+  constructor(options) {
+    super("mssql", options);
+
+    Object.assign(this.features, {
+      quoteStyle    : QuoteStyle.kBrackets,
+      nativeBoolean : false
+    });
+
+    this._update();
+  }
+
+  /** @override */
+  escapeString(value) {
+    // It seems best to just pre-scan the string and then decide what to do.
+    if (reOkayString.test(value))
+      return "'" + value + "'";
+    else
+      return "N'" + value.replace(reEscapeChars, fnEscapeString) + "'";
+  }
+
+  /** @override */
+  _compileOffsetLimit(offset, limit) {
+    var out = "";
+
+    if (offset || limit)
+      out += "OFFSET " + offset + (offset === 1 ? " ROW" : " ROWS");
+
+    if (limit)
+      out += (out ? " FETCH NEXT " : "FETCH NEXT ") + limit + " ROWS ONLY";
+
+    return out;
+  }
+}
+xql$dialect.add("mssql", MSSQLContext);
 
 })();
 
@@ -2711,8 +2787,11 @@ class Binary extends Node {
     if (!parent)
       return false;
 
-    if (parent._type === this._type)
-      return false;
+    const type = this._type;
+    if (parent._type === type) {
+      if (type === "+")
+        return false;
+    }
 
     return true;
   }
@@ -3127,6 +3206,12 @@ class When extends Binary {
 }
 xql$node.When = When;
 
+function WHEN(expression, body) {
+  return new When(expression, body);
+};
+
+xql.WHEN = WHEN;
+
 // ============================================================================
 // [xql.Case]
 // ============================================================================
@@ -3168,7 +3253,7 @@ class Case extends NodeArray {
   }
 
   WHEN(expression, body) {
-    this._values.push(new When(expression, body));
+    this._values.push(WHEN(expression, body));
     return this;
   }
 
@@ -3179,7 +3264,11 @@ class Case extends NodeArray {
 }
 xql$node.Case = Case;
 
-xql.CASE = function CASE() { return new Case(); }
+function CASE() {
+  return new Case();
+}
+
+xql.CASE = CASE;
 
 // ============================================================================
 // [xql.Value]
@@ -3493,6 +3582,20 @@ class Join extends Binary {
 xql$node.Join = Join;
 
 // ============================================================================
+// [xql.Statement]
+// ============================================================================
+
+/**
+ * SQL statement.
+ */
+class Statement extends Node {
+  constructor(type) {
+    super(type, "");
+  }
+};
+xql$node.Statement = Statement;
+
+// ============================================================================
 // [xql.Query]
 // ============================================================================
 
@@ -3515,7 +3618,7 @@ xql$node.Join = Join;
  *
  * @alias xql.node.Query
  */
-class Query extends Node {
+class Query extends Statement {
   constructor(type) {
     super(type, "");
 
@@ -4573,9 +4676,6 @@ const kBinary        = OpFlags.kBinary;
 const kFunction      = OpFlags.kFunction;
 const kAggregate     = OpFlags.kAggregate;
 const kVoid          = OpFlags.kVoid;
-const kNotBeforeOp   = OpFlags.kNotBeforeOp;
-const kNotAfterOp    = OpFlags.kNotAfterOp;
-const kNotMiddleOp   = OpFlags.kNotMiddleOp;
 const kLeftValues    = OpFlags.kLeftValues;
 const kRightValues   = OpFlags.kRightValues;
 const kSpaceSeparate = OpFlags.kSpaceSeparate;
@@ -4588,22 +4688,20 @@ function register(defs, commons) {
   for (var i = 0; i < defs.length; i++) {
     const def = defs[i];
 
-    var name       = def.name;
-    var nameNot    = def.nameNot || null;
+    var name     = def.name;
+    var nameNot  = null;
+    var args     = def.args;
+    var opFlags  = (def.opFlags || 0) | baseOpFlags;
+    var dialect  = def.dialect  || baseDialect;
+    var category = def.category || baseCategory;
 
-    var args       = def.args;
-    var opFlags    = (def.opFlags || 0) | baseOpFlags;
-    var dialect    = def.dialect  || baseDialect;
-    var category   = def.category || baseCategory;
-
-    if (!nameNot && (opFlags & kNotBeforeOp)) nameNot = "NOT " + name;
-    if (!nameNot && (opFlags & kNotAfterOp)) nameNot = name + " NOT";
+    if (name.indexOf("[NOT]") !== -1) {
+      nameNot = name.replace("[NOT]", "NOT");
+      name = name.replace("[NOT]", "").trim();
+    }
 
     var format = (opFlags & kSpaceSeparate) ? " " + name + " " : name;
-    var formatNot = null;
-
-    if (nameNot)
-      formatNot = (opFlags & kSpaceSeparate) ? " " + nameNot + " " : nameNot;
+    var formatNot = nameNot ? ((opFlags & kSpaceSeparate) ? " " + nameNot + " " : nameNot) : null;
 
     var ctor = def.ctor;
     if (!ctor)
@@ -4709,6 +4807,76 @@ function compileChr(ctx, $) {
     return ctx._compileFuncImpl(name, args, $._flags, $._alias);
 }
 
+function compileOverlay(ctx, $) {
+  var name = $._type;
+  var args = $._values;
+
+  if (args.length < 3 || args.length > 4)
+    throwCompileError(`OVERLAY must have between 3-4 arguments, ${args.length} given'`);
+
+  var body = ctx._compile(args[0]) +
+             " PLACING " + ctx._compile(args[1]) +
+             " FROM "    + ctx._compile(args[2]);
+
+  if (args.length >= 4)
+    body += " FOR " + ctx._compile(args[3]);
+
+  return ctx._compileFuncAs(`OVERLAY(${body})`, $._alias);
+}
+
+function compilePosition(ctx, $) {
+  var args = $._values;
+  if (args.length !== 2)
+    throwCompileError(`POSITION must have 2 arguments, ${args.length} given'`);
+
+  var body = ctx._compile(args[0]) + " IN " + ctx._compile(args[1]);
+  return ctx._compileFuncAs(`POSITION(${body})`, $._alias);
+}
+
+function compileSubString(ctx, $) {
+  var args = $._values;
+  if (args.length < 1 || args.length > 3)
+    throwCompileError(`SUBSTRING must have between 2-3 arguments, ${args.length} given'`);
+
+  var body = ctx._compile(args[0]) +
+             (args.length > 1 ? " FROM " + ctx._compile(args[1]) : " FROM 0");
+
+  if (args.length > 2)
+    body += " FOR " + ctx._compile(args[2]);
+
+  return ctx._compileFuncAs(`SUBSTRING(${body})`, $._alias);
+}
+
+function compileBTrim(ctx, $) {
+  var args = $._values;
+  if (args.length < 1 || args.length > 2)
+    throwCompileError(`BTRIM must have between 1-2 arguments, ${args.length} given'`);
+
+  if (ctx.dialect === "sqlite") {
+    // Compile to "TRIM" as it has the same semantics as BTRIM.
+    return ctx._compileFuncImpl("TRIM", args, $._flags, $._alias);
+  }
+  else if (ctx.dialect === "pgsql") {
+    // Compile to "BTRIM" as it matches our semantics.
+    return ctx._compileFuncImpl("BTRIM", args, $._flags, $._alias);
+  }
+  else if (ctx.dialect === "mssql") {
+    // Compile BTRIM into "LTRIM(RTRIM(...) [, ...])"
+    var exp = ctx._compile(args[0]);
+    var opt = args.length > 1 ? ", " + ctx._compile(args[1]) : "";
+    return ctx._compileFuncAs(`LTRIM(RTRIM(${exp}${opt})${opt})`, $._alias);
+  }
+  else {
+    // Compile to a standard SQL "TRIM(characters FROM expression)".
+    var body = "";
+    if (args.length === 1)
+      body = `TRIM(${ctx._compile(args[0])})`;
+    else
+      body = `TRIM(${ctx._compile(args[1])} FROM ${ctx._compile(args[0])})`;
+    return ctx._compileFuncAs(body, $._alias);
+  }
+}
+
 function compileCurrentDateTime(ctx, $) {
   var name = $._type;
   var args = $._values;
@@ -4733,7 +4901,7 @@ function compileExtract(ctx, $) {
 
 register([
   { name: "NOT"                      , args: 1     , opFlags: 0           , dialect: "*"     , doc: "NOT($1)" },
-  { name: "EXISTS"                   , args: 1     , opFlags: kNotBeforeOp, dialect: "*"     , doc: "EXISTS($1)" }
+  { name: "[NOT] EXISTS"             , args: 1     , opFlags: 0           , dialect: "*"     , doc: "EXISTS($1)" }
 ], { category: "general", opFlags: kUnary });
 
 register([
@@ -4768,16 +4936,16 @@ register([
 ], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
-  { name: "IS"                       , args: 2     , opFlags: kNotAfterOp , dialect: "*"    },
-  { name: "IS DISTINCT FROM"         , args: 2     , opFlags: kNotMiddleOp, dialect: "*"     , nameNot: "IS NOT DISTINCT FROM" },
-  { name: "LIKE"                     , args: 2     , opFlags: kNotBeforeOp, dialect: "*"    },
-  { name: "ILIKE"                    , args: 2     , opFlags: kNotBeforeOp, dialect: "*"    },
-  { name: "SIMILAR TO"               , args: 2     , opFlags: kNotBeforeOp, dialect: "*"    }
+  { name: "IS [NOT]"                 , args: 2     , opFlags: 0           , dialect: "*"    },
+  { name: "IS [NOT] DISTINCT FROM"   , args: 2     , opFlags: 0           , dialect: "*"     , nameNot: "IS NOT DISTINCT FROM" },
+  { name: "[NOT] LIKE"               , args: 2     , opFlags: 0           , dialect: "*"    },
+  { name: "[NOT] ILIKE"              , args: 2     , opFlags: 0           , dialect: "*"    },
+  { name: "[NOT] SIMILAR TO"         , args: 2     , opFlags: 0           , dialect: "*"    }
 ], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
-  { name: "IN"                       , args: 2     , opFlags: kRightValues, dialect: "*"    }
-], { category: "general", opFlags: kBinary | kSpaceSeparate | kNotBeforeOp });
+  { name: "[NOT] IN"                 , args: 2     , opFlags: kRightValues, dialect: "*"    }
+], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
   { name: "AND"                      , args: 2     , opFlags: 0           , dialect: "*"    },
@@ -4785,9 +4953,9 @@ register([
 ], { category: "general", opFlags: kBinary | kSpaceSeparate });
 
 register([
-  { name: "BETWEEN"                  , args: 3     , opFlags: 0           , dialect: "*"      , compile: compileBetween },
-  { name: "BETWEEN SYMMETRIC"        , args: 3     , opFlags: 0           , dialect: "*"      , compile: compileBetween }
-], { category: "general", opFlags: kFunction | kSpaceSeparate | kNotBeforeOp });
+  { name: "[NOT] BETWEEN"            , args: 3     , opFlags: 0           , dialect: "*"      , compile: compileBetween },
+  { name: "[NOT] BETWEEN SYMMETRIC"  , args: 3     , opFlags: 0           , dialect: "*"      , compile: compileBetween }
+], { category: "general", opFlags: kFunction | kSpaceSeparate });
 
 register([
   { name: "CAST"                     , args: 2     , opFlags: 0           , dialect: "*"      , compile: compileCast },
@@ -4810,14 +4978,12 @@ register([
   { name: "COS"                      , args: 1     , opFlags: 0           , dialect: "*"     },
   { name: "COT"                      , args: 1     , opFlags: 0           , dialect: "*"     },
   { name: "DEGREES"                  , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "DIV"                      , args: 2     , opFlags: 0           , dialect: "*"     }, // TODO:
   { name: "EXP"                      , args: 1     , opFlags: 0           , dialect: "*"     },
   { name: "FLOOR"                    , args: 1     , opFlags: 0           , dialect: "*"     },
   { name: "LN"                       , args: 1     , opFlags: 0           , dialect: "*"     },
   { name: "LOG"                      , args: [1, 2], opFlags: 0           , dialect: "*"     },
   { name: "LOG10"                    , args: 1     , opFlags: 0           , dialect: "*"      , compile: compileLog10 },
   { name: "LOG2"                     , args: 1     , opFlags: 0           , dialect: "*"      , compile: compileLog2 },
-  { name: "MOD"                      , args: 2     , opFlags: 0           , dialect: "*"     },
   { name: "PI"                       , args: 0     , opFlags: 0           , dialect: "*"     },
   { name: "POWER"                    , args: 2     , opFlags: 0           , dialect: "*"     },
   { name: "RADIANS"                  , args: 1     , opFlags: 0           , dialect: "*"     },
@@ -4835,7 +5001,7 @@ register([
 register([
   { name: "ASCII"                    , args: 1     , opFlags: 0           , dialect: "*"     },
   { name: "BIT_LENGTH"               , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "BTRIM"                    , args: [1, N], opFlags: 0           , dialect: "pgsql" },
+  { name: "BTRIM"                    , args: [1, N], opFlags: 0           , dialect: "*"      , compile: compileBTrim },
   { name: "CHAR"                     , args: [1, N], opFlags: 0           , dialect: "mysql" },
   { name: "CHAR_LENGTH"              , args: 1     , opFlags: 0           , dialect: "*"     },
   { name: "CHR"                      , args: 1     , opFlags: 0           , dialect: "*"      , compile: compileChr },
@@ -4852,9 +5018,9 @@ register([
   { name: "LPAD"                     , args: [2, 3], opFlags: 0           , dialect: "*"     },
   { name: "LTRIM"                    , args: [1, N], opFlags: 0           , dialect: "*"     },
   { name: "OCTET_LENGTH"             , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "OVERLAY"                  , args: null  , opFlags: 0           , dialect: "pgsql" }, // TODO:
+  { name: "OVERLAY"                  , args: [3, 4], opFlags: 0           , dialect: "pgsql"  , compile: compileOverlay },
   { name: "PG_CLIENT_ENCODING"       , args: 0     , opFlags: 0           , dialect: "pgsql" },
-  { name: "POSITION"                 , args: null  , opFlags: 0           , dialect: "*"     }, // TODO:
+  { name: "POSITION"                 , args: null  , opFlags: 0           , dialect: "*"      , compile: compilePosition },
   { name: "REPEAT"                   , args: 2     , opFlags: 0           , dialect: "*"     },
   { name: "REPLACE"                  , args: 3     , opFlags: 0           , dialect: "*"     },
   { name: "REVERSE"                  , args: 1     , opFlags: 0           , dialect: "*"     },
@@ -4865,9 +5031,8 @@ register([
   { name: "STRCMP"                   , args: 2     , opFlags: 0           , dialect: "mysql" },
   { name: "STRPOS"                   , args: 2     , opFlags: 0           , dialect: "pgsql" },
   { name: "SUBSTR"                   , args: [2, 3], opFlags: 0           , dialect: "*"     },
-  { name: "SUBSTRING"                , args: null  , opFlags: 0           , dialect: "*"     },
+  { name: "SUBSTRING"                , args: [1, 3], opFlags: 0           , dialect: "*"     , compile: compileSubString },
   { name: "TRANSLATE"                , args: 3     , opFlags: 0           , dialect: "pgsql" },
-  { name: "TRIM"                     , args: null  , opFlags: 0           , dialect: "*"     },
   { name: "UPPER"                    , args: 1     , opFlags: 0           , dialect: "*"     }
 ], { category: "string", opFlags: kFunction });
 
@@ -5064,13 +5229,14 @@ register([
   { name: "XMLAGG"                   , args: 1     , dialect: "pgsql" }
 ], { category: "xml", opFlags: kFunction | kAggregate });
 
-OpInfo.addAlias("!=", "<>");
+OpInfo.addAlias("TRIM", "BTRIM");
 OpInfo.addAlias("POW", "POWER");
 OpInfo.addAlias("CEIL", "CEILING");
 OpInfo.addAlias("EVERY", "BOOL_AND");
 OpInfo.addAlias("STDDEV", "STDDEV_SAMP");
 OpInfo.addAlias("VARIANCE", "VAR_SAMP");
 
+OpInfo.addAlias("!=", "<>");
 OpInfo.addNegation("=", "<>");
 OpInfo.addNegation(">", "<=");
 OpInfo.addNegation("<", ">=");
@@ -5078,16 +5244,16 @@ OpInfo.addNegation("~", "!~");
 OpInfo.addNegation("~*", "!~*");
 
 // Add all known functions to `xql` namespace.
-OpInfo.forEach(function(_alias, info) {
+OpInfo.forEach(function(alias, info) {
   if (info.opFlags & (kUnary | kBinary | kFunction) && reUpperCasedWithSpaces.test(info.name)) {
-    const alias = _alias.replace(/ /g, "_");
-    if (!xql[alias]) {
+    const funcName = alias.replace(/ /g, "_");
+    if (!xql[funcName]) {
       if (info.opFlags & kUnary)
-        xql[alias] = Unary.makeWrap(info.name, info.nodeFlags, info.ctor);
+        xql[funcName] = Unary.makeWrap(info.name, info.nodeFlags, info.ctor);
       else if (info.opFlags & kBinary)
-        xql[alias] = Binary.makeWrap(info.name, info.nodeFlags, info.ctor);
+        xql[funcName] = Binary.makeWrap(info.name, info.nodeFlags, info.ctor);
       else
-        xql[alias] = Func.makeWrap(info.name, info.nodeFlags, info.ctor);
+        xql[funcName] = Func.makeWrap(info.name, info.nodeFlags, info.ctor);
     }
   }
 });
@@ -5097,6 +5263,12 @@ OpInfo.forEach(function(_alias, info) {
 // ============================================================================
 // [xql.SQL]
 // ============================================================================
+
+xql.ADD = Binary.makeWrap("+", OpInfo.get("+").nodeFlags);
+xql.SUB = Binary.makeWrap("-", OpInfo.get("-").nodeFlags);
+xql.MUL = Binary.makeWrap("*", OpInfo.get("*").nodeFlags);
+xql.DIV = Binary.makeWrap("*", OpInfo.get("/").nodeFlags);
+xql.MOD = Binary.makeWrap("*", OpInfo.get("%").nodeFlags);
 
 xql.EQ = Binary.makeWrap("=" , OpInfo.get("=" ).nodeFlags);
 xql.NE = Binary.makeWrap("<>", OpInfo.get("<>").nodeFlags);
