@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.7";
+const VERSION = "1.4.8";
 
 // ============================================================================
 // [Internal Utilities]
@@ -492,7 +492,7 @@ xql$dialect.newContext = $xql$dialect$newContext;
 // [xql.dialect.Context]
 // ============================================================================
 
-function fnBrackets(s) {
+function fnEscapeBrackets(s) {
   return s.charCodeAt(0) === 91 ? "[[" : "]]";
 }
 
@@ -502,8 +502,8 @@ function fnBrackets(s) {
  * dialect-agnostic functionality that is shared between multiple dialect
  * implementations.
  *
- * It's essential to call `_update()` in your own constructor when extending
- * `Context` to implement your own database dialect.
+ * It's essential to call `_updateInternalData()` in your own constructor when
+ * extending `Context` to implement your own database dialect.
  *
  * @param {string} dialect Database dialect the context is using.
  * @param {object} options Context options.
@@ -536,17 +536,15 @@ class Context {
       nativeHSTORE     : false,              // Supports HSTORE.
       nullsOrdering    : false,              // Supports NULLS FIRST and NULLS LAST.
       nullsSortBottom  : false,              // NULLs are sorted last by default.
+      selectTopN       : false,              // Supports Top-N queries.
       returning        : false,              // If RETURNING or OUTPUT is supported.
       returningAsOutput: false,              // Use OUTPUT instead of RETURNING.
       specialNumbers   : false               // No special numbers by default.
     };
 
-    // Functions that depend on `this.pretty` option.
-    this.indent = null;
-    this.concat = null;
-
     // Computed properties based on configuration and dialect features. These
-    // require `_update()` to be called after one or more property is changed.
+    // require `_updateInternalData()` to be called after one or more property
+    // is changed.
     this._DB_TRUE        = "";   // Dialect-specific TRUE value.
     this._DB_FALSE       = "";   // Dialect-specific FALSE value.
     this._DB_NAN         = "";   // Dialect-specific NaN value.
@@ -562,6 +560,13 @@ class Context {
 
     // Regular expression that checks if the identifier needs escaping.
     this._RE_IDENT_CHECK = null;
+
+    // Functions that can be updated based on the settings and database dialect.
+    this.indent = null;
+    this.concat = null;
+
+    this._wrap = null;
+    this._compileOffsetLimit = null;
   }
 
   /**
@@ -575,7 +580,7 @@ class Context {
    */
   setVersion(version) {
     this.version = parseVersion(version);
-    this._update();
+    this._updateInternalData();
 
     return this;
   }
@@ -708,7 +713,7 @@ class Context {
 
     if (qs == QuoteStyle.kDouble  ) return ident.replace(reDoubleQuotes, "\"\"");
     if (qs == QuoteStyle.kGrave   ) return ident.replace(reGraveQuotes, "``");
-    if (qs == QuoteStyle.kBrackets) return ident.replace(reBrackets, fnBrackets);
+    if (qs == QuoteStyle.kBrackets) return ident.replace(reBrackets, fnEscapeBrackets);
 
     throwCompileError("Cannot escape identifier: Invalid 'features.quoteStyle' set");
   }
@@ -1023,6 +1028,97 @@ class Context {
     throwTypeError("Abstract method called");
   }
 
+  /**
+   * Called whenever some property is changed to update all computed properties.
+   *
+   * @private
+   */
+  _updateInternalData() {
+    const pretty = this.pretty;
+    const features = this.features;
+    const qs = this.features.quoteStyle;
+
+    // Update everything sensitive to DB dialect and dialect-based options.
+    this._DB_TRUE    = features.nativeBoolean ? "TRUE"  : "1";
+    this._DB_FALSE   = features.nativeBoolean ? "FALSE" : "0";
+
+    if (qs === QuoteStyle.kDouble) {
+      this._DB_IDENT_OPEN = "\"";
+      this._DB_IDENT_CLOSE = "\"";
+      this._RE_IDENT_CHECK = /[\.\"\x00]/g;
+    }
+
+    if (qs === QuoteStyle.kGrave) {
+      this._DB_IDENT_OPEN = "`";
+      this._DB_IDENT_CLOSE = "`";
+      this._RE_IDENT_CHECK = /[\.\`\x00]/g;
+    }
+
+    if (qs === QuoteStyle.kBrackets) {
+      this._DB_IDENT_OPEN = "[";
+      this._DB_IDENT_CLOSE = "]";
+      this._RE_IDENT_CHECK = /[\.\[\]\x00]/g;
+    }
+
+    // Update members that are not DB dialect sensitive (pretty print).
+    this._STR_NL     = !pretty ? " "  : "\n";
+    this._STR_COMMA  = !pretty ? ", " : ",\n";
+    this._STR_INDENT = !pretty ? ""   : " ".repeat(this.indentation);
+    this._STR_CONCAT = !pretty ? " "  : this._STR_NL + this._STR_INDENT;
+
+    // Update the implementation of the most important building functions.
+    this.indent      = !pretty ? this._indent$none : this._indent$pretty;
+    this.concat      = !pretty ? this._concat$none : this._concat$pretty;
+    this._wrap       = !pretty ? this._wrapSimple  : this._wrapPretty;
+
+    this._compileOffsetLimit = features.selectTopN ? this._compileOffsetLimitTopN
+                                                   : this._compileOffsetLimitImpl;
+  }
+
+  /**
+   * Indents a given string `s` by the Context's indentation settings if pretty
+   * print is enabled, otherwise does nothing.
+   *
+   * @param {string} s String to indent.
+   * @return {string} Indented string if indentation is enabled or unchanged `s`.
+   *
+   * @function
+   * @alias xql.dialect.Context.prototype.indent
+   */
+  _indent$none(s) {
+    return s;
+  }
+
+  _indent$pretty(s) {
+    var INDENT = this._STR_INDENT;
+    return INDENT + s.replace(reNewLine, "\n" + INDENT);
+  }
+
+  /**
+   * TODO: Change the name
+   *
+   * Called before a string `s` is concatenated into a SQL expression in a way
+   * that may require a new line if pretty printing is enabled. It returns the
+   * original string prefixed with a space or a line break and possibly indented.
+   *
+   * @param {string} s Input string to process.
+   * @return {string} Possibly modified string.
+   *
+   * @function
+   * @alias xql.dialect.Context.prototype.concat
+   */
+  _concat$none(s) {
+    return " " + s;
+  }
+
+  _concat$pretty(s) {
+    var _STR_CONCAT = this._STR_CONCAT;
+    return _STR_CONCAT + s.replace(reNewLine, _STR_CONCAT);
+  }
+
+  _wrapSimple(str) { return `(${str})`; }
+  _wrapPretty(str) { return "(" + indent(str + ")", " ").substr(1); }
+
   _compileValues(something) {
     if (something instanceof Node) {
       const body = something.compileNode(this);
@@ -1037,7 +1133,7 @@ class Context {
     }
   }
 
-  _compileUnary(node) {
+  _compileUnaryNode(node) {
     var type = node._type;
     var out = this._compile(node._value);
 
@@ -1063,7 +1159,7 @@ class Context {
     return out;
   }
 
-  _compileBinary(node) {
+  _compileBinaryNode(node) {
     var type = node._type;
     var out = "";
 
@@ -1077,7 +1173,7 @@ class Context {
     var right = "";
 
     if (!type)
-      throwCompileError("_compileBinary.compileNode() - No operator specified");
+      throwCompileError("_compileBinaryNode.compileNode() - No operator specified");
 
     var opInfo = OpInfo.get(type);
     var opFlags = opInfo ? opInfo.opFlags : 0;
@@ -1135,7 +1231,7 @@ class Context {
    *
    * @private
    */
-  _compileFunc(node) {
+  _compileFuncNode(node) {
     const name = node._type;
     const info = OpInfo.get(name);
 
@@ -1240,7 +1336,7 @@ class Context {
     // Compile `(...) AS identifier`.
     const alias = node._alias;
     if (alias)
-      out = this._wrapQuery(out) + " AS " + this.escapeIdentifier(alias);
+      out = this._wrap(out) + " AS " + this.escapeIdentifier(alias);
 
     return out;
   }
@@ -1475,7 +1571,7 @@ class Context {
         out += separator;
 
       if (query.mustWrap(this, node))
-        compiled = this._wrapQuery(compiled);
+        compiled = this._wrap(compiled);
 
       out += compiled;
     }
@@ -1649,7 +1745,7 @@ class Context {
       else {
         var compiled = column.compileNode(this);
         if (column.mustWrap(this, null))
-          out += this._wrapQuery(compiled);
+          out += this._wrap(compiled);
         else
           out += compiled;
       }
@@ -1694,109 +1790,14 @@ class Context {
     return out;
   }
 
-  _compileOffsetLimit(offset, limit) {
-    var out = "";
-
-    if (limit)
-      out += "LIMIT " + limit;
-
-    if (offset) {
-      if (out) out += " ";
-      out += "OFFSET " + offset;
-    }
-
-    return out;
+  _compileOffsetLimitTopN(offset, limit) {
+    var out = offset || limit ? "OFFSET " + String(offset) + (offset === 1 ? " ROW" : " ROWS") : "";
+    return limit ? (out ? out + " FETCH NEXT " : "FETCH NEXT ") + String(limit) + (limit === 1 ? " ROW ONLY" : " ROWS ONLY") : out;
   }
 
-  _wrapQuery(str) {
-    if (this.pretty)
-      return "(" + indent(str + ")", " ").substr(1);
-    else
-      return "(" + str + ")";
-  }
-
-  /**
-   * Called whenever some property is changed to update all computed properties.
-   *
-   * @private
-   */
-  _update() {
-    const pretty = this.pretty;
-    const features = this.features;
-    const qs = this.features.quoteStyle;
-
-    // Update everything sensitive to DB dialect and dialect-based options.
-    this._DB_TRUE    = features.nativeBoolean ? "TRUE"  : "1";
-    this._DB_FALSE   = features.nativeBoolean ? "FALSE" : "0";
-
-    if (qs === QuoteStyle.kDouble) {
-      this._DB_IDENT_OPEN = "\"";
-      this._DB_IDENT_CLOSE = "\"";
-      this._RE_IDENT_CHECK = /[\.\"\x00]/g;
-    }
-
-    if (qs === QuoteStyle.kGrave) {
-      this._DB_IDENT_OPEN = "`";
-      this._DB_IDENT_CLOSE = "`";
-      this._RE_IDENT_CHECK = /[\.\`\x00]/g;
-    }
-
-    if (qs === QuoteStyle.kBrackets) {
-      this._DB_IDENT_OPEN = "[";
-      this._DB_IDENT_CLOSE = "]";
-      this._RE_IDENT_CHECK = /[\.\[\]\x00]/g;
-    }
-
-    // Update members that are not DB dialect sensitive (pretty print).
-    this._STR_NL     = !pretty ? " "  : "\n";
-    this._STR_COMMA  = !pretty ? ", " : ",\n";
-    this._STR_INDENT = !pretty ? ""   : " ".repeat(this.indentation);
-    this._STR_CONCAT = !pretty ? " "  : this._STR_NL + this._STR_INDENT;
-
-    // Update the implementation of the most important building functions.
-    this.indent      = !pretty ? this._indent$none : this._indent$pretty;
-    this.concat      = !pretty ? this._concat$none : this._concat$pretty;
-  }
-
-  /**
-   * Indents a given string `s` by the Context's indentation settings if pretty
-   * print is enabled, otherwise does nothing.
-   *
-   * @param {string} s String to indent.
-   * @return {string} Indented string if indentation is enabled or unchanged `s`.
-   *
-   * @function
-   * @alias xql.dialect.Context.prototype.indent
-   */
-  _indent$none(s) {
-    return s;
-  }
-
-  _indent$pretty(s) {
-    var INDENT = this._STR_INDENT;
-    return INDENT + s.replace(reNewLine, "\n" + INDENT);
-  }
-
-  /**
-   * TODO: Change the name
-   *
-   * Called before a string `s` is concatenated into a SQL expression in a way
-   * that may require a new line if pretty printing is enabled. It returns the
-   * original string prefixed with a space or a line break and possibly indented.
-   *
-   * @param {string} s Input string to process.
-   * @return {string} Possibly modified string.
-   *
-   * @function
-   * @alias xql.dialect.Context.prototype.concat
-   */
-  _concat$none(s) {
-    return " " + s;
-  }
-
-  _concat$pretty(s) {
-    var _STR_CONCAT = this._STR_CONCAT;
-    return _STR_CONCAT + s.replace(reNewLine, _STR_CONCAT);
+  _compileOffsetLimitImpl(offset, limit) {
+    var out = limit ? "LIMIT " + String(limit) : "";
+    return offset ? (out ? out + " OFFSET " : "OFFSET ") + String(offset) : out;
   }
 }
 xql$dialect.Context = Context;
@@ -1849,7 +1850,7 @@ class PGSQLContext extends Context {
     });
 
     // Update everything the base Context understands.
-    this._update();
+    this._updateInternalData();
 
     // Override everything, which is Postgres specific.
     this._DB_POS_INF = "'Infinity'";
@@ -2177,7 +2178,7 @@ class MySQLContext extends Context {
       nativeBoolean : true
     });
 
-    this._update();
+    this._updateInternalData();
   }
 
   /** @override */
@@ -2186,7 +2187,7 @@ class MySQLContext extends Context {
   }
 
   /** @override */
-  _compileOffsetLimit(offset, limit) {
+  _compileOffsetLimitImpl(offset, limit) {
     // Compile either `LIMIT <limit>` or `LIMIT <offset>, <limit>`.
     const limitStr = limit ? String(limit) : "18446744073709551615";
     if (offset === 0)
@@ -2227,10 +2228,11 @@ class MSSQLContext extends Context {
 
     Object.assign(this.features, {
       quoteStyle    : QuoteStyle.kBrackets,
-      nativeBoolean : false
+      nativeBoolean : false,
+      selectTopN    : true
     });
 
-    this._update();
+    this._updateInternalData();
   }
 
   /** @override */
@@ -2240,19 +2242,6 @@ class MSSQLContext extends Context {
       return "'" + value + "'";
     else
       return "N'" + value.replace(reEscapeChars, fnEscapeString) + "'";
-  }
-
-  /** @override */
-  _compileOffsetLimit(offset, limit) {
-    var out = "";
-
-    if (offset || limit)
-      out += "OFFSET " + offset + (offset === 1 ? " ROW" : " ROWS");
-
-    if (limit)
-      out += (out ? " FETCH NEXT " : "FETCH NEXT ") + limit + " ROWS ONLY";
-
-    return out;
   }
 }
 xql$dialect.add("mssql", MSSQLContext);
@@ -2274,7 +2263,7 @@ class SQLiteContext extends Context {
   constructor(options) {
     super("sqlite", options);
 
-    this._update();
+    this._updateInternalData();
   }
 
   /** @override */
@@ -2333,7 +2322,7 @@ class SQLiteContext extends Context {
   }
 
   /** @override */
-  _compileOffsetLimit(offset, limit) {
+  _compileOffsetLimitImpl(offset, limit) {
     // Compile `LIMIT <limit> OFFSET <offset>`.
     const limitStr = limit ? String(limit) : "-1";
     const offsetStr = String(offset);
@@ -2716,7 +2705,7 @@ class Unary extends Node {
 
   /** @override */
   compileNode(ctx) {
-    return ctx._compileUnary(this);
+    return ctx._compileUnaryNode(this);
   }
 
   /**
@@ -2798,7 +2787,7 @@ class Binary extends Node {
 
   /** @override */
   compileNode(ctx) {
-    return ctx._compileBinary(this);
+    return ctx._compileBinaryNode(this);
   }
 
   /**
@@ -2889,7 +2878,7 @@ class Binary extends Node {
 }
 xql$node.Binary = Binary;
 
-function BINARY_OP(a, op, b) {
+function BINARY_OP(left, op, right) {
   const info = OpInfo.get(op);
   const flags = info ? info.nodeFlags : 0;
 
@@ -2898,8 +2887,8 @@ function BINARY_OP(a, op, b) {
     _type    : op,
     _flags   : flags,
     _alias   : "",
-    _left    : a,
-    _right   : b
+    _left    : left,
+    _right   : right
   };
 }
 
@@ -3141,7 +3130,7 @@ class Func extends NodeArray {
 
   /** @override */
   compileNode(ctx) {
-    return ctx._compileFunc(this);
+    return ctx._compileFuncNode(this);
   }
 
   getArguments() {
@@ -3190,8 +3179,8 @@ xql.FUNC = FUNC;
  * @alias xql.node.When
  */
 class When extends Binary {
-  constructor(expression, body) {
-    super(expression, "WHEN", body);
+  constructor(a, b) {
+    super(a, "WHEN", b);
   }
 
   /** @override */
@@ -3206,8 +3195,8 @@ class When extends Binary {
 }
 xql$node.When = When;
 
-function WHEN(expression, body) {
-  return new When(expression, body);
+function WHEN(a, b) {
+  return new When(a, b);
 };
 
 xql.WHEN = WHEN;
@@ -3222,9 +3211,10 @@ xql.WHEN = WHEN;
  * @alias xql.node.Case
  */
 class Case extends NodeArray {
-  constructor() {
+  constructor(input) {
     super("CASE");
-    this._else = null;
+    this._input = input;
+    this._else = undefined;
   }
 
   /** @override */
@@ -3237,14 +3227,18 @@ class Case extends NodeArray {
     var out = "CASE";
     var alias = this._alias;
 
-    var whens = this._values;
-    var else_ = this._else;
+    var input = this._input;
+    var cases = this._values;
+    var _else = this._else;
 
-    for (var i = 0; i < whens.length; i++)
-      out += " " + whens[i].compileNode(ctx);
+    if (input !== undefined)
+      out += " " + ctx._compile(input);
 
-    if (else_ !== null)
-      out += " ELSE " + ctx._compile(else_);
+    for (var i = 0; i < cases.length; i++)
+      out += " " + cases[i].compileNode(ctx);
+
+    if (_else !== undefined)
+      out += " ELSE " + ctx._compile(_else);
 
     out += " END";
     if (alias)
@@ -3252,20 +3246,38 @@ class Case extends NodeArray {
     return out;
   }
 
-  WHEN(expression, body) {
-    this._values.push(WHEN(expression, body));
+  getInput() {
+    return this._input;
+  }
+
+  setInput(exp) {
+    this._input = exp;
     return this;
   }
 
-  ELSE(body) {
-    this._else = body;
+  getElse() {
+    return this._else;
+  }
+
+  setElse(exp) {
+    this._else = exp;
+    return this;
+  }
+
+  WHEN(a, b) {
+    this._values.push(WHEN(a, b));
+    return this;
+  }
+
+  ELSE(exp) {
+    this._else = exp;
     return this;
   }
 }
 xql$node.Case = Case;
 
-function CASE() {
-  return new Case();
+function CASE(input) {
+  return new Case(input);
 }
 
 xql.CASE = CASE;
