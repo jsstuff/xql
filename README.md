@@ -1,7 +1,7 @@
 xql.js
 ======
 
-SQL builder and utilities library for node.js.
+Extensible and dependency free SQL builder and expression tree for node.js.
 
   * [Official Repository (jsstuff/xql)](https://github.com/jsstuff/xql)
   * [Official Fiddler](https://kobalicek.com/fiddle-xql.html)
@@ -10,7 +10,9 @@ SQL builder and utilities library for node.js.
 Disclaimer
 ----------
 
-This library is used in production, but it doesn't contain all possible features of all available DB engines (currently only PG). Be prepared for some minor API changes before the library stabilizes.
+This library is used in production, but it doesn't contain all possible features of all available DB engines. It started initially with only PostgreSQL support, but now also MySQL, MSSQL, and SQLite dialects are available.
+
+Be prepared for some minor API changes before the library stabilizes.
 
 Introduction
 ------------
@@ -79,7 +81,7 @@ console.log(query.compileQuery(ctx));
 //   "population" >= 1000000 AND "capital" = TRUE;
 ```
 
-If you ask yourself why all SQL constructs are UPPERCASED the explanation is very simple: in the past xql.js supported both conventions (UPPERCASED and camelCased), but it led to confusion and ambiguity. The new API follows a very simple rule: if any function creates a new SQL expression it's name is always UPPERCASED, otherwise it's camelCased. This way it's very simple to visually distinguish between SQL building blocks and other logic in the source code.
+If you ask yourself why all SQL constructs are UPPERCASED the explanation is very simple: in the past xql.js supported both conventions (UPPERCASED and camelCased), but it led to confusion and ambiguity. The new API follows a very simple rule: if any function creates a new SQL expression or modifies an existing one based on SQL semantics it's name is always UPPERCASED, otherwise it's camelCased (utility functions, etc). This way it's very simple to visually distinguish between SQL building blocks and other logic in your own code. Please open an issue if you would like to discuss other possibilities.
 
 API Overview
 ------------
@@ -100,7 +102,7 @@ Error                       | Description
 `xql.error.ValueError`      | Error thrown if data is wrong
 `xql.error.CompileError`    | Error thrown if query is wrong
 
-SQL expression tree:
+Expression tree:
 
 Node                        | Description
 :-------------------------- | :------------------------------------
@@ -118,7 +120,8 @@ Node                        | Description
 `xql.node.ConditionalMap`   | Special node that contains key/value interface that can be used to construct `WHERE` like expressions without constructing `xql.node.Logical` nodes.
 `xql.node.Join`             | SQL `JOIN` construct
 `xql.node.Sort`             | SQL `ORDER BY` construct
-`xql.node.Query`            | Base class for implementing SQL query statements
+`xql.node.Statement`        | Base class representing a single SQL statement
+`xql.node.Query`            | Base class used by `SELECT`, `INSERT`, `UPDATE`, and `DELETE` statements.
 `xql.node.SelectQuery`      | SQL `SELECT` query
 `xql.node.InsertQuery`      | SQL `INSERT` query
 `xql.node.UpdateQuery`      | SQL `UPDATE` query

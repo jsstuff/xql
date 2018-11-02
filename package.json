@@ -5,19 +5,22 @@
   "engines": {
     "node": ">=6"
   },
-  "description": "SQL builder and utilities library designed to work with PostgreSQL.",
+  "description": "Extensible and dependency free SQL builder that provides an expression tree and supports multiple database dialects.",
   "keywords": [
     "builder",
     "database",
     "expression",
     "generate",
     "generator",
+    "mysql",
     "pg",
     "pgsql",
     "postgres",
     "postgresql",
     "query",
+    "statement",
     "sql",
+    "sqlite",
     "tools",
     "utilities",
     "utility",
