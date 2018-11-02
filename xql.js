@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.8";
+const VERSION = "1.4.9";
 
 // ============================================================================
 // [Internal Utilities]
@@ -553,7 +553,7 @@ class Context {
     this._DB_IDENT_OPEN  = "";   // Escape character inserted before SQL identifier.
     this._DB_IDENT_CLOSE = "";   // Escape character inserted after SQL identifier.
 
-    this._STR_NL         = "";   // Space character, either " " or "\n" (pretty).
+    this._STR_BLANK      = "";   // Space or newline character, either " " or "\n" (pretty).
     this._STR_COMMA      = "";   // Comma separator, either ", " or ",\n" (pretty).
     this._STR_INDENT     = "";   // Indentation string.
     this._STR_CONCAT     = "";   // Concatenation string, equals to `space + _STR_INDENT`.
@@ -1061,10 +1061,10 @@ class Context {
     }
 
     // Update members that are not DB dialect sensitive (pretty print).
-    this._STR_NL     = !pretty ? " "  : "\n";
+    this._STR_BLANK  = !pretty ? " "  : "\n";
     this._STR_COMMA  = !pretty ? ", " : ",\n";
     this._STR_INDENT = !pretty ? ""   : " ".repeat(this.indentation);
-    this._STR_CONCAT = !pretty ? " "  : this._STR_NL + this._STR_INDENT;
+    this._STR_CONCAT = !pretty ? " "  : this._STR_BLANK + this._STR_INDENT;
 
     // Update the implementation of the most important building functions.
     this.indent      = !pretty ? this._indent$none : this._indent$pretty;
@@ -1280,12 +1280,11 @@ class Context {
   _compileSelect(node) {
     var out = "SELECT";
 
-    const space = this._STR_NL;
+    const BLANK = this._STR_BLANK;
     const flags = node._flags;
 
     const offset = node._offset;
     const limit = node._limit;
-    const hasLimit = offset !== 0 || limit !== 0;
 
     // Compile `SELECT [ALL|DISTINCT]`
     //
@@ -1302,33 +1301,33 @@ class Context {
     // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
     const from = node._fromOrUsing;
     if (from)
-      out += space + "FROM" + this.concat(this._compileFromOrUsing(from));
+      out += BLANK + "FROM" + this.concat(this._compileFromOrUsing(from));
 
     // Compile `WHERE ...`.
     const where = node._where;
     if (where && where._values.length)
-      out += space + "WHERE" + this.concat(this._compileWhereOrHaving(where));
+      out += BLANK + "WHERE" + this.concat(this._compileWhereOrHaving(where));
 
     // Compile `GROUP BY ...`.
     const groupBy = node._groupBy;
     if (groupBy && groupBy.length)
-      out += space + "GROUP BY" + this.concat(this._compileGroupBy(groupBy));
+      out += BLANK + "GROUP BY" + this.concat(this._compileGroupBy(groupBy));
 
     // Compile `HAVING ...`.
     const having = node._having;
     if (having && having._values.length)
-      out += space + "HAVING" + this.concat(this._compileWhereOrHaving(having));
+      out += BLANK + "HAVING" + this.concat(this._compileWhereOrHaving(having));
 
     // TODO: Compile `WINDOW ...`.
 
     // Compile `ORDER BY ...`.
     const orderBy = node._orderBy;
     if (orderBy && orderBy.length)
-      out += space + "ORDER BY" + this.concat(this._compileOrderBy(orderBy));
+      out += BLANK + "ORDER BY" + this.concat(this._compileOrderBy(orderBy));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
-    if (hasLimit)
-      out += space + this._compileOffsetLimit(offset, limit);
+    if (offset || limit)
+      out += BLANK + this._compileOffsetLimit(offset, limit);
 
     // TODO: Compile `FETCH ...`.
     // TODO: Compile `FOR ...`.
@@ -1356,7 +1355,7 @@ class Context {
     var k;
     var i, len;
 
-    const NL = this._STR_NL;
+    const BLANK = this._STR_BLANK;
 
     const table = node._table;
     const columns = node._columns;
@@ -1385,7 +1384,7 @@ class Context {
     const objects = node._values;
     const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
 
-    out += NL + "VALUES";
+    out += BLANK + "VALUES";
     for (i = 0, len = objects.length; i < len; i++) {
       const object = objects[i];
 
@@ -1404,7 +1403,7 @@ class Context {
 
     // Compile `RETURNING ...`.
     if (hasReturning)
-      out += NL + "RETURNING" + this.concat(this._compileReturning(returning));
+      out += BLANK + "RETURNING" + this.concat(this._compileReturning(returning));
 
     return out;
   }
@@ -1421,7 +1420,7 @@ class Context {
     var out = "";
     var t = "";
 
-    const NL = this._STR_NL;
+    const BLANK = this._STR_BLANK;
     const COMMA = this._STR_COMMA;
 
     const table = node._table;
@@ -1460,28 +1459,28 @@ class Context {
       if (t) t += COMMA;
       t += this.escapeIdentifier(k) + " = " + compiled;
     }
-    out += NL + "SET" + this.concat(t);
+    out += BLANK + "SET" + this.concat(t);
 
     // Compile `FROM table[, table[, ...]]` or `FROM table JOIN table [, JOIN ...]`.
     const from = node._fromOrUsing;
     if (from)
-      out += NL + "FROM"  + this.concat(this._compileFromOrUsing(from));
+      out += BLANK + "FROM" + this.concat(this._compileFromOrUsing(from));
 
     // Compile `WHERE ...`.
     const where = node._where;
     if (where && where._values.length)
-      out += NL + "WHERE" + this.concat(this._compileWhereOrHaving(where));
+      out += BLANK + "WHERE" + this.concat(this._compileWhereOrHaving(where));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     const offset = node._offset;
     const limit = node._limit;
 
     if (offset || limit)
-      out += NL + this._compileOffsetLimit(offset, limit);
+      out += BLANK + this._compileOffsetLimit(offset, limit);
 
     // Compile `RETURNING ...`.
     if (hasReturning)
-      out += NL + "RETURNING" + this.concat(this._compileReturning(returning));
+      out += BLANK + "RETURNING" + this.concat(this._compileReturning(returning));
 
     return out;
   }
@@ -1498,7 +1497,7 @@ class Context {
     var out = "";
     var t = "";
 
-    const NL = this._STR_NL;
+    const BLANK = this._STR_BLANK;
 
     const table = node._table;
     const returning = node._fieldsOrReturning || NoArray;
@@ -1520,23 +1519,23 @@ class Context {
     // Compile `USING table[, table[, ...]]` or `USING table JOIN table [, JOIN ...]`.
     const using = node._fromOrUsing;
     if (using)
-      out += NL + "USING" + this.concat(this._compileFromOrUsing(using));
+      out += BLANK + "USING" + this.concat(this._compileFromOrUsing(using));
 
     // Compile `WHERE ...`
     const where = node._where;
     if (where && where._values.length)
-      out += NL + "WHERE" + this.concat(this._compileWhereOrHaving(where));
+      out += BLANK + "WHERE" + this.concat(this._compileWhereOrHaving(where));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     const offset = node._offset;
     const limit = node._limit;
 
     if (offset || limit)
-      out += NL + this._compileOffsetLimit(offset, limit);
+      out += BLANK + this._compileOffsetLimit(offset, limit);
 
     // Compile `RETURNING ...`.
     if (hasReturning)
-      out += NL + "RETURNING" + this.concat(this._compileReturning(returning));
+      out += BLANK + "RETURNING" + this.concat(this._compileReturning(returning));
 
     return out;
   }
@@ -1550,19 +1549,17 @@ class Context {
    * @private
    */
   _compileCompound(node) {
-    var out = "";
-
-    const space = this._STR_NL;
-
-    const flags = node._flags;
     var combineOp = node._type;
+    const flags = node._flags;
 
     if (flags & NodeFlags.kAll)
       combineOp += " ALL";
 
+    const BLANK = this._STR_BLANK;
     const queries = node._values;
-    const separator = space + combineOp + space;
+    const separator = BLANK + combineOp + BLANK;
 
+    var out = "";
     for (var i = 0, len = queries.length; i < len; i++) {
       var query = queries[i];
       var compiled = this._compile(query);
@@ -1579,14 +1576,14 @@ class Context {
     // Compile `ORDER BY ...`.
     const orderBy = node._orderBy;
     if (orderBy && orderBy.length)
-      out += space + "ORDER BY" + this.concat(this._compileOrderBy(orderBy));
+      out += BLANK + "ORDER BY" + this.concat(this._compileOrderBy(orderBy));
 
     // Compile `OFFSET ...` / `LIMIT ...`.
     const offset = node._offset;
     const limit = node._limit;
 
     if (offset || limit)
-      out += space + this._compileOffsetLimit(offset, limit);
+      out += BLANK + this._compileOffsetLimit(offset, limit);
 
     return out;
   }
@@ -1791,13 +1788,27 @@ class Context {
   }
 
   _compileOffsetLimitTopN(offset, limit) {
-    var out = offset || limit ? "OFFSET " + String(offset) + (offset === 1 ? " ROW" : " ROWS") : "";
-    return limit ? (out ? out + " FETCH NEXT " : "FETCH NEXT ") + String(limit) + (limit === 1 ? " ROW ONLY" : " ROWS ONLY") : out;
+    const CONCAT = this._STR_CONCAT;
+    var out = offset || limit ? "OFFSET" + CONCAT + String(offset) + (offset === 1 ? " ROW" : " ROWS") : "";
+
+    if (!limit)
+      return out;
+
+    if (out)
+      out += this._STR_BLANK;
+    return out + "FETCH NEXT" + CONCAT + String(limit) + (limit === 1 ? " ROW ONLY" : " ROWS ONLY");
   }
 
   _compileOffsetLimitImpl(offset, limit) {
-    var out = limit ? "LIMIT " + String(limit) : "";
-    return offset ? (out ? out + " OFFSET " : "OFFSET ") + String(offset) : out;
+    const CONCAT = this._STR_CONCAT;
+    var out = limit ? "LIMIT" + CONCAT + String(limit) : "";
+
+    if (!offset)
+      return out;
+
+    if (out)
+      out += this._STR_BLANK;
+    return out + "OFFSET" + CONCAT + String(offset);
   }
 }
 xql$dialect.Context = Context;
@@ -2191,9 +2202,9 @@ class MySQLContext extends Context {
     // Compile either `LIMIT <limit>` or `LIMIT <offset>, <limit>`.
     const limitStr = limit ? String(limit) : "18446744073709551615";
     if (offset === 0)
-      return "LIMIT " + limitStr;
+      return "LIMIT" + this._STR_CONCAT + limitStr;
     else
-      return "LIMIT " + offset + ", " + limitStr;
+      return "LIMIT" + this._STR_CONCAT + String(offset) + ", " + limitStr;
   }
 }
 xql$dialect.add("mysql", MySQLContext);
@@ -2319,18 +2330,6 @@ class SQLiteContext extends Context {
     }
 
     return out;
-  }
-
-  /** @override */
-  _compileOffsetLimitImpl(offset, limit) {
-    // Compile `LIMIT <limit> OFFSET <offset>`.
-    const limitStr = limit ? String(limit) : "-1";
-    const offsetStr = String(offset);
-
-    if (offset === 0)
-      return "LIMIT " + limitStr;
-    else
-      return "LIMIT " + limitStr + " OFFSET " + offsetStr;
   }
 }
 xql$dialect.add("sqlite", SQLiteContext);
@@ -5279,8 +5278,8 @@ OpInfo.forEach(function(alias, info) {
 xql.ADD = Binary.makeWrap("+", OpInfo.get("+").nodeFlags);
 xql.SUB = Binary.makeWrap("-", OpInfo.get("-").nodeFlags);
 xql.MUL = Binary.makeWrap("*", OpInfo.get("*").nodeFlags);
-xql.DIV = Binary.makeWrap("*", OpInfo.get("/").nodeFlags);
-xql.MOD = Binary.makeWrap("*", OpInfo.get("%").nodeFlags);
+xql.DIV = Binary.makeWrap("/", OpInfo.get("/").nodeFlags);
+xql.MOD = Binary.makeWrap("%", OpInfo.get("%").nodeFlags);
 
 xql.EQ = Binary.makeWrap("=" , OpInfo.get("=" ).nodeFlags);
 xql.NE = Binary.makeWrap("<>", OpInfo.get("<>").nodeFlags);

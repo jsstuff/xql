@@ -23,7 +23,13 @@ const ARRAY_VAL        = xql.ARRAY_VAL;
 const JSON_VAL         = xql.JSON_VAL;
 
 // Operators/Functions
-const NOT              = xql.NOT;
+const OP               = xql.OP;
+
+const ADD              = xql.ADD;
+const SUB              = xql.SUB;
+const MUL              = xql.MUL;
+const DIV              = xql.DIV;
+const MOD              = xql.MOD;
 const AND              = xql.AND;
 const OR               = xql.OR;
 const EQ               = xql.EQ;
@@ -32,7 +38,7 @@ const GT               = xql.GT;
 const GE               = xql.GE;
 const LT               = xql.LT;
 const LE               = xql.LE;
-const OP               = xql.OP;
+const NOT              = xql.NOT;
 const MIN              = xql.MIN;
 const MAX              = xql.MAX;
 const IN               = xql.IN;
@@ -202,17 +208,26 @@ describe("xql", function() {
 
   // OPERATORS.
   it("should test common operators", function() {
+    shouldMatch(ADD(0, 1), '0 + 1');
+    shouldMatch(SUB(0, 1), '0 - 1');
+    shouldMatch(MUL(0, 1), '0 * 1');
+    shouldMatch(DIV(0, 1), '0 / 1');
+    shouldMatch(MOD(0, 1), '0 % 1');
+
     shouldMatch(EQ(0, 1), '0 = 1');
     shouldMatch(NE(0, 1), '0 <> 1');
     shouldMatch(GT(0, 1), '0 > 1');
     shouldMatch(GE(0, 1), '0 >= 1');
     shouldMatch(LT(0, 1), '0 < 1');
     shouldMatch(LE(0, 1), '0 <= 1');
+
     shouldMatch(AND(0, 1), '0 AND 1');
     shouldMatch(OR(0, 1), '0 OR 1');
     shouldMatch(NOT(OR(0, 1)), 'NOT (0 OR 1)');
+
     shouldMatch(BETWEEN(0, 1, 2), '0 BETWEEN 1 AND 2');
     shouldMatch(NOT_BETWEEN(0, 1, 2), '0 NOT BETWEEN 1 AND 2');
+
     shouldMatch(IN(COL("a"), [1, 2]), '"a" IN (1, 2)');
     shouldMatch(NOT_IN(COL("a"), [1, 2]), '"a" NOT IN (1, 2)');
   });
