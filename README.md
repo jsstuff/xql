@@ -452,8 +452,8 @@ var query = UPDATE("users")
 UPDATE
   "users"
 SET
-  "tagsArray" = ARRAY['accounting', 'customer support'], -- Using PG ARRAY syntax.
-  "tagsJson" = '["accounting", "customer support"]'      -- Using PG JSON syntax.
+  "tagsArray" = ARRAY['accounting', 'customer support'],  -- Using PG ARRAY syntax.
+  "tagsJson" = '["accounting", "customer support"]'::json -- Using PG JSON syntax.
 WHERE
   "userId" = 1;
 ```

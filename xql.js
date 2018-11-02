@@ -56,6 +56,12 @@ const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
 // Map of identifiers that are not escaped.
 const IdentifierMap = { "*": true };
 
+const StatementToOutputKeywordMap = freeze({
+  "INSERT": "INSERTED",
+  "UPDATE": "UPDATED",
+  "DELETE": "DELETED"
+});
+
 // Map of strings which can be implicitly casted to `TRUE` or `FALSE`.
 const BoolMap = (function() {
   const map = {
@@ -537,8 +543,7 @@ class Context {
       nullsOrdering    : false,              // Supports NULLS FIRST and NULLS LAST.
       nullsSortBottom  : false,              // NULLs are sorted last by default.
       selectTopN       : false,              // Supports Top-N queries.
-      returning        : false,              // If RETURNING or OUTPUT is supported.
-      returningAsOutput: false,              // Use OUTPUT instead of RETURNING.
+      returning        : "",                 // If RETURNING or OUTPUT is supported.
       specialNumbers   : false               // No special numbers by default.
     };
 
@@ -567,6 +572,7 @@ class Context {
     this.concatNoSpace = null;
 
     this._wrap = null;
+    this._compileReturning = null;
     this._compileOffsetLimit = null;
   }
 
@@ -1073,8 +1079,16 @@ class Context {
     this.concatNoSpace = !pretty ? this._concat$none  : this._concat$pretty;
     this._wrap         = !pretty ? this._wrapSimple   : this._wrapPretty;
 
-    this._compileOffsetLimit = features.selectTopN ? this._compileOffsetLimitTopN
-                                                   : this._compileOffsetLimitImpl;
+    switch (features.returning) {
+      case ""         : this._compileReturning = this._compileReturning$NoImpl  ; break;
+      case "RETURNING": this._compileReturning = this._compileReturning$Base; break;
+      case "OUTPUT"   : this._compileReturning = this._compileReturning$Output; break;
+      default:
+        throwTypeError(`Invalid value '${features.returning}' in features.returning`);
+    }
+
+    this._compileOffsetLimit = features.selectTopN ? this._compileOffsetLimitAsTopN
+                                                   : this._compileOffsetLimitSimple;
   }
 
   /**
@@ -1414,9 +1428,9 @@ class Context {
       out += prefix + t + ")";
     }
 
-    // Compile `RETURNING ...`.
+    // Compile `RETURNING ...` or `OUTPUT ...`.
     if (hasReturning)
-      out += BLANK + "RETURNING" + this.concat(this._compileReturning(returning));
+      out += BLANK + this._compileReturning(returning, "INSERT");
 
     return out;
   }
@@ -1491,9 +1505,9 @@ class Context {
     if (offset || limit)
       out += BLANK + this._compileOffsetLimit(offset, limit);
 
-    // Compile `RETURNING ...`.
+    // Compile `RETURNING ...` or `OUTPUT ...`.
     if (hasReturning)
-      out += BLANK + "RETURNING" + this.concat(this._compileReturning(returning));
+      out += BLANK + this._compileReturning(returning, "UPDATE");
 
     return out;
   }
@@ -1546,9 +1560,9 @@ class Context {
     if (offset || limit)
       out += BLANK + this._compileOffsetLimit(offset, limit);
 
-    // Compile `RETURNING ...`.
+    // Compile `RETURNING ...` or `OUTPUT ...`.
     if (hasReturning)
-      out += BLANK + "RETURNING" + this.concat(this._compileReturning(returning));
+      out += BLANK + this._compileReturning(returning, "DELETE");
 
     return out;
   }
@@ -1710,9 +1724,9 @@ class Context {
   }
 
   _compileGroupBy(groupBy) {
-    var out = "";
-    var COMMA = this._STR_COMMA;
+    const COMMA = this._STR_COMMA;
 
+    var out = "";
     for (var i = 0, len = groupBy.length; i < len; i++) {
       var group = groupBy[i];
       if (out) out += COMMA;
@@ -1723,29 +1737,27 @@ class Context {
       else
         out += group.compileNode(this);
     }
-
     return out;
   }
 
   _compileOrderBy(orderBy) {
-    var out = "";
-    var COMMA = this._STR_COMMA;
+    const COMMA = this._STR_COMMA;
 
+    var out = "";
     for (var i = 0, len = orderBy.length; i < len; i++) {
       var sort = orderBy[i];
       if (out) out += COMMA;
       out += sort.compileNode(this);
     }
-
     return out;
   }
 
-  _compileFields(list) {
-    var out = "";
-    var COMMA = this._STR_COMMA;
+  _compileFields(args) {
+    const COMMA = this._STR_COMMA;
 
-    for (var i = 0, len = list.length; i < len; i++) {
-      var column = list[i];
+    var out = "";
+    for (var i = 0, len = args.length; i < len; i++) {
+      var column = args[i];
       if (out) out += COMMA;
 
       // Compile column identifier or expression.
@@ -1760,12 +1772,46 @@ class Context {
           out += compiled;
       }
     }
-
     return out;
   }
 
-  _compileReturning(list) {
-    return this._compileFields(list);
+  // No RETURNING/OUTPUT implementation.
+  _compileReturning$NoImpl(args, type) {
+    return "";
+  }
+
+  // Compiles RETURNING ... (PGSQL, the same syntax as VALUES).
+  _compileReturning$Base(args, type) {
+    return "RETURNING" + this.concat(this._compileFields(args));
+  }
+
+  // Compiles "OUTPUT ...".
+  _compileReturning$Output(args, type) {
+    const COMMA = this._STR_COMMA;
+    const prefix = StatementToOutputKeywordMap[type] + ".";
+
+    var out = "";
+    for (var i = 0, len = args.length; i < len; i++) {
+      var column = args[i];
+      if (out) out += COMMA;
+
+      // Compile column identifier or expression.
+      if (typeof column === "string") {
+        out += prefix + this.escapeIdentifier(column);
+      }
+      else if (column instanceof Identifier) {
+        out += prefix + this._compile(column);
+      }
+      else {
+        var compiled = column.compileNode(this);
+        if (column.mustWrap(this, null))
+          out += this._wrap(compiled);
+        else
+          out += compiled;
+      }
+    }
+
+    return "OUTPUT" + this.concat(out);
   }
 
   _compileFromOrUsing(node) {
@@ -1800,19 +1846,7 @@ class Context {
     return out;
   }
 
-  _compileOffsetLimitTopN(offset, limit) {
-    const CONCAT = this._STR_CONCAT;
-    var out = offset || limit ? "OFFSET" + CONCAT + String(offset) + (offset === 1 ? " ROW" : " ROWS") : "";
-
-    if (!limit)
-      return out;
-
-    if (out)
-      out += this._STR_BLANK;
-    return out + "FETCH NEXT" + CONCAT + String(limit) + (limit === 1 ? " ROW ONLY" : " ROWS ONLY");
-  }
-
-  _compileOffsetLimitImpl(offset, limit) {
+  _compileOffsetLimitSimple(offset, limit) {
     const CONCAT = this._STR_CONCAT;
     var out = limit ? "LIMIT" + CONCAT + String(limit) : "";
 
@@ -1822,6 +1856,18 @@ class Context {
     if (out)
       out += this._STR_BLANK;
     return out + "OFFSET" + CONCAT + String(offset);
+  }
+
+  _compileOffsetLimitAsTopN(offset, limit) {
+    const CONCAT = this._STR_CONCAT;
+    var out = offset || limit ? "OFFSET" + CONCAT + String(offset) + (offset === 1 ? " ROW" : " ROWS") : "";
+
+    if (!limit)
+      return out;
+
+    if (out)
+      out += this._STR_BLANK;
+    return out + "FETCH NEXT" + CONCAT + String(limit) + (limit === 1 ? " ROW ONLY" : " ROWS ONLY");
   }
 }
 xql$dialect.Context = Context;
@@ -1869,7 +1915,7 @@ class PGSQLContext extends Context {
       nativeHSTORE     : true,
       nullsOrdering    : true,
       nullsSortBottom  : true,
-      returning        : true,
+      returning        : "RETURNING",
       specialNumbers   : true
     });
 
@@ -2211,7 +2257,7 @@ class MySQLContext extends Context {
   }
 
   /** @override */
-  _compileOffsetLimitImpl(offset, limit) {
+  _compileOffsetLimitSimple(offset, limit) {
     // Compile either `LIMIT <limit>` or `LIMIT <offset>, <limit>`.
     const limitStr = limit ? String(limit) : "18446744073709551615";
     if (offset === 0)
@@ -2251,9 +2297,10 @@ class MSSQLContext extends Context {
     super("mssql", options);
 
     Object.assign(this.features, {
-      quoteStyle    : QuoteStyle.kBrackets,
-      nativeBoolean : false,
-      selectTopN    : true
+      quoteStyle       : QuoteStyle.kBrackets,
+      nativeBoolean    : false,
+      selectTopN       : true,
+      returning        : "OUTPUT"
     });
 
     this._updateInternalData();
