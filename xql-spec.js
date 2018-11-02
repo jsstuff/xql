@@ -299,22 +299,22 @@ describe("xql", function() {
       'SELECT "a", "b", "c" FROM "x" WHERE "a" = 1 AND "b" = 2 AND "c" = 3');
   });
 
-  it("should test SELECT DISTINCT ... FROM ... WHERE ...", function() {
+  it("should test SELECT DISTINCT [ON (...)] ... FROM ... WHERE ...", function() {
     shouldMatch(
       SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE("a", "<=", 42),
       'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
 
     shouldMatch(
-      SELECT().DISTINCT("a", "b", "c").FROM("x").WHERE("a", ">=", 42),
-      'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" >= 42');
+      SELECT(["a", "b", "c"]).DISTINCT("a").FROM("x").WHERE("a", ">=", 42),
+      'SELECT DISTINCT ON ("a") "a", "b", "c" FROM "x" WHERE "a" >= 42');
 
     shouldMatch(
       SELECT().DISTINCT(["a", "b", "c"]).FROM("x").WHERE("a", "<>", 42),
-      'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <> 42');
+      'SELECT DISTINCT ON ("a", "b", "c") * FROM "x" WHERE "a" <> 42');
 
     shouldMatch(
-      SELECT().DISTINCT({ a: true, b: true, c: true }).FROM("x").WHERE("a", "<=", 42),
-      'SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <= 42');
+      SELECT().DISTINCT({ a: true, b: true, c: true }).FIELD({ a: true, b: true, c: true }).FROM("x").WHERE("a", "<=", 42),
+      'SELECT DISTINCT ON ("a", "b", "c") "a", "b", "c" FROM "x" WHERE "a" <= 42');
   });
 
   it("should test SELECT ... FROM ... GROUP BY ...", function() {

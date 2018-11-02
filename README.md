@@ -229,7 +229,7 @@ xql.node.SelectQuery       | Description
 :------------------------- | :------------------------------------
 `.FIELD(...)`              |
 `.FIELD([...])`            | Add a field or expression to be selected. It accepts a `xql.node.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
-`.DISTINCT(...)`           | Add a `DISTINCT` clause to the query. <br><br>Please note that `DISTINCT(...)` passes all optional arguments to the `FIELD()` method making `SELECT(...).DISTINCT()` and `SELECT().DISTINCT(...)` constructs equivalent
+`.DISTINCT(...)`           | Add a `DISTINCT` or `DISTINCT ON` (if arguments are provided) clause to the query.
 `.FROM(...)`               |
 `.FROM([...])`             | Add `FROM` clause to the query. The method accepts multiple arguments or a list of arguments. Most of the time `FROM` is used with a single argument describing the table to select from, however, multiple arguments forming an implicit `CROSS JOIN` construct, which matches the SQL specification, are allowed. <br><br>For example `FROM(a)` construct will generate `SELECT ... FROM "a"` query, while `FROM(a, b)` construct will generate `SELECT ... FROM "a", "b"` or `SELECT ... FROM "a" CROSS JOIN "b"` (these are equivalent, xql.js can generate any of these depending on the version and implementation changes)
 `.CROSS_JOIN(with, cond)`  |
@@ -278,8 +278,12 @@ Sample SQL selects:
       <td>`SELECT "id" AS "userId", "name" FROM "users"`</td>
     </tr>
     <tr>
-      <td>`SELECT().DISTINCT(["a", "b", "c"]).FROM("x").WHERE("a", "<>", 42)`</td>
+      <td>`SELECT(["a", "b", "c"]).DISTINCT().FROM("x").WHERE("a", "<>", 42)`</td>
       <td>`SELECT DISTINCT "a", "b", "c" FROM "x" WHERE "a" <> 42`</td>
+    </tr>
+    <tr>
+      <td>`SELECT(["a", "b", "c"]).DISTINCT("a").FROM("x").WHERE("a", "<>", 42)`</td>
+      <td>`SELECT DISTINCT ON ("a") "a", "b", "c" FROM "x" WHERE "a" <> 42`</td>
     </tr>
   </tbody>
 </table>

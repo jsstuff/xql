@@ -10,7 +10,7 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.9";
+const VERSION = "1.4.10";
 
 // ============================================================================
 // [Internal Utilities]
@@ -166,7 +166,7 @@ const NodeFlags = freeze({
   kNullsLast     : 0x00000080, // Sort nulls last (NULLS LAST).
   kAll           : 0x00000100, // ALL flag.
   kDistinct      : 0x00000200, // DISTINCT flag.
-  kQueryStatement: 0x10000000  // This node represents a query statement (like SELECT, UPDATE, etc).
+  kStatement     : 0x10000000  // This node represents a query statement (like SELECT, UPDATE, etc).
 });
 xql.NodeFlags = NodeFlags;
 
@@ -564,6 +564,7 @@ class Context {
     // Functions that can be updated based on the settings and database dialect.
     this.indent = null;
     this.concat = null;
+    this.concatNoSpace = null;
 
     this._wrap = null;
     this._compileOffsetLimit = null;
@@ -1067,9 +1068,10 @@ class Context {
     this._STR_CONCAT = !pretty ? " "  : this._STR_BLANK + this._STR_INDENT;
 
     // Update the implementation of the most important building functions.
-    this.indent      = !pretty ? this._indent$none : this._indent$pretty;
-    this.concat      = !pretty ? this._concat$none : this._concat$pretty;
-    this._wrap       = !pretty ? this._wrapSimple  : this._wrapPretty;
+    this.indent        = !pretty ? this._indent$none  : this._indent$pretty;
+    this.concat        = !pretty ? this._concat$space : this._concat$pretty;
+    this.concatNoSpace = !pretty ? this._concat$none  : this._concat$pretty;
+    this._wrap         = !pretty ? this._wrapSimple   : this._wrapPretty;
 
     this._compileOffsetLimit = features.selectTopN ? this._compileOffsetLimitTopN
                                                    : this._compileOffsetLimitImpl;
@@ -1108,6 +1110,10 @@ class Context {
    * @alias xql.dialect.Context.prototype.concat
    */
   _concat$none(s) {
+    return s;
+  }
+
+  _concat$space(s) {
     return " " + s;
   }
 
@@ -1289,8 +1295,15 @@ class Context {
     // Compile `SELECT [ALL|DISTINCT]`
     //
     // Use `*` if  fields are not used.
-    if (flags & NodeFlags.kDistinct)
-      out += " DISTINCT";
+    if (flags & NodeFlags.kDistinct) {
+      const distinct = node._distinct;
+      if (isArray(distinct) && distinct.length) {
+        out += this.concat("DISTINCT ON (" + this.concatNoSpace(this._compileFields(distinct) + ")"));
+      }
+      else {
+        out += " DISTINCT";
+      }
+    }
 
     // Compile `[*|fields]`
     //
@@ -2396,13 +2409,13 @@ class Node {
   }
 
   /**
-   * Returns whether the node represents a query statement that can be executed.
-   * All query statements inherit from `xql.Query`
+   * Returns whether the node represents a statement that can be executed. Must
+   * return true for all nodes that inherit `xql.node.Statement`.
    *
    * @return {boolean} True if the compiled query can be executed, false otherwise.
    */
-  isQueryStatement() {
-    return (this._flags & NodeFlags.kQueryStatement) != 0;
+  isStatement() {
+    return (this._flags & NodeFlags.kStatement) != 0;
   }
 
   /**
@@ -2911,7 +2924,7 @@ class NodeArray extends Node {
    *
    * @note Behaves same as `Array.push()`.
    *
-   * @param {...*} va Variable arguments.
+   * @param {...*} args Variable arguments.
    * @return {this}
    */
   push() {
@@ -3637,22 +3650,22 @@ class Query extends Statement {
     this._columns = null;
 
     // Used by:
-    //   - `SELECT` - `SELECT ...`.
-    //   - `INSERT` - `RETURNING ...`.
-    //   - `UPDATE` - `RETURNING ...`.
-    //   - `DELETE` - `RETURNING ...`.
+    //   - SELECT - SELECT ...
+    //   - INSERT - RETURNING ...
+    //   - UPDATE - RETURNING ...
+    //   - DELETE - RETURNING ...
     this._fieldsOrReturning = null;
 
     // Used by:
-    //   - `INSERT` - `INSERT INTO ...`.
-    //   - `UPDATE` - `UPDATE ...`.
-    //   - `DELETE` - `DELETE FROM ...`.
+    //   - INSERT - INSERT INTO ...
+    //   - UPDATE - UPDATE ...
+    //   - DELETE - DELETE FROM ...
     this._table = null;
 
     // Used by:
-    //   - `SELECT` - `FROM ...`
-    //   - `UPDATE` - `FROM ...`.
-    //   - `DELETE` - `USING ...`.
+    //   - SELECT - FROM ...
+    //   - UPDATE - FROM ...
+    //   - DELETE - USING ...
     //
     // Contains the `FROM` or `USING` expression. The `_fromOrUsing` can be a
     // string describing a table name or `Node` that is describing a table name
@@ -3661,25 +3674,24 @@ class Query extends Statement {
     this._fromOrUsing = null;
 
     // Used by:
-    //   - `SELECT`
-    //   - `UPDATE`
-    //   - `DELETE`
+    //   - SELECT
+    //   - UPDATE
+    //   - DELETE
     this._where = null;
 
     // Used by:
-    //   - `SELECT`
-    //   - `EXCEPT`, `INTERSECT`, `UNION` - See `CompoundQuery`.
+    //   - SELECT
+    //   - EXCEPT, INTERSECT, UNION - See `CompoundQuery`.
     this._orderBy = null;
 
     // Used by:
-    //   - `SELECT`
-    //   - `UPDATE`
-    //   - `DELETE`
+    //   - SELECT
+    //   - UPDATE
+    //   - DELETE
     //
-    // Contains `OFFSET ...` and `LIMIT ...` parameters. There are some DB engines
-    // (like SQLite), which allow to specify `OFFSET` / `LIMIT` in `UPDATE` and
-    // `DELETE` This is the main reason that these members are part of Query and
-    // not SelectQuery.
+    // Contains "OFFSET ..." and "LIMIT ..." parameters. There are some DB engines
+    // (like SQLite), which allow to specify OFFSET / LIMIT in `UPDATE` and DELETE.
+    // This is the main reason that these members are part of Query and not SelectQuery.
     this._offset = 0;
     this._limit = 0;
 
@@ -3687,10 +3699,10 @@ class Query extends Statement {
     //
     // Type mapping is sometimes important when it comes to type ambiguity. For
     // example when using PostgreSQL there is ambiguity when escaping `Array`.
-    // It can be escaped by using PostgreSQL `ARRAY[] or {}` or as JSON `[]`.
+    // It can be escaped by using PostgreSQL ARRAY[] or {} or as JSON [].
     this._typeMapping = null;
 
-    this._flags |= NodeFlags.kQueryStatement;
+    this._flags |= NodeFlags.kStatement;
   }
 
   /** @override */
@@ -3958,7 +3970,7 @@ class Query extends Statement {
    * 4. `where(a:string, op:string, b:*)`
    *   Adds one `WHERE` clause in the form `a op b`.
    *
-   * @param {...*} va Variable arguments.
+   * @param {...*} args Variable arguments.
    * @return {this}
    */
   WHERE() {
@@ -3971,7 +3983,7 @@ class Query extends Statement {
    * This function is similar to `WHERE`, however, instead of forming a logical
    * `AND` it forms a logical `OR`. See {@link WHERE} for more details.
    *
-   * @param {...*} va Variable arguments.
+   * @param {...*} args Variable arguments.
    * @return {this}
    */
   OR_WHERE() {
@@ -4056,10 +4068,13 @@ class SelectQuery extends Query {
 
     this._flags |= NodeFlags.kAll;
 
-    // `GROUP BY` clause.
+    // DISTINCT ON (...) clause.
+    this._distinct = null;
+
+    // GROUP BY clause.
     this._groupBy = null;
 
-    // `HAVING` clause.
+    // HAVING clause.
     this._having = null;
   }
 
@@ -4073,6 +4088,70 @@ class SelectQuery extends Query {
   /** @override */
   compileNode(ctx) {
     return ctx._compileSelect(this);
+  }
+
+  /**
+   * Unfortunately this is the same as `_addFieldsOrReturning()` but using a
+   * `_distinct` member for storing the expressions.
+   */
+  _addDistinct(defs) {
+    var fields = this._distinct;
+    var i, len;
+
+    if (arguments.length > 1) {
+      if (fields === null) {
+        this._distinct = slice.call(arguments, 0);
+        return this;
+      }
+
+      for (i = 0, len = arguments.length; i < len; i++)
+        fields.push(arguments[i]);
+      return this;
+    }
+
+    // Handle a single parameter of type `Object` or `Array`.
+    if (typeof defs === "object") {
+      if (isArray(defs)) {
+        if (fields === null) {
+          this._distinct = defs;
+          return this;
+        }
+
+        for (i = 0, len = defs.length; i < len; i++)
+          fields.push(defs[i]);
+        return this;
+      }
+
+      if (!(defs instanceof Node)) {
+        if (fields === null)
+          this._distinct = fields = [];
+
+        for (var k in defs) {
+          var def = defs[k];
+
+          if (def === true) {
+            fields.push(k);
+            continue;
+          }
+
+          if (typeof def === "string")
+            def = IDENT(def);
+
+          fields.push(def.AS(k));
+        }
+
+        return this;
+      }
+
+      // ... Fall through ...
+    }
+
+    if (fields === null)
+      this._distinct = [defs];
+    else
+      fields.push(defs);
+
+    return this;
   }
 
   // Add `HAVING` condition of specified `type`.
@@ -4126,7 +4205,7 @@ class SelectQuery extends Query {
    * It accepts the same arguments as `SELECT()` so it can be used in a similar
    * way.
    *
-   * @param {...*} va Variable arguments.
+   * @param {...*} args Variable arguments.
    * @return {this}
    */
   ALL() {
@@ -4142,17 +4221,29 @@ class SelectQuery extends Query {
    * It accepts the same arguments as `SELECT()` so it can be used in a similar
    * way. The following expressions are equivalent:
    *
-   *   - `SELECT(["a", "b", "c"]).DISTINCT()`
-   *   - `SELECT().DISTINCT(["a", "b", "c"])`
-   *   - `SELECT().DISTINCT().FIELD(["a", "b", "c"])`
+   *   ```
+   *   SELECT(["a", "b", "c"]).DISTINCT()
+   *   SELECT().DISTINCT().FIELD(["a", "b", "c"])
+   *   ```
    *
-   * @param {...*} va Variable arguments.
+   * Please note that use can also use DISTINCT(arguments), however, if
+   * you use such construct it means that instead of DISTINCT you want a
+   * DISTINCT ON expression, which explicitly specifies which columns
+   * must be checked for duplicates.
+   *
+   *   `SELECT().DISTINCT(["a", "b").FIELD(["a", "b", "c")`
+   *
+   * Would yield:
+   *
+   *   `SELECT DISTINCT ON ("a", "b") "a", "b", "c"`
+   *
+   * @param {...*} args Variable arguments.
    * @return {this}
    */
-  DISTINCT() {
+  DISTINCT(...args) {
     this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
-    if (arguments.length)
-      this.FIELD.apply(this, arguments);
+    if (args.length)
+      this._addDistinct(...args);
     return this;
   }
 
@@ -4167,7 +4258,7 @@ class SelectQuery extends Query {
    *   3. `FROM([array])` - Like the second form, but the tables are specified
    *      by the array passed in the first argument.
    *
-   * @param {...*} va Variable arguments
+   * @param {...*} args Variable arguments
    */
   FROM() {
     var arg;
@@ -4291,10 +4382,10 @@ xql$node.SelectQuery = alias(SelectQuery, {
  *
  * @alias xql.SELECT
  */
-function SELECT(/* ... */) {
+function SELECT(...args) {
   var q = new SelectQuery();
-  if (arguments.length)
-    q.FIELD.apply(q, arguments);
+  if (args.length)
+    q.FIELD(...args);
   return q;
 }
 xql.SELECT = SELECT;
