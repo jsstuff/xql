@@ -10,30 +10,85 @@
  */
 const xql = $export[$as] = {};
 
-const VERSION = "1.4.10";
+// ============================================================================
+// [Public Constants]
+// ============================================================================
+
+/**
+ * Version string.
+ *
+ * @alias xql.misc.VERSION
+ */
+const VERSION = "1.4.11";
+
+/**
+ * Identifier's quote style.
+ *
+ * @alias xql.QuoteStyle
+ */
+const QuoteStyle = Object.freeze({
+  Double         : 0,          // Double quotes, for example "identifier".
+  Grave          : 1,          // Grave quotes, for example `identifier`.
+  Brackets       : 2           // Brackets, for example [identifier].
+});
+xql.QuoteStyle = QuoteStyle;
+
+/**
+ * Node flags.
+ *
+ * @alias xql.NodeFlags
+ */
+const NodeFlags = Object.freeze({
+  Immutable      : 0x00000001, // Node is immutable (cannot be changed).
+  Not            : 0x00000002, // Expression is negated (NOT).
+  Ascending      : 0x00000010, // Sort ascending (ASC).
+  Descending     : 0x00000020, // Sort descending (DESC).
+  NullsFirst     : 0x00000040, // Sort nulls first (NULLS FIRST).
+  NullsLast      : 0x00000080, // Sort nulls last (NULLS LAST).
+  All            : 0x00000100, // ALL flag.
+  Distinct       : 0x00000200, // DISTINCT flag.
+  Statement      : 0x10000000  // This node represents a query statement (like SELECT, UPDATE, etc).
+});
+xql.NodeFlags = NodeFlags;
+
+/**
+ * Operator and function flags.
+ *
+ * @alias xql.OpFlags
+ */
+const OpFlags = Object.freeze({
+  Unary          : 0x00000001, // Operator is unary (has one child node - `value`).
+  Binary         : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
+  Function       : 0x00000004, // Operator is a function.
+  Aggregate      : 0x00000008, // Operator is an aggregation function.
+  Void           : 0x00000010, // Operator has no return value.
+  LeftValues     : 0x00000100, // Operator expects left  values as (a, b[, ...]).
+  RightValues    : 0x00000200, // Operator expects right values as (a, b[, ...]).
+  SpaceSeparate  : 0x00000400  // Separate the function or operator by spaces before and after.
+});
+xql.OpFlags = OpFlags;
 
 // ============================================================================
-// [Internal Utilities]
+// [Internal Constants]
 // ============================================================================
 
 // Always returns false, used internally for browser support.
 function returnFalse() { return false; }
 
 // Global shorthands.
-const freeze   = Object.freeze;
 const hasOwn   = Object.prototype.hasOwnProperty;
 const slice    = Array.prototype.slice;
 
 const isArray  = Array.isArray;
 const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
 
-// ============================================================================
-// [Internal Constants]
-// ============================================================================
-
 // Empty object/array used as an replacement for null/undefined in some cases.
-const NoObject = freeze(Object.create(null));
-const NoArray = freeze([]);
+const NoObject = Object.freeze(Object.create(null));
+const NoArray = Object.freeze([]);
+
+// Aliases that we use in xql.js. It's much easier this way.
+const NF = NodeFlags;
+const OF = OpFlags;
 
 // Global regular expressions.
 const reNewLine      = /\n/g;                 // Check for new line characters.
@@ -56,7 +111,7 @@ const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
 // Map of identifiers that are not escaped.
 const IdentifierMap = { "*": true };
 
-const StatementToOutputKeywordMap = freeze({
+const StatementToOutputKeywordMap = Object.freeze({
   "INSERT": "INSERTED",
   "UPDATE": "UPDATED",
   "DELETE": "DELETED"
@@ -79,7 +134,7 @@ const BoolMap = (function() {
     "on"           : true
   };
   Object.keys(map).forEach(function(key) { map[key.toUpperCase()] = map[key]; });
-  return freeze(map);
+  return Object.freeze(map);
 })();
 
 const DateFieldMap = {
@@ -142,74 +197,21 @@ Object.keys(TypeMap).forEach(function(key) {
   TypeMap[key.toUpperCase()] = TypeMap[key];
 });
 
-// ============================================================================
-// [Public Constants]
-// ============================================================================
-
-/**
- * Identifier's quote style.
- *
- * @alias xql.QuoteStyle
- */
-const QuoteStyle = freeze({
-  kDouble        : 0,          // Double quotes, for example "identifier".
-  kGrave         : 1,          // Grave quotes, for example `identifier`.
-  kBrackets      : 2           // Brackets, for example [identifier].
-});
-xql.QuoteStyle = QuoteStyle;
-
-/**
- * Node flags.
- *
- * @alias xql.NodeFlags
- */
-const NodeFlags = freeze({
-  kImmutable     : 0x00000001, // Node is immutable (cannot be changed).
-  kNot           : 0x00000002, // Expression is negated (NOT).
-  kAscending     : 0x00000010, // Sort ascending (ASC).
-  kDescending    : 0x00000020, // Sort descending (DESC).
-  kNullsFirst    : 0x00000040, // Sort nulls first (NULLS FIRST).
-  kNullsLast     : 0x00000080, // Sort nulls last (NULLS LAST).
-  kAll           : 0x00000100, // ALL flag.
-  kDistinct      : 0x00000200, // DISTINCT flag.
-  kStatement     : 0x10000000  // This node represents a query statement (like SELECT, UPDATE, etc).
-});
-xql.NodeFlags = NodeFlags;
-
-// Sort directions.
-const SortDirection = freeze({
+// Sort direction enum value from string.
+const SortDirection = Object.freeze({
   ""             : 0,
   "0"            : 0,
-
-  "1"            : NodeFlags.kAscending,
-  "-1"           : NodeFlags.kDescending,
-
-  "ASC"          : NodeFlags.kAscending,
-  "DESC"         : NodeFlags.kDescending
+  "1"            : NF.Ascending,
+  "-1"           : NF.Descending,
+  "ASC"          : NF.Ascending,
+  "DESC"         : NF.Descending
 });
 
-// Sort nulls.
-const SortNulls = freeze({
-  "NULLS FIRST"  : NodeFlags.kNullsFirst,
-  "NULLS LAST"   : NodeFlags.kNullsLast
+// Sort nulls enum value from string.
+const SortNulls = Object.freeze({
+  "NULLS FIRST"  : NF.NullsFirst,
+  "NULLS LAST"   : NF.NullsLast
 });
-
-/**
- * Operator and function flags.
- *
- * @alias xql.OpFlags
- */
-const OpFlags = freeze({
-  kUnary         : 0x00000001, // Operator is unary (has one child node - `value`).
-  kBinary        : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
-  kFunction      : 0x00000004, // Operator is a function.
-  kAggregate     : 0x00000008, // Operator is an aggregation function.
-  kVoid          : 0x00000010, // Operator has no return value.
-  kLeftValues    : 0x00000100, // Operator expects left  values as (a, b[, ...]).
-  kRightValues   : 0x00000200, // Operator expects right values as (a, b[, ...]).
-  kSpaceSeparate : 0x00000400  // Separate the function or operator by spaces before and after.
-});
-xql.OpFlags = OpFlags;
 
 // ============================================================================
 // [xql.OpInfo]
@@ -232,13 +234,20 @@ const OpInfo = new class OpInfo {
   }
 
   add(info) {
-    this._map[info.name] = info;
+    this._addInternal(info.name, info);
     if (info.nameNot) {
       const infoNot = Object.assign({}, info);
-      infoNot.nodeFlags = NodeFlags.kNot;
-      this._map[info.nameNot] = infoNot;
+      infoNot.nodeFlags = NF.Not;
+      this._addInternal(info.nameNot, infoNot);
     }
     return this;
+  }
+
+  _addInternal(key, info) {
+    this._map[key] = info;
+    const alias = key.replace(/ /g, "_");
+    if (alias !== key)
+      this._map[alias] = info;
   }
 
   addAlias(a, b) {
@@ -533,7 +542,7 @@ class Context {
 
     // Dialect features (these are modified by a dialect-specific `Context`).
     this.features = {
-      quoteStyle       : QuoteStyle.kDouble, // The default SQL quotes are "".
+      quoteStyle       : QuoteStyle.Double, // The default SQL quotes are "".
       nativeBoolean    : false,              // Supports BOOLEAN.
       nativeRange      : false,              // Supports RANGE.
       nativeArray      : false,              // Supports ARRAY.
@@ -542,7 +551,9 @@ class Context {
       nativeHSTORE     : false,              // Supports HSTORE.
       nullsOrdering    : false,              // Supports NULLS FIRST and NULLS LAST.
       nullsSortBottom  : false,              // NULLs are sorted last by default.
+      defaultValues    : false,              // Supports DEFAULT keyword in VALUES(...).
       selectTopN       : false,              // Supports Top-N queries.
+      leastGreatest    : "LEAST|GREATEST",   // Supports GREATEST/LEAST functions.
       returning        : "",                 // If RETURNING or OUTPUT is supported.
       specialNumbers   : false               // No special numbers by default.
     };
@@ -572,6 +583,7 @@ class Context {
     this.concatNoSpace = null;
 
     this._wrap = null;
+    this._compileInsert = null;
     this._compileReturning = null;
     this._compileOffsetLimit = null;
   }
@@ -718,9 +730,9 @@ class Context {
     // bring any performance gain.
     const qs = this.features.quoteStyle;
 
-    if (qs == QuoteStyle.kDouble  ) return ident.replace(reDoubleQuotes, "\"\"");
-    if (qs == QuoteStyle.kGrave   ) return ident.replace(reGraveQuotes, "``");
-    if (qs == QuoteStyle.kBrackets) return ident.replace(reBrackets, fnEscapeBrackets);
+    if (qs == QuoteStyle.Double  ) return ident.replace(reDoubleQuotes, "\"\"");
+    if (qs == QuoteStyle.Grave   ) return ident.replace(reGraveQuotes, "``");
+    if (qs == QuoteStyle.Brackets) return ident.replace(reBrackets, fnEscapeBrackets);
 
     throwCompileError("Cannot escape identifier: Invalid 'features.quoteStyle' set");
   }
@@ -1042,26 +1054,26 @@ class Context {
    */
   _updateInternalData() {
     const pretty = this.pretty;
-    const features = this.features;
-    const qs = this.features.quoteStyle;
+    const f = this.features;
+    const qs = f.quoteStyle;
 
     // Update everything sensitive to DB dialect and dialect-based options.
-    this._DB_TRUE    = features.nativeBoolean ? "TRUE"  : "1";
-    this._DB_FALSE   = features.nativeBoolean ? "FALSE" : "0";
+    this._DB_TRUE = f.nativeBoolean ? "TRUE"  : "1";
+    this._DB_FALSE = f.nativeBoolean ? "FALSE" : "0";
 
-    if (qs === QuoteStyle.kDouble) {
+    if (qs === QuoteStyle.Double) {
       this._DB_IDENT_OPEN = "\"";
       this._DB_IDENT_CLOSE = "\"";
       this._RE_IDENT_CHECK = /[\.\"\x00]/g;
     }
 
-    if (qs === QuoteStyle.kGrave) {
+    if (qs === QuoteStyle.Grave) {
       this._DB_IDENT_OPEN = "`";
       this._DB_IDENT_CLOSE = "`";
       this._RE_IDENT_CHECK = /[\.\`\x00]/g;
     }
 
-    if (qs === QuoteStyle.kBrackets) {
+    if (qs === QuoteStyle.Brackets) {
       this._DB_IDENT_OPEN = "[";
       this._DB_IDENT_CLOSE = "]";
       this._RE_IDENT_CHECK = /[\.\[\]\x00]/g;
@@ -1077,18 +1089,21 @@ class Context {
     this.indent        = !pretty ? this._indent$none  : this._indent$pretty;
     this.concat        = !pretty ? this._concat$space : this._concat$pretty;
     this.concatNoSpace = !pretty ? this._concat$none  : this._concat$pretty;
-    this._wrap         = !pretty ? this._wrapSimple   : this._wrapPretty;
+    this._wrap         = !pretty ? this._wrap$simple  : this._wrap$pretty;
 
-    switch (features.returning) {
-      case ""         : this._compileReturning = this._compileReturning$NoImpl  ; break;
+    this._compileInsert = !f.defaultValues ? this._compileInsert$noDefaults
+                                           : this._compileInsert$useDefaults;
+
+    switch (f.returning) {
+      case ""         : this._compileReturning = this._compileReturning$NoImpl; break;
       case "RETURNING": this._compileReturning = this._compileReturning$Base; break;
       case "OUTPUT"   : this._compileReturning = this._compileReturning$Output; break;
       default:
-        throwTypeError(`Invalid value '${features.returning}' in features.returning`);
+        throwTypeError(`Invalid value '${f.returning}' in features.returning`);
     }
 
-    this._compileOffsetLimit = features.selectTopN ? this._compileOffsetLimitAsTopN
-                                                   : this._compileOffsetLimitSimple;
+    this._compileOffsetLimit = !f.selectTopN ? this._compileOffsetLimit$Simple
+                                             : this._compileOffsetLimit$TopN;
   }
 
   /**
@@ -1136,8 +1151,8 @@ class Context {
     return _STR_CONCAT + s.replace(reNewLine, _STR_CONCAT);
   }
 
-  _wrapSimple(str) { return `(${str})`; }
-  _wrapPretty(str) { return "(" + indent(str + ")", " ").substr(1); }
+  _wrap$simple(str) { return `(${str})`; }
+  _wrap$pretty(str) { return "(" + indent(str + ")", " ").substr(1); }
 
   _compileValues(something) {
     if (something instanceof Node) {
@@ -1198,12 +1213,12 @@ class Context {
     var opInfo = OpInfo.get(type);
     var opFlags = opInfo ? opInfo.opFlags : 0;
 
-    if (opFlags & OpFlags.kLeftValues)
+    if (opFlags & OpFlags.LeftValues)
       left = this._compileValues(leftNode);
     else
       left = this._compile(leftNode);
 
-    if (opFlags & OpFlags.kRightValues)
+    if (opFlags & OpFlags.RightValues)
       right = this._compileValues(rightNode);
     else
       right = this._compile(rightNode);
@@ -1219,12 +1234,12 @@ class Context {
         else if (opInfo.name === "<>") {
           opInfo = OpInfo.get("IS");
           opFlags = opInfo.opFlags;
-          nodeFlags |= NodeFlags.kNot;
+          nodeFlags |= NF.Not;
         }
       }
 
       keyword = opInfo.format;
-      if (nodeFlags & NodeFlags.kNot)
+      if (nodeFlags & NF.Not)
         keyword = opInfo.formatNot;
     }
     else {
@@ -1274,7 +1289,7 @@ class Context {
     }
 
     // Compile `DISTINCT` if specified.
-    if (flags & NodeFlags.kDistinct)
+    if (flags & NF.Distinct)
       out = "DISTINCT " + out;
 
     // Form the function including an alias.
@@ -1301,22 +1316,20 @@ class Context {
     var out = "SELECT";
 
     const BLANK = this._STR_BLANK;
-    const flags = node._flags;
 
+    const flags = node._flags;
     const offset = node._offset;
     const limit = node._limit;
 
     // Compile `SELECT [ALL|DISTINCT]`
     //
     // Use `*` if  fields are not used.
-    if (flags & NodeFlags.kDistinct) {
+    if (flags & NF.Distinct) {
       const distinct = node._distinct;
-      if (isArray(distinct) && distinct.length) {
+      if (isArray(distinct) && distinct.length)
         out += this.concat("DISTINCT ON (" + this.concatNoSpace(this._compileFields(distinct) + ")"));
-      }
-      else {
+      else
         out += " DISTINCT";
-      }
     }
 
     // Compile `[*|fields]`
@@ -1368,68 +1381,113 @@ class Context {
   }
 
   /**
-   * Compiles INSERT.
-   *
-   * @param {xql.node.InsertQuery} node Insert node.
-   * @return {string} Compiled INSERT.
+   * Compiles INSERT that can contain DEFAULT in VALUES().
    *
    * @private
    */
-  _compileInsert(node) {
-    var out = "";
-    var t = "";
-
-    var k;
-    var i, len;
-
+  _compileInsert$useDefaults(node) {
     const BLANK = this._STR_BLANK;
+    const features = this.features;
 
     const table = node._table;
+    const objects = node._values;
     const columns = node._columns;
     const returning = node._fieldsOrReturning || NoArray;
     const typeMapping = node._typeMapping || NoObject;
-
-    const features = this.features;
-    const hasReturning = features.returning && returning.length !== 0;
 
     // Compile `INSERT INTO table (...)`.
     if (!table)
       throwCompileError("InsertQuery.compileNode() - Table not defined");
 
-    if (typeof table === "string")
-      t = this.escapeIdentifier(table);
-    else
-      t = table.compileNode(this);
-
-    for (k in columns) {
-      if (out) out += ", ";
-      out += this.escapeIdentifier(k);
-    }
-    out = "INSERT INTO" + this.concat(t + " (" + out + ")");
-
-    // Compile `VALUES (...)[, (...)]`.
-    const objects = node._values;
     const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
+    const into = typeof table === "string" ? this.escapeIdentifier(table)
+                                           : table.compileNode(this);
 
-    out += BLANK + "VALUES";
-    for (i = 0, len = objects.length; i < len; i++) {
+    var k;
+    var cols = "";
+
+    // Compile columns that follow "INSERT INTO ..."
+    for (k in columns) {
+      if (cols) cols += ", ";
+      cols += this.escapeIdentifier(k);
+    }
+
+    // Compile values.
+    var out = "INSERT INTO" + this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
+    for (var i = 0, len = objects.length; i < len; i++) {
       const object = objects[i];
 
-      t = "";
+      var vals = "";
       for (k in columns) {
-        if (t) t += ", ";
+        if (vals) vals += ", ";
         if (hasOwn.call(object, k))
-          t += this._compile(object[k], typeMapping[k]);
+          vals += this._compile(object[k], typeMapping[k]);
         else
-          t += "DEFAULT";
+          vals += "DEFAULT";
       }
 
       if (i !== 0) out += ",";
-      out += prefix + t + ")";
+      out += prefix + vals + ")";
     }
 
     // Compile `RETURNING ...` or `OUTPUT ...`.
-    if (hasReturning)
+    if (features.returning && returning.length !== 0)
+      out += BLANK + this._compileReturning(returning, "INSERT");
+
+    return out;
+  }
+
+  /**
+   * Compiles INSERT that cannot contain DEFAULT in VALUES().
+   *
+   * @private
+   */
+  _compileInsert$noDefaults(node) {
+    const BLANK = this._STR_BLANK;
+    const features = this.features;
+
+    const table = node._table;
+    const objects = node._values;
+    const returning = node._fieldsOrReturning || NoArray;
+    const typeMapping = node._typeMapping || NoObject;
+
+    // Compile `INSERT INTO table (...)`.
+    if (!table)
+      throwCompileError("InsertQuery.compileNode() - Table not defined");
+
+    const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
+    const into = typeof table === "string" ? this.escapeIdentifier(table)
+                                           : table.compileNode(this);
+
+    var out = "";
+    var prevCols = "";
+
+    for (var i = 0, len = objects.length; i < len; i++) {
+      const object = objects[i];
+      var cols = "";
+      var vals = "";
+
+      for (var k in object) {
+        if (cols) cols += ", ";
+        if (vals) vals += ", ";
+
+        cols += this.escapeIdentifier(k);
+        vals += this._compile(object[k], typeMapping[k]);
+      }
+
+      if (cols === prevCols) {
+        out += "," + prefix + vals + ")";
+      }
+      else {
+        prevCols = cols;
+        if (out) out += ";\n";
+        out += "INSERT INTO" + this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
+        out += prefix + vals + ")";
+      }
+    }
+
+    // Compile `RETURNING ...` or `OUTPUT ...`.
+    if (features.returning && returning.length !== 0)
       out += BLANK + this._compileReturning(returning, "INSERT");
 
     return out;
@@ -1449,12 +1507,10 @@ class Context {
 
     const BLANK = this._STR_BLANK;
     const COMMA = this._STR_COMMA;
+    const features = this.features;
 
     const table = node._table;
     const returning = node._fieldsOrReturning || NoArray;
-
-    const features = this.features;
-    const hasReturning = features.returning && returning.length !== 0;
 
     // Compile `UPDATE ...`
     if (!table)
@@ -1506,7 +1562,7 @@ class Context {
       out += BLANK + this._compileOffsetLimit(offset, limit);
 
     // Compile `RETURNING ...` or `OUTPUT ...`.
-    if (hasReturning)
+    if (features.returning && returning.length !== 0)
       out += BLANK + this._compileReturning(returning, "UPDATE");
 
     return out;
@@ -1525,12 +1581,10 @@ class Context {
     var t = "";
 
     const BLANK = this._STR_BLANK;
+    const features = this.features;
 
     const table = node._table;
     const returning = node._fieldsOrReturning || NoArray;
-
-    const features = this.features;
-    const hasReturning = features.returning && returning.length !== 0;
 
     // Compile `DELETE FROM ...`
     if (!table)
@@ -1561,7 +1615,7 @@ class Context {
       out += BLANK + this._compileOffsetLimit(offset, limit);
 
     // Compile `RETURNING ...` or `OUTPUT ...`.
-    if (hasReturning)
+    if (features.returning && returning.length !== 0)
       out += BLANK + this._compileReturning(returning, "DELETE");
 
     return out;
@@ -1579,7 +1633,7 @@ class Context {
     var combineOp = node._type;
     const flags = node._flags;
 
-    if (flags & NodeFlags.kAll)
+    if (flags & NF.All)
       combineOp += " ALL";
 
     const BLANK = this._STR_BLANK;
@@ -1694,23 +1748,22 @@ class Context {
     else
       throwCompileError("Sort.compileNode() - Invalid value type " + typeof value);
 
-    const sortOrder = (flags & NodeFlags.kAscending ) ? " ASC"  :
-                      (flags & NodeFlags.kDescending) ? " DESC" : "";
+    const sortOrder = (flags & NF.Ascending ) ? " ASC"  :
+                      (flags & NF.Descending) ? " DESC" : "";
 
-    if ((flags & (NodeFlags.kNullsFirst | NodeFlags.kNullsLast)) === 0)
+    if ((flags & (NF.NullsFirst | NF.NullsLast)) === 0)
       return out + sortOrder;
 
     const features = this.features;
-    const nullsFirst = flags & NodeFlags.kNullsFirst ? true : false;
+    const nullsFirst = flags & NF.NullsFirst ? true : false;
 
     if (features.nullsOrdering)
       return out + sortOrder + (nullsFirst ? " NULLS FIRST" : " NULLS LAST");
 
     // Unsupported `NULLS FIRST` and `NULLS LAST`. The best we can do is to omit
     // it completely if the DB sorts the records the requested way by default.
-    const nullsFirstByDB = features.nullsSortBottom
-      ? (flags & NodeFlags.kDescending) !== 0
-      : (flags & NodeFlags.kDescending) === 0;
+    const nullsFirstByDB = features.nullsSortBottom ? (flags & NF.Descending) !== 0
+                                                    : (flags & NF.Descending) === 0;
 
     if (nullsFirst === nullsFirstByDB)
       return out + sortOrder;
@@ -1846,7 +1899,7 @@ class Context {
     return out;
   }
 
-  _compileOffsetLimitSimple(offset, limit) {
+  _compileOffsetLimit$Simple(offset, limit) {
     const CONCAT = this._STR_CONCAT;
     var out = limit ? "LIMIT" + CONCAT + String(limit) : "";
 
@@ -1858,7 +1911,7 @@ class Context {
     return out + "OFFSET" + CONCAT + String(offset);
   }
 
-  _compileOffsetLimitAsTopN(offset, limit) {
+  _compileOffsetLimit$TopN(offset, limit) {
     const CONCAT = this._STR_CONCAT;
     var out = offset || limit ? "OFFSET" + CONCAT + String(offset) + (offset === 1 ? " ROW" : " ROWS") : "";
 
@@ -1907,6 +1960,7 @@ class PGSQLContext extends Context {
 
     // Setup Postgres features.
     Object.assign(this.features, {
+      quoteStyle       : QuoteStyle.Double,
       nativeBoolean    : true,
       nativeRange      : true,
       nativeArray      : true,
@@ -1915,6 +1969,8 @@ class PGSQLContext extends Context {
       nativeHSTORE     : true,
       nullsOrdering    : true,
       nullsSortBottom  : true,
+      defaultValues    : true,
+      leastGreatest    : "LEAST|GREATEST",
       returning        : "RETURNING",
       specialNumbers   : true
     });
@@ -2244,8 +2300,10 @@ class MySQLContext extends Context {
     super("mysql", options);
 
     Object.assign(this.features, {
-      quoteStyle    : QuoteStyle.kGrave,
-      nativeBoolean : true
+      quoteStyle       : QuoteStyle.Grave,
+      nativeBoolean    : true,
+      defaultValues    : true,
+      leastGreatest    : "LEAST|GREATEST"
     });
 
     this._updateInternalData();
@@ -2257,7 +2315,7 @@ class MySQLContext extends Context {
   }
 
   /** @override */
-  _compileOffsetLimitSimple(offset, limit) {
+  _compileOffsetLimit$Simple(offset, limit) {
     // Compile either `LIMIT <limit>` or `LIMIT <offset>, <limit>`.
     const limitStr = limit ? String(limit) : "18446744073709551615";
     if (offset === 0)
@@ -2297,9 +2355,11 @@ class MSSQLContext extends Context {
     super("mssql", options);
 
     Object.assign(this.features, {
-      quoteStyle       : QuoteStyle.kBrackets,
+      quoteStyle       : QuoteStyle.Brackets,
       nativeBoolean    : false,
+      defaultValues    : true,
       selectTopN       : true,
+      leastGreatest    : "IIF",
       returning        : "OUTPUT"
     });
 
@@ -2333,6 +2393,11 @@ xql$dialect.add("mssql", MSSQLContext);
 class SQLiteContext extends Context {
   constructor(options) {
     super("sqlite", options);
+
+    Object.assign(this.features, {
+      quoteStyle       : QuoteStyle.Double,
+      leastGreatest    : "MIN|MAX"
+    });
 
     this._updateInternalData();
   }
@@ -2447,7 +2512,7 @@ class Node {
 
   /**
    * Returns true if the node can be negated (by either replacing its operator
-   * or by adding a `NodeFlags.kNot` to its flags. Please note that if a `negate()`
+   * or by adding a `NodeFlags.Not` to its flags. Please note that if a `negate()`
    * is called on node, which cannot be negated an exteption would be thrown.
    */
   canNegate() {
@@ -2462,7 +2527,7 @@ class Node {
    * @return {boolean} True if the compiled query can be executed, false otherwise.
    */
   isStatement() {
-    return (this._flags & NodeFlags.kStatement) != 0;
+    return (this._flags & NF.Statement) != 0;
   }
 
   /**
@@ -2602,7 +2667,7 @@ class Node {
       }
 
       if (info.nameNot != null) {
-        this._flags ^= NodeFlags.kNot;
+        this._flags ^= NF.Not;
         return this;
       }
     }
@@ -3178,7 +3243,7 @@ class Func extends NodeArray {
   constructor(type, args) {
     super(type, "");
 
-    this._flags |= NodeFlags.kAll;
+    this._flags |= NF.All;
     this._values = args || [];
   }
 
@@ -3207,7 +3272,7 @@ class Func extends NodeArray {
    * @return {this}
    */
   ALL() {
-    return this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
+    return this.replaceFlag(NF.Distinct, NF.All);
   }
 
   /**
@@ -3216,7 +3281,7 @@ class Func extends NodeArray {
    * @return {this}
    */
   DISTINCT() {
-    return this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
+    return this.replaceFlag(NF.All, NF.Distinct);
   }
 
   static makeWrap(type, flags, ctor) {
@@ -3456,9 +3521,9 @@ class Sort extends Identifier {
    */
   getSortOrder() {
     var flags = this._flags;
-    if (flags & NodeFlags.kDescending)
+    if (flags & NF.Descending)
       return "DESC";
-    else if (flags & NodeFlags.kAscending)
+    else if (flags & NF.Ascending)
       return "ASC";
     else
       return "";
@@ -3472,7 +3537,7 @@ class Sort extends Identifier {
    * @throws {CompileError} If `order` contains an invalid value.
    */
   setSortOrder(order) {
-    var flags = this._flags & ~(NodeFlags.kAscending | NodeFlags.kDescending);
+    var flags = this._flags & ~(NF.Ascending | NF.Descending);
     if (hasOwn.call(SortDirection, order))
       this._flags = flags | SortDirection[order];
     else
@@ -3488,9 +3553,9 @@ class Sort extends Identifier {
    */
   getNullsOrder() {
     var flags = this._flags;
-    if (flags & NodeFlags.kNullsFirst)
+    if (flags & NF.NullsFirst)
       return "NULLS FIRST";
-    else if (flags & NodeFlags.kNullsLast)
+    else if (flags & NF.NullsLast)
       return "NULLS LAST";
     else
       return "";
@@ -3505,7 +3570,7 @@ class Sort extends Identifier {
    * @throws {CompileError} If `order` contains an invalid value.
    */
   setNullsOrder(order) {
-    var flags = this._flags & ~(NodeFlags.kNullsFirst | NodeFlags.kNullsLast);
+    var flags = this._flags & ~(NF.NullsFirst | NF.NullsLast);
     if (hasOwn.call(SortNulls, order))
       this._flags = flags | SortNulls[order];
     else
@@ -3520,7 +3585,7 @@ class Sort extends Identifier {
    *   order has not been set (xql distinguish between not set, ASC, and DESC).
    */
   isAscending() {
-    return (this._flags & NodeFlags.kAscending) !== 0;
+    return (this._flags & NF.Ascending) !== 0;
   }
 
   /**
@@ -3530,7 +3595,7 @@ class Sort extends Identifier {
    *   order has not been set (xql distinguish between not set, ASC, and DESC).
    */
   isDescending() {
-    return (this._flags & NodeFlags.kDescending) !== 0;
+    return (this._flags & NF.Descending) !== 0;
   }
 
   /**
@@ -3540,7 +3605,7 @@ class Sort extends Identifier {
    *   false if the sorting nulls option is not "NULLS FIRST" or is not set.
    */
   hasNullsFirst() {
-    return (this._flags & NodeFlags.kNullsFirst) !== 0;
+    return (this._flags & NF.NullsFirst) !== 0;
   }
 
   /**
@@ -3550,7 +3615,7 @@ class Sort extends Identifier {
    *   false if the sorting nulls option is not "NULLS LAST" or is not set.
    */
   hasNullsLast() {
-    return (this._flags & NodeFlags.kNullsLast) !== 0;
+    return (this._flags & NF.NullsLast) !== 0;
   }
 
   /**
@@ -3561,7 +3626,7 @@ class Sort extends Identifier {
    * @return {this}
    */
   ASC() {
-    return this.replaceFlag(NodeFlags.kDescending, NodeFlags.kAscending);
+    return this.replaceFlag(NF.Descending, NF.Ascending);
   }
 
   /**
@@ -3572,7 +3637,7 @@ class Sort extends Identifier {
    * @return {this}
    */
   DESC() {
-    return this.replaceFlag(NodeFlags.kAscending, NodeFlags.kDescending);
+    return this.replaceFlag(NF.Ascending, NF.Descending);
   }
 
   /**
@@ -3583,7 +3648,7 @@ class Sort extends Identifier {
    * @return {this}
    */
   NULLS_FIRST() {
-    return this.replaceFlag(NodeFlags.kNullsLast, NodeFlags.kNullsFirst);
+    return this.replaceFlag(NF.NullsLast, NF.NullsFirst);
   }
 
   /**
@@ -3594,7 +3659,7 @@ class Sort extends Identifier {
    * @return {this}
    */
   NULLS_LAST() {
-    return this.replaceFlag(NodeFlags.kNullsFirst, NodeFlags.kNullsLast);
+    return this.replaceFlag(NF.NullsFirst, NF.NullsLast);
   }
 }
 xql$node.Sort = Sort;
@@ -3749,7 +3814,7 @@ class Query extends Statement {
     // It can be escaped by using PostgreSQL ARRAY[] or {} or as JSON [].
     this._typeMapping = null;
 
-    this._flags |= NodeFlags.kStatement;
+    this._flags |= NF.Statement;
   }
 
   /** @override */
@@ -4113,7 +4178,7 @@ class SelectQuery extends Query {
   constructor() {
     super("SELECT");
 
-    this._flags |= NodeFlags.kAll;
+    this._flags |= NF.All;
 
     // DISTINCT ON (...) clause.
     this._distinct = null;
@@ -4256,7 +4321,7 @@ class SelectQuery extends Query {
    * @return {this}
    */
   ALL() {
-    this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
+    this.replaceFlag(NF.Distinct, NF.All);
     if (arguments.length)
       this.FIELD.apply(this, arguments);
     return this;
@@ -4288,7 +4353,7 @@ class SelectQuery extends Query {
    * @return {this}
    */
   DISTINCT(...args) {
-    this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
+    this.replaceFlag(NF.All, NF.Distinct);
     if (args.length)
       this._addDistinct(...args);
     return this;
@@ -4648,7 +4713,7 @@ class CompoundQuery extends Query {
   constructor(type, values) {
     super(type);
 
-    this._flags |= NodeFlags.kDistinct;
+    this._flags |= NF.Distinct;
     this._values = values || [];
   }
 
@@ -4668,7 +4733,7 @@ class CompoundQuery extends Query {
    * @return {this}
    */
   ALL() {
-    return this.replaceFlag(NodeFlags.kDistinct, NodeFlags.kAll);
+    return this.replaceFlag(NF.Distinct, NF.All);
   }
 
   /**
@@ -4677,7 +4742,7 @@ class CompoundQuery extends Query {
    * @return {this}
    */
   DISTINCT() {
-    return this.replaceFlag(NodeFlags.kAll, NodeFlags.kDistinct);
+    return this.replaceFlag(NF.All, NF.Distinct);
   }
 
   push() {
@@ -4820,15 +4885,6 @@ xql.VAL = xql.VALUE;
 
 const N = -1;
 
-const kUnary         = OpFlags.kUnary;
-const kBinary        = OpFlags.kBinary;
-const kFunction      = OpFlags.kFunction;
-const kAggregate     = OpFlags.kAggregate;
-const kVoid          = OpFlags.kVoid;
-const kLeftValues    = OpFlags.kLeftValues;
-const kRightValues   = OpFlags.kRightValues;
-const kSpaceSeparate = OpFlags.kSpaceSeparate;
-
 function register(defs, commons) {
   const baseOpFlags  = commons.opFlags  || 0;
   const baseCategory = commons.category || "core";
@@ -4849,14 +4905,14 @@ function register(defs, commons) {
       name = name.replace("[NOT]", "").trim();
     }
 
-    var format = (opFlags & kSpaceSeparate) ? " " + name + " " : name;
-    var formatNot = nameNot ? ((opFlags & kSpaceSeparate) ? " " + nameNot + " " : nameNot) : null;
+    var format = (opFlags & OF.SpaceSeparate) ? " " + name + " " : name;
+    var formatNot = nameNot ? ((opFlags & OF.SpaceSeparate) ? " " + nameNot + " " : nameNot) : null;
 
     var ctor = def.ctor;
     if (!ctor)
-      ctor = (opFlags & kUnary   ) ? Unary  :
-             (opFlags & kBinary  ) ? Binary :
-             (opFlags & kFunction) ? Func   : null;
+      ctor = (opFlags & OF.Unary   ) ? Unary  :
+             (opFlags & OF.Binary  ) ? Binary :
+             (opFlags & OF.Function) ? Func   : null;
 
     if (!ctor)
       throwTypeError("Cannot guess constructor as nothing is specified in 'opFlags'");
@@ -4900,7 +4956,7 @@ function compileCast(ctx, $) {
 function compileBetween(ctx, $) {
   const args = $._values;
   const info = OpInfo.get($._type);
-  const keyword = ($._flags & NodeFlags.kNot) ? info.formatNot : info.format;
+  const keyword = ($._flags & NF.Not) ? info.formatNot : info.format;
 
   return ctx.escapeOrWrap(args[0]) + keyword +
          ctx.escapeOrWrap(args[1]) + " AND " +
@@ -4943,6 +4999,35 @@ function compileTrunc(ctx, $) {
       args = args.concat(0);
   }
 
+  return ctx._compileFuncImpl(name, args, $._flags, $._alias);
+}
+
+function compileGreatestLeast(ctx, $) {
+  var name = $._type;
+  var args = $._values;
+
+  var n = args.length;
+  if (n <= 1)
+    return n === 1 ? "(" + ctx._compile(args[0]) + ")" : "NULL";
+
+  switch (ctx.features.leastGreatest) {
+    case "MIN|MAX": {
+      name = name === "LEAST" ? "MIN" : "MAX";
+      break;
+    }
+
+    case "IIF": {
+      var sign = name === "LEAST" ? "<" : ">";
+      if (n > 2)
+        throwCompileError(`Cannot replace '${name}' of ${n} arguments with 'IIF'`);
+
+      const a = ctx._compile(args[0]);
+      const b = ctx._compile(args[1]);
+      return `IIF((${a}) ${sign} (${b}), ${a}, ${b})`;
+    }
+  }
+
+  // Implements either LEAST|GREATEST or MIN|MAX approach.
   return ctx._compileFuncImpl(name, args, $._flags, $._alias);
 }
 
@@ -5049,205 +5134,212 @@ function compileExtract(ctx, $) {
 }
 
 register([
-  { name: "NOT"                      , args: 1     , opFlags: 0           , dialect: "*"     , doc: "NOT($1)" },
-  { name: "[NOT] EXISTS"             , args: 1     , opFlags: 0           , dialect: "*"     , doc: "EXISTS($1)" }
-], { category: "general", opFlags: kUnary });
+  { name: "NOT"                      , args: 1     , dialect: "*"     , doc: "NOT($1)" },
+  { name: "[NOT] EXISTS"             , args: 1     , dialect: "*"     , doc: "EXISTS($1)" }
+], { category: "general", opFlags: OF.Unary });
 
 register([
-  { name: "="                        , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: ">"                        , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: ">="                       , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "<"                        , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "<="                       , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "<>"                       , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "@>"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Contains"               },
-  { name: "<@"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Contained by"           },
-  { name: "&&"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Overlap"                },
-  { name: "&<"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Right of"               },
-  { name: "&>"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Left of"                },
-  { name: "-|-"                      , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Adjacent to"            },
-  { name: "+"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Add / Union"            },
-  { name: "-"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Subtract / Difference"  },
-  { name: "*"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Multiply / Intersect"   },
-  { name: "/"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Divide"                 },
-  { name: "%"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Modulo"                 },
-  { name: "^"                        , args: 2     , opFlags: 0           , dialect: "pgsql" , doc: "Power"                  },
-  { name: "&"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Bitwise AND"            },
-  { name: "|"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Bitwise OR"             },
-  { name: "#"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Bitwise XOR"            },
-  { name: "~"                        , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Bitwise NOT / Match"    },
-  { name: "<<"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Left shift / Left of"   },
-  { name: ">>"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Right shift / Right of" },
-  { name: "||"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Concatenate"            },
-  { name: "~*"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Match (I)"              },
-  { name: "!~"                       , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Not match"              },
-  { name: "!~*"                      , args: 2     , opFlags: 0           , dialect: "*"     , doc: "Not match (I)"          }
-], { category: "general", opFlags: kBinary | kSpaceSeparate });
+  { name: "="                        , args: 2     , dialect: "*"     },
+  { name: ">"                        , args: 2     , dialect: "*"     },
+  { name: ">="                       , args: 2     , dialect: "*"     },
+  { name: "<"                        , args: 2     , dialect: "*"     },
+  { name: "<="                       , args: 2     , dialect: "*"     },
+  { name: "<>"                       , args: 2     , dialect: "*"     },
+  { name: "@>"                       , args: 2     , dialect: "*"      , doc: "Contains"               },
+  { name: "<@"                       , args: 2     , dialect: "*"      , doc: "Contained by"           },
+  { name: "&&"                       , args: 2     , dialect: "*"      , doc: "Overlap"                },
+  { name: "&<"                       , args: 2     , dialect: "*"      , doc: "Right of"               },
+  { name: "&>"                       , args: 2     , dialect: "*"      , doc: "Left of"                },
+  { name: "-|-"                      , args: 2     , dialect: "*"      , doc: "Adjacent to"            },
+  { name: "+"                        , args: 2     , dialect: "*"      , doc: "Add / Union"            },
+  { name: "-"                        , args: 2     , dialect: "*"      , doc: "Subtract / Difference"  },
+  { name: "*"                        , args: 2     , dialect: "*"      , doc: "Multiply / Intersect"   },
+  { name: "/"                        , args: 2     , dialect: "*"      , doc: "Divide"                 },
+  { name: "%"                        , args: 2     , dialect: "*"      , doc: "Modulo"                 },
+  { name: "^"                        , args: 2     , dialect: "pgsql"  , doc: "Power"                  },
+  { name: "&"                        , args: 2     , dialect: "*"      , doc: "Bitwise AND"            },
+  { name: "|"                        , args: 2     , dialect: "*"      , doc: "Bitwise OR"             },
+  { name: "#"                        , args: 2     , dialect: "*"      , doc: "Bitwise XOR"            },
+  { name: "~"                        , args: 2     , dialect: "*"      , doc: "Bitwise NOT / Match"    },
+  { name: "<<"                       , args: 2     , dialect: "*"      , doc: "Left shift / Left of"   },
+  { name: ">>"                       , args: 2     , dialect: "*"      , doc: "Right shift / Right of" },
+  { name: "||"                       , args: 2     , dialect: "*"      , doc: "Concatenate"            },
+  { name: "~*"                       , args: 2     , dialect: "*"      , doc: "Match (I)"              },
+  { name: "!~"                       , args: 2     , dialect: "*"      , doc: "Not match"              },
+  { name: "!~*"                      , args: 2     , dialect: "*"      , doc: "Not match (I)"          }
+], { category: "general", opFlags: OF.Binary | OF.SpaceSeparate });
 
 register([
-  { name: "IS [NOT]"                 , args: 2     , opFlags: 0           , dialect: "*"    },
-  { name: "IS [NOT] DISTINCT FROM"   , args: 2     , opFlags: 0           , dialect: "*"     , nameNot: "IS NOT DISTINCT FROM" },
-  { name: "[NOT] LIKE"               , args: 2     , opFlags: 0           , dialect: "*"    },
-  { name: "[NOT] ILIKE"              , args: 2     , opFlags: 0           , dialect: "*"    },
-  { name: "[NOT] SIMILAR TO"         , args: 2     , opFlags: 0           , dialect: "*"    }
-], { category: "general", opFlags: kBinary | kSpaceSeparate });
+  { name: "IS [NOT]"                 , args: 2     , dialect: "*"     },
+  { name: "IS [NOT] DISTINCT FROM"   , args: 2     , dialect: "*"     },
+  { name: "[NOT] LIKE"               , args: 2     , dialect: "*"     },
+  { name: "[NOT] ILIKE"              , args: 2     , dialect: "*"     },
+  { name: "[NOT] SIMILAR TO"         , args: 2     , dialect: "*"     }
+], { category: "general", opFlags: OF.Binary | OF.SpaceSeparate });
 
 register([
-  { name: "[NOT] IN"                 , args: 2     , opFlags: kRightValues, dialect: "*"    }
-], { category: "general", opFlags: kBinary | kSpaceSeparate });
+  { name: "[NOT] IN"                 , args: 2     , dialect: "*"     }
+], { category: "general", opFlags: OF.Binary | OF.SpaceSeparate | OF.RightValues});
 
 register([
-  { name: "AND"                      , args: 2     , opFlags: 0           , dialect: "*"    },
-  { name: "OR"                       , args: 2     , opFlags: 0           , dialect: "*"    }
-], { category: "general", opFlags: kBinary | kSpaceSeparate });
+  { name: "AND"                      , args: 2     , dialect: "*"     },
+  { name: "OR"                       , args: 2     , dialect: "*"     }
+], { category: "general", opFlags: OF.Binary | OF.SpaceSeparate });
 
 register([
-  { name: "[NOT] BETWEEN"            , args: 3     , opFlags: 0           , dialect: "*"      , compile: compileBetween },
-  { name: "[NOT] BETWEEN SYMMETRIC"  , args: 3     , opFlags: 0           , dialect: "*"      , compile: compileBetween }
-], { category: "general", opFlags: kFunction | kSpaceSeparate });
+  { name: "OVERLAPS"                 , args: 2     , dialect: "*"     }
+], { category: "datetime", opFlags: OF.Binary | OF.SpaceSeparate });
 
 register([
-  { name: "CAST"                     , args: 2     , opFlags: 0           , dialect: "*"      , compile: compileCast },
-  { name: "NULLIF"                   , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "COALESCE"                 , args: [1, N], opFlags: 0           , dialect: "*"     },
-  { name: "GREATEST"                 , args: [1, N], opFlags: 0           , dialect: "*"     },
-  { name: "LEAST"                    , args: [1, N], opFlags: 0           , dialect: "*"     },
-  { name: "NUM_NULLS"                , args: [0, N], opFlags: 0           , dialect: "*"     },
-  { name: "NUM_NONNULLS"             , args: [0, N], opFlags: 0           , dialect: "*"     }
-], { category: "general", opFlags: kFunction });
+  { name: "[NOT] BETWEEN"            , args: 3     , dialect: "*"      , compile: compileBetween },
+  { name: "[NOT] BETWEEN SYMMETRIC"  , args: 3     , dialect: "*"      , compile: compileBetween }
+], { category: "general", opFlags: OF.Function | OF.SpaceSeparate });
 
 register([
-  { name: "ABS"                      , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "ACOS"                     , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "ASIN"                     , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "ATAN"                     , args: [1, 2], opFlags: 0           , dialect: "*"      , compile: compileAtan },
-  { name: "ATAN2"                    , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "CBRT"                     , args: 1     , opFlags: 0           , dialect: "pgsql" },
-  { name: "CEILING"                  , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "COS"                      , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "COT"                      , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "DEGREES"                  , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "EXP"                      , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "FLOOR"                    , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "LN"                       , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "LOG"                      , args: [1, 2], opFlags: 0           , dialect: "*"     },
-  { name: "LOG10"                    , args: 1     , opFlags: 0           , dialect: "*"      , compile: compileLog10 },
-  { name: "LOG2"                     , args: 1     , opFlags: 0           , dialect: "*"      , compile: compileLog2 },
-  { name: "PI"                       , args: 0     , opFlags: 0           , dialect: "*"     },
-  { name: "POWER"                    , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "RADIANS"                  , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "RANDOM"                   , args: 0     , opFlags: 0           , dialect: "*"      , compile: compileRandom },
-  { name: "ROUND"                    , args: [1, 2], opFlags: 0           , dialect: "*"     },
-  { name: "SETSEED"                  , args: 1     , opFlags: kVoid       , dialect: "pgsql" },
-  { name: "SIGN"                     , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "SIN"                      , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "SQRT"                     , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "TAN"                      , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "TRUNC"                    , args: 1     , opFlags: 0           , dialect: "*"      , compile: compileTrunc },
-  { name: "WIDTH_BUCKET"             , args: 4     , opFlags: 0           , dialect: "pgsql" }
-], { category: "math", opFlags: kFunction });
+  { name: "CAST"                     , args: 2     , dialect: "*"      , compile: compileCast },
+  { name: "NULLIF"                   , args: 2     , dialect: "*"     },
+  { name: "COALESCE"                 , args: [1, N], dialect: "*"     },
+  { name: "GREATEST"                 , args: [1, N], dialect: "*"      , compile: compileGreatestLeast },
+  { name: "LEAST"                    , args: [1, N], dialect: "*"      , compile: compileGreatestLeast },
+  { name: "NUM_NULLS"                , args: [0, N], dialect: "*"     },
+  { name: "NUM_NONNULLS"             , args: [0, N], dialect: "*"     }
+], { category: "general", opFlags: OF.Function });
 
 register([
-  { name: "ASCII"                    , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "BIT_LENGTH"               , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "BTRIM"                    , args: [1, N], opFlags: 0           , dialect: "*"      , compile: compileBTrim },
-  { name: "CHAR"                     , args: [1, N], opFlags: 0           , dialect: "mysql" },
-  { name: "CHAR_LENGTH"              , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "CHR"                      , args: 1     , opFlags: 0           , dialect: "*"      , compile: compileChr },
-  { name: "CONCAT"                   , args: [1, N], opFlags: 0           , dialect: "*"     },
-  { name: "CONCAT_WS"                , args: [2, N], opFlags: 0           , dialect: "*"     },
-  { name: "CONVERT"                  , args: 3     , opFlags: 0           , dialect: "pgsql" },
-  { name: "CONVERT_FROM"             , args: 2     , opFlags: 0           , dialect: "pgsql" },
-  { name: "CONVERT_TO"               , args: 2     , opFlags: 0           , dialect: "pgsql" },
-  { name: "FORMAT"                   , args: null  , opFlags: 0           , dialect: "-"     },
-  { name: "INITCAP"                  , args: 1     , opFlags: 0           , dialect: "pgsql" },
-  { name: "LEFT"                     , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "LENGTH"                   , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "LOWER"                    , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "LPAD"                     , args: [2, 3], opFlags: 0           , dialect: "*"     },
-  { name: "LTRIM"                    , args: [1, N], opFlags: 0           , dialect: "*"     },
-  { name: "OCTET_LENGTH"             , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "OVERLAY"                  , args: [3, 4], opFlags: 0           , dialect: "pgsql"  , compile: compileOverlay },
-  { name: "PG_CLIENT_ENCODING"       , args: 0     , opFlags: 0           , dialect: "pgsql" },
-  { name: "POSITION"                 , args: null  , opFlags: 0           , dialect: "*"      , compile: compilePosition },
-  { name: "REPEAT"                   , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "REPLACE"                  , args: 3     , opFlags: 0           , dialect: "*"     },
-  { name: "REVERSE"                  , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "RIGHT"                    , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "RPAD"                     , args: [2, 3], opFlags: 0           , dialect: "*"     },
-  { name: "RTRIM"                    , args: [1, N], opFlags: 0           , dialect: "*"     },
-  { name: "SPLIT_PART"               , args: 3     , opFlags: 0           , dialect: "pgsql" },
-  { name: "STRCMP"                   , args: 2     , opFlags: 0           , dialect: "mysql" },
-  { name: "STRPOS"                   , args: 2     , opFlags: 0           , dialect: "pgsql" },
-  { name: "SUBSTR"                   , args: [2, 3], opFlags: 0           , dialect: "*"     },
-  { name: "SUBSTRING"                , args: [1, 3], opFlags: 0           , dialect: "*"     , compile: compileSubString },
-  { name: "TRANSLATE"                , args: 3     , opFlags: 0           , dialect: "pgsql" },
-  { name: "UPPER"                    , args: 1     , opFlags: 0           , dialect: "*"     }
-], { category: "string", opFlags: kFunction });
+  { name: "ABS"                      , args: 1     , dialect: "*"     },
+  { name: "ACOS"                     , args: 1     , dialect: "*"     },
+  { name: "ASIN"                     , args: 1     , dialect: "*"     },
+  { name: "ATAN"                     , args: [1, 2], dialect: "*"      , compile: compileAtan },
+  { name: "ATAN2"                    , args: 2     , dialect: "*"     },
+  { name: "CBRT"                     , args: 1     , dialect: "pgsql" },
+  { name: "CEILING"                  , args: 1     , dialect: "*"     },
+  { name: "COS"                      , args: 1     , dialect: "*"     },
+  { name: "COT"                      , args: 1     , dialect: "*"     },
+  { name: "DEGREES"                  , args: 1     , dialect: "*"     },
+  { name: "EXP"                      , args: 1     , dialect: "*"     },
+  { name: "FLOOR"                    , args: 1     , dialect: "*"     },
+  { name: "LN"                       , args: 1     , dialect: "*"     },
+  { name: "LOG"                      , args: [1, 2], dialect: "*"     },
+  { name: "LOG10"                    , args: 1     , dialect: "*"      , compile: compileLog10 },
+  { name: "LOG2"                     , args: 1     , dialect: "*"      , compile: compileLog2 },
+  { name: "PI"                       , args: 0     , dialect: "*"     },
+  { name: "POWER"                    , args: 2     , dialect: "*"     },
+  { name: "RADIANS"                  , args: 1     , dialect: "*"     },
+  { name: "RANDOM"                   , args: 0     , dialect: "*"      , compile: compileRandom },
+  { name: "ROUND"                    , args: [1, 2], dialect: "*"     },
+  { name: "SIGN"                     , args: 1     , dialect: "*"     },
+  { name: "SIN"                      , args: 1     , dialect: "*"     },
+  { name: "SQRT"                     , args: 1     , dialect: "*"     },
+  { name: "TAN"                      , args: 1     , dialect: "*"     },
+  { name: "TRUNC"                    , args: 1     , dialect: "*"      , compile: compileTrunc },
+  { name: "WIDTH_BUCKET"             , args: 4     , dialect: "pgsql" }
+], { category: "math", opFlags: OF.Function });
 
 register([
-  { name: "OVERLAPS"                 , args: 2     , opFlags: 0           , dialect: "*"     }
-], { category: "datetime", opFlags: kBinary | kSpaceSeparate });
+  { name: "SETSEED"                  , args: 1     , dialect: "pgsql" }
+], { category: "math", opFlags: OF.Function | OF.Void});
 
 register([
-  { name: "AGE"                      , args: [1, 2], opFlags: 0           , dialect: "*"     },
-  { name: "CLOCK_TIMESTAMP"          , args: 0     , opFlags: 0           , dialect: "*"     },
-  { name: "CURRENT_DATE"             , args: 0     , opFlags: 0           , dialect: "*"      , compile: compileCurrentDateTime },
-  { name: "CURRENT_TIME"             , args: [0, 1], opFlags: 0           , dialect: "*"      , compile: compileCurrentDateTime },
-  { name: "CURRENT_TIMESTAMP"        , args: [0, 1], opFlags: 0           , dialect: "*"      , compile: compileCurrentDateTime },
-  { name: "DATE_PART"                , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "DATE_TRUNC"               , args: 2     , opFlags: 0           , dialect: "*"     },
-  { name: "EXTRACT"                  , args: 2     , opFlags: 0           , dialect: "*"      , compile: compileExtract },
-  { name: "ISFINITE"                 , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "JUSTIFY_DAYS"             , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "JUSTIFY_HOURS"            , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "JUSTIFY_INTERVAL"         , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "LOCALTIME"                , args: [0, 1], opFlags: 0           , dialect: "*"      , compile: compileCurrentDateTime },
-  { name: "LOCALTIMESTAMP"           , args: [0, 1], opFlags: 0           , dialect: "*"      , compile: compileCurrentDateTime },
-  { name: "MAKE_DATE"                , args: 3     , opFlags: 0           , dialect: "*"     },
-  { name: "MAKE_INTERVAL"            , args: [0, 7], opFlags: 0           , dialect: "*"     },
-  { name: "MAKE_TIME"                , args: 3     , opFlags: 0           , dialect: "*"     },
-  { name: "MAKE_TIMESTAMP"           , args: 6     , opFlags: 0           , dialect: "*"     },
-  { name: "MAKE_TIMESTAMPTZ"         , args: [6, 7], opFlags: 0           , dialect: "*"     },
-  { name: "NOW"                      , args: 0     , opFlags: 0           , dialect: "*"     },
-  { name: "STATEMENT_TIMESTAMP"      , args: 0     , opFlags: 0           , dialect: "*"     },
-  { name: "TIMEOFDAY"                , args: 0     , opFlags: 0           , dialect: "*"     },
-  { name: "TO_TIMESTAMP"             , args: [1, 2], opFlags: 0           , dialect: "*"     },
-  { name: "TRANSACTION_TIMESTAMP"    , args: 0     , opFlags: 0           , dialect: "*"     }
-], { category: "datetime", opFlags: kFunction });
+  { name: "ASCII"                    , args: 1     , dialect: "*"     },
+  { name: "BIT_LENGTH"               , args: 1     , dialect: "*"     },
+  { name: "BTRIM"                    , args: [1, N], dialect: "*"      , compile: compileBTrim },
+  { name: "CHAR"                     , args: [1, N], dialect: "mysql" },
+  { name: "CHAR_LENGTH"              , args: 1     , dialect: "*"     },
+  { name: "CHR"                      , args: 1     , dialect: "*"      , compile: compileChr },
+  { name: "CONCAT"                   , args: [1, N], dialect: "*"     },
+  { name: "CONCAT_WS"                , args: [2, N], dialect: "*"     },
+  { name: "CONVERT"                  , args: 3     , dialect: "pgsql" },
+  { name: "CONVERT_FROM"             , args: 2     , dialect: "pgsql" },
+  { name: "CONVERT_TO"               , args: 2     , dialect: "pgsql" },
+  { name: "FORMAT"                   , args: null  , dialect: "-"     },
+  { name: "INITCAP"                  , args: 1     , dialect: "pgsql" },
+  { name: "LEFT"                     , args: 2     , dialect: "*"     },
+  { name: "LENGTH"                   , args: 1     , dialect: "*"     },
+  { name: "LOWER"                    , args: 1     , dialect: "*"     },
+  { name: "LPAD"                     , args: [2, 3], dialect: "*"     },
+  { name: "LTRIM"                    , args: [1, N], dialect: "*"     },
+  { name: "OCTET_LENGTH"             , args: 1     , dialect: "*"     },
+  { name: "OVERLAY"                  , args: [3, 4], dialect: "pgsql"  , compile: compileOverlay },
+  { name: "PG_CLIENT_ENCODING"       , args: 0     , dialect: "pgsql" },
+  { name: "POSITION"                 , args: null  , dialect: "*"      , compile: compilePosition },
+  { name: "REPEAT"                   , args: 2     , dialect: "*"     },
+  { name: "REPLACE"                  , args: 3     , dialect: "*"     },
+  { name: "REVERSE"                  , args: 1     , dialect: "*"     },
+  { name: "RIGHT"                    , args: 2     , dialect: "*"     },
+  { name: "RPAD"                     , args: [2, 3], dialect: "*"     },
+  { name: "RTRIM"                    , args: [1, N], dialect: "*"     },
+  { name: "SPLIT_PART"               , args: 3     , dialect: "pgsql" },
+  { name: "STRCMP"                   , args: 2     , dialect: "mysql" },
+  { name: "STRPOS"                   , args: 2     , dialect: "pgsql" },
+  { name: "SUBSTR"                   , args: [2, 3], dialect: "*"     },
+  { name: "SUBSTRING"                , args: [1, 3], dialect: "*"     , compile: compileSubString },
+  { name: "TRANSLATE"                , args: 3     , dialect: "pgsql" },
+  { name: "UPPER"                    , args: 1     , dialect: "*"     }
+], { category: "string", opFlags: OF.Function });
 
 register([
-  { name: "TO_CHAR"                  , args: 2     , opFlags: 0           , dialect: "pgsql" },
-  { name: "TO_DATE"                  , args: 2     , opFlags: 0           , dialect: "pgsql" },
-  { name: "TO_NUMBER"                , args: 2     , opFlags: 0           , dialect: "pgsql" },
-  { name: "TO_TIMESTAMP"             , args: 2     , opFlags: 0           , dialect: "pgsql" }
-], { category: "datetime", opFlags: kFunction });
+  { name: "AGE"                      , args: [1, 2], dialect: "*"     },
+  { name: "CLOCK_TIMESTAMP"          , args: 0     , dialect: "*"     },
+  { name: "CURRENT_DATE"             , args: 0     , dialect: "*"      , compile: compileCurrentDateTime },
+  { name: "CURRENT_TIME"             , args: [0, 1], dialect: "*"      , compile: compileCurrentDateTime },
+  { name: "CURRENT_TIMESTAMP"        , args: [0, 1], dialect: "*"      , compile: compileCurrentDateTime },
+  { name: "DATE_PART"                , args: 2     , dialect: "*"     },
+  { name: "DATE_TRUNC"               , args: 2     , dialect: "*"     },
+  { name: "EXTRACT"                  , args: 2     , dialect: "*"      , compile: compileExtract },
+  { name: "ISFINITE"                 , args: 1     , dialect: "*"     },
+  { name: "JUSTIFY_DAYS"             , args: 1     , dialect: "*"     },
+  { name: "JUSTIFY_HOURS"            , args: 1     , dialect: "*"     },
+  { name: "JUSTIFY_INTERVAL"         , args: 1     , dialect: "*"     },
+  { name: "LOCALTIME"                , args: [0, 1], dialect: "*"      , compile: compileCurrentDateTime },
+  { name: "LOCALTIMESTAMP"           , args: [0, 1], dialect: "*"      , compile: compileCurrentDateTime },
+  { name: "MAKE_DATE"                , args: 3     , dialect: "*"     },
+  { name: "MAKE_INTERVAL"            , args: [0, 7], dialect: "*"     },
+  { name: "MAKE_TIME"                , args: 3     , dialect: "*"     },
+  { name: "MAKE_TIMESTAMP"           , args: 6     , dialect: "*"     },
+  { name: "MAKE_TIMESTAMPTZ"         , args: [6, 7], dialect: "*"     },
+  { name: "NOW"                      , args: 0     , dialect: "*"     },
+  { name: "STATEMENT_TIMESTAMP"      , args: 0     , dialect: "*"     },
+  { name: "TIMEOFDAY"                , args: 0     , dialect: "*"     },
+  { name: "TO_TIMESTAMP"             , args: [1, 2], dialect: "*"     },
+  { name: "TRANSACTION_TIMESTAMP"    , args: 0     , dialect: "*"     }
+], { category: "datetime", opFlags: OF.Function });
 
 register([
-  { name: "DECODE"                   , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "ENCODE"                   , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "GET_BIT"                  , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "GET_BYTE"                 , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "QUOTE_IDENT"              , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "QUOTE_LITERAL"            , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "QUOTE_NULLABLE"           , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "REGEXP_MATCHES"           , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "REGEXP_REPLACE"           , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "REGEXP_SPLIT_TO_ARRAY"    , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "REGEXP_SPLIT_TO_TABLE"    , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "SET_BIT"                  , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "SET_BYTE"                 , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "TO_ASCII"                 , args: null  , opFlags: 0           , dialect: "*"     },
-  { name: "TO_HEX"                   , args: null  , opFlags: 0           , dialect: "*"     }
-], { category: "other", opFlags: kFunction });
+  { name: "TO_CHAR"                  , args: 2     , dialect: "pgsql" },
+  { name: "TO_DATE"                  , args: 2     , dialect: "pgsql" },
+  { name: "TO_NUMBER"                , args: 2     , dialect: "pgsql" },
+  { name: "TO_TIMESTAMP"             , args: 2     , dialect: "pgsql" }
+], { category: "datetime", opFlags: OF.Function });
 
 register([
-  { name: "MD5"                      , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "SHA224"                   , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "SHA256"                   , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "SHA384"                   , args: 1     , opFlags: 0           , dialect: "*"     },
-  { name: "SHA512"                   , args: 1     , opFlags: 0           , dialect: "*"     }
-], { category: "hash", opFlags: kFunction });
+  { name: "DECODE"                   , args: null  , dialect: "*"     },
+  { name: "ENCODE"                   , args: null  , dialect: "*"     },
+  { name: "GET_BIT"                  , args: null  , dialect: "*"     },
+  { name: "GET_BYTE"                 , args: null  , dialect: "*"     },
+  { name: "QUOTE_IDENT"              , args: null  , dialect: "*"     },
+  { name: "QUOTE_LITERAL"            , args: null  , dialect: "*"     },
+  { name: "QUOTE_NULLABLE"           , args: null  , dialect: "*"     },
+  { name: "REGEXP_MATCHES"           , args: null  , dialect: "*"     },
+  { name: "REGEXP_REPLACE"           , args: null  , dialect: "*"     },
+  { name: "REGEXP_SPLIT_TO_ARRAY"    , args: null  , dialect: "*"     },
+  { name: "REGEXP_SPLIT_TO_TABLE"    , args: null  , dialect: "*"     },
+  { name: "SET_BIT"                  , args: null  , dialect: "*"     },
+  { name: "SET_BYTE"                 , args: null  , dialect: "*"     },
+  { name: "TO_ASCII"                 , args: null  , dialect: "*"     },
+  { name: "TO_HEX"                   , args: null  , dialect: "*"     }
+], { category: "other", opFlags: OF.Function });
+
+register([
+  { name: "LAST_INSERT_ROWID"        , args: 0     , dialect: "sqlite"},
+], { category: "other", opFlags: OF.Function });
+
+register([
+  { name: "MD5"                      , args: 1     , dialect: "*"     },
+  { name: "SHA224"                   , args: 1     , dialect: "*"     },
+  { name: "SHA256"                   , args: 1     , dialect: "*"     },
+  { name: "SHA384"                   , args: 1     , dialect: "*"     },
+  { name: "SHA512"                   , args: 1     , dialect: "*"     }
+], { category: "hash", opFlags: OF.Function });
 
 register([
   { name: "ISEMPTY"                  , args: 1     , dialect: "pgsql" },
@@ -5256,7 +5348,7 @@ register([
   { name: "UPPER_INC"                , args: 1     , dialect: "pgsql" },
   { name: "UPPER_INF"                , args: 1     , dialect: "pgsql" },
   { name: "RANGE_MERGE"              , args: 2     , dialect: "pgsql" }
-], { category: "range", opFlags: kFunction });
+], { category: "range", opFlags: OF.Function });
 
 register([
   { name: "ARRAY_APPEND"             , args: 2     , dialect: "pgsql" },
@@ -5276,7 +5368,7 @@ register([
   { name: "CARDINALITY"              , args: 1     , dialect: "pgsql" },
   { name: "STRING_TO_ARRAY"          , args: [2, 3], dialect: "pgsql" },
   { name: "UNNEST"                   , args: [1, N], dialect: "pgsql" }
-], { category: "array", opFlags: kFunction });
+], { category: "array", opFlags: OF.Function });
 
 register([
   { name: "ARRAY_TO_JSON"            , args: [1, 2], dialect: "pgsql" },
@@ -5318,15 +5410,15 @@ register([
   { name: "ROW_TO_JSON"              , args: [1, 2], dialect: "pgsql" },
   { name: "TO_JSON"                  , args: 1     , dialect: "pgsql" },
   { name: "TO_JSONB"                 , args: 1     , dialect: "pgsql" }
-], { category: "json", opFlags: kFunction });
+], { category: "json", opFlags: OF.Function });
 
 register([
   { name: "STRING_AGG"               , args: 2     , dialect: "pgsql" }
-], { category: "string", opFlags: kFunction | kAggregate });
+], { category: "string", opFlags: OF.Function | OF.Aggregate });
 
 register([
   { name: "ARRAY_AGG"                , args: 1     , dialect: "pgsql" }
-], { category: "array", opFlags: kFunction | kAggregate });
+], { category: "array", opFlags: OF.Function | OF.Aggregate });
 
 register([
   { name: "AVG"                      , args: 1     , dialect: "*"     },
@@ -5339,7 +5431,7 @@ register([
   { name: "MAX"                      , args: 1     , dialect: "*"     },
   { name: "MIN"                      , args: 1     , dialect: "*"     },
   { name: "SUM"                      , args: 1     , dialect: "*"     }
-], { category: "general", opFlags: kFunction | kAggregate });
+], { category: "general", opFlags: OF.Function | OF.Aggregate });
 
 register([
   { name: "CORR"                     , args: 2     , dialect: "pgsql" },
@@ -5358,25 +5450,25 @@ register([
   { name: "STDDEV_SAMP"              , args: 1     , dialect: "pgsql" },
   { name: "VAR_POP"                  , args: 1     , dialect: "pgsql" },
   { name: "VAR_SAMP"                 , args: 1     , dialect: "pgsql" }
-], { category: "statistics", opFlags: kFunction | kAggregate });
+], { category: "statistics", opFlags: OF.Function | OF.Aggregate });
 
 register([
   { name: "CUME_DIST"                , args: [1, N], dialect: "pgsql" },
   { name: "DENSE_RANK"               , args: [1, N], dialect: "pgsql" },
   { name: "PERCENT_RANK"             , args: [1, N], dialect: "pgsql" },
   { name: "RANK"                     , args: [1, N], dialect: "pgsql" }
-], { category: "hypothetical-set", opFlags: kFunction | kAggregate });
+], { category: "hypothetical-set", opFlags: OF.Function | OF.Aggregate });
 
 register([
   { name: "JSON_AGG"                 , args: 1     , dialect: "pgsql" },
   { name: "JSON_OBJECT_AGG"          , args: 2     , dialect: "pgsql" },
   { name: "JSONB_AGG"                , args: 2     , dialect: "pgsql" },
   { name: "JSONB_OBJECT_AGG"         , args: 2     , dialect: "pgsql" }
-], { category: "json", opFlags: kFunction | kAggregate });
+], { category: "json", opFlags: OF.Function | OF.Aggregate });
 
 register([
   { name: "XMLAGG"                   , args: 1     , dialect: "pgsql" }
-], { category: "xml", opFlags: kFunction | kAggregate });
+], { category: "xml", opFlags: OF.Function | OF.Aggregate });
 
 OpInfo.addAlias("TRIM", "BTRIM");
 OpInfo.addAlias("POW", "POWER");
@@ -5394,12 +5486,12 @@ OpInfo.addNegation("~*", "!~*");
 
 // Add all known functions to `xql` namespace.
 OpInfo.forEach(function(alias, info) {
-  if (info.opFlags & (kUnary | kBinary | kFunction) && reUpperCasedWithSpaces.test(info.name)) {
+  if (info.opFlags & (OF.Unary | OF.Binary | OF.Function) && reUpperCasedWithSpaces.test(info.name)) {
     const funcName = alias.replace(/ /g, "_");
     if (!xql[funcName]) {
-      if (info.opFlags & kUnary)
+      if (info.opFlags & OF.Unary)
         xql[funcName] = Unary.makeWrap(info.name, info.nodeFlags, info.ctor);
-      else if (info.opFlags & kBinary)
+      else if (info.opFlags & OF.Binary)
         xql[funcName] = Binary.makeWrap(info.name, info.nodeFlags, info.ctor);
       else
         xql[funcName] = Func.makeWrap(info.name, info.nodeFlags, info.ctor);
