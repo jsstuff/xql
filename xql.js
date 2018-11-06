@@ -5111,9 +5111,27 @@ function compileBTrim(ctx, $) {
   }
 }
 
+function compileNow(ctx, $) {
+  var name = $._type;
+  var args = $._values;
+
+  if (ctx.dialect === "sqlite")
+    return ctx._compileFuncAs(`CURRENT_TIMESTAMP`, $._alias);
+
+  return ctx._compileFuncImpl(name, args, $._flags, $._alias);
+}
+
 function compileCurrentDateTime(ctx, $) {
   var name = $._type;
   var args = $._values;
+
+  if (ctx.dialect === "sqlite") {
+    switch (name) {
+      case "NOW"           : return ctx._compileFuncAs(`CURRENT_TIMESTAMP`, $._alias);
+      case "LOCALTIME"     : return ctx._compileFuncAs(`TIME('now', 'localtime')`, $._alias);
+      case "LOCALTIMESTAMP": return ctx._compileFuncAs(`DATETIME('now','localtime')`, $._alias);
+    }
+  }
 
   if (args.length === 0 && ctx.dialect !== "mysql")
     return name;
@@ -5297,7 +5315,7 @@ register([
   { name: "MAKE_TIME"                , args: 3     , dialect: "*"     },
   { name: "MAKE_TIMESTAMP"           , args: 6     , dialect: "*"     },
   { name: "MAKE_TIMESTAMPTZ"         , args: [6, 7], dialect: "*"     },
-  { name: "NOW"                      , args: 0     , dialect: "*"     },
+  { name: "NOW"                      , args: 0     , dialect: "*"      , compile: compileNow },
   { name: "STATEMENT_TIMESTAMP"      , args: 0     , dialect: "*"     },
   { name: "TIMEOFDAY"                , args: 0     , dialect: "*"     },
   { name: "TO_TIMESTAMP"             , args: [1, 2], dialect: "*"     },
