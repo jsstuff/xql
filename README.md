@@ -54,7 +54,7 @@ var query = xql.SELECT("*")
   .WHERE("capital", true);            // 2 form WHERE, implicit equality.
 
 // Use context to compile the query.
-console.log(query.compileQuery(ctx));
+console.log(query.compileStatement(ctx));
 // SELECT * FROM "cities" WHERE "population" >= 1000000 AND "capital" = TRUE;
 ```
 
@@ -72,7 +72,7 @@ var query = xql.SELECT("*")
   .WHERE("population", ">=", 1000000)
   .WHERE("capital", true);
 
-console.log(query.compileQuery(ctx));
+console.log(query.compileStatement(ctx));
 // SELECT
 //   *
 // FROM
@@ -120,13 +120,14 @@ Node                        | Description
 `xql.node.ConditionalMap`   | Special node that contains key/value interface that can be used to construct `WHERE` like expressions without constructing `xql.node.Logical` nodes.
 `xql.node.Join`             | SQL `JOIN` construct
 `xql.node.Sort`             | SQL `ORDER BY` construct
-`xql.node.Statement`        | Base class representing a single SQL statement
-`xql.node.Query`            | Base class used by `SELECT`, `INSERT`, `UPDATE`, and `DELETE` statements.
-`xql.node.SelectQuery`      | SQL `SELECT` query
-`xql.node.InsertQuery`      | SQL `INSERT` query
-`xql.node.UpdateQuery`      | SQL `UPDATE` query
-`xql.node.DeleteQuery`      | SQL `DELETE` query
-`xql.node.CompoundQuery`    | SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple queries
+`xql.node.With`             | Expression representing `"identifier" AS (SELECT ...)` part of WITH clause.
+`xql.node.Statement`        | Base class representing a single SQL statement, which should end with semicolon
+`xql.node.QueryStatement`   | Base class used by `SELECT`, `INSERT`, `UPDATE`, and `DELETE` statements
+`xql.node.SelectStatement`  | SQL `SELECT` statement
+`xql.node.InsertStatement`  | SQL `INSERT` statement
+`xql.node.UpdateStatement`  | SQL `UPDATE` statement
+`xql.node.DeleteStatement`  | SQL `DELETE` statement
+`xql.node.CompoundStatement`| SQL `UNION`, `INTERSECT`, and `EXCEPT` operators that can be used to combine multiple query statements
 
 High-level SQL builder concepts:
 
@@ -165,16 +166,16 @@ SQL-Builder API             | Description
 `xql.FUNCTION_NAME(...)`    | Create a `xql.node.Func` node describing `FUNCTION_NAME(...)` expression. Note that `FUNCTION_NAME` has to be replaced by the name of the function to be used, for example `xql.SIN(...)` describes `SIN()` function and `xql.COUNT(...)` describes `COUNT()` aggregate
 `xql.AND(...)`              | Create a `xql.node.Logical` expression describing `AND` expression
 `xql.OR(...)`               | Create a `xql.node.Logical` expression describing `OR` expression
-`xql.SELECT(...)`           | Create a `xql.node.SelectQuery` and pass optional arguments to the `SelectQuery.FIELD(...)` method
-`xql.INSERT(...)`           | Create a `xql.node.InsertQuery` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectQuery.FIELD(...)` method
-`xql.UPDATE(...)`           | Create a `xql.node.UpdateQuery` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateQuery.FIELD(...)` method
-`xql.DELETE(...)`           | Create a `xql.node.DeleteQuery` and use an optional first argument as a table name
-`xql.EXCEPT(...)`           | Create a `xql.node.CompoundQuery` describing `EXCEPT` expression
-`xql.EXCEPT_ALL(...)`       | Create a `xql.node.CompoundQuery` describing `EXCEPT ALL` query
-`xql.INTERSECT(...)`        | Create a `xql.node.CompoundQuery` describing `INTERSECT` query
-`xql.INTERSECT_ALL(...)`    | Create a `xql.node.CompoundQuery` describing `INTERSECT ALL` query
-`xql.UNION(...)`            | Create a `xql.node.CompoundQuery` describing `UNION` query
-`xql.UNION_ALL(...)`        | Create a `xql.node.CompoundQuery` describing `UNION ALL` query
+`xql.SELECT(...)`           | Create a `xql.node.SelectStatement` and pass optional arguments to the `SelectStatement.FIELD(...)` method
+`xql.INSERT(...)`           | Create a `xql.node.InsertStatement` and use an optional first argument as a table name (`FROM` clause) if it's a string or an identifier, and pass all other arguments to `SelectStatement.FIELD(...)` method
+`xql.UPDATE(...)`           | Create a `xql.node.UpdateStatement` and use an optional first argument as a table name (`UPDATE ...` clause) if it's a string or an identifier, and pass all other arguments to `UpdateStatement.FIELD(...)` method
+`xql.DELETE(...)`           | Create a `xql.node.DeleteStatement` and use an optional first argument as a table name
+`xql.EXCEPT(...)`           | Create a `xql.node.CompoundStatement` describing `EXCEPT` expression
+`xql.EXCEPT_ALL(...)`       | Create a `xql.node.CompoundStatement` describing `EXCEPT ALL` query
+`xql.INTERSECT(...)`        | Create a `xql.node.CompoundStatement` describing `INTERSECT` query
+`xql.INTERSECT_ALL(...)`    | Create a `xql.node.CompoundStatement` describing `INTERSECT ALL` query
+`xql.UNION(...)`            | Create a `xql.node.CompoundStatement` describing `UNION` query
+`xql.UNION_ALL(...)`        | Create a `xql.node.CompoundStatement` describing `UNION ALL` query
 `xql.SORT(c, sort, nulls)`  | Create a `xql.node.Sort` node wrapping an `ORDER BY` clause
 
 Generic Interface
@@ -184,13 +185,13 @@ Since every node that is used to describe various constructs inherits directly o
 
 xql.node.Node              | Description
 :------------------------- | :------------------------------------
-`.getType()`               | Get the node type {String}. For example a `xql.node.SelectQuery` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
+`.getType()`               | Get the node type {String}. For example a `xql.node.SelectStatement` is a `SELECT` type, logical operator is `AND` or `OR` type, etc...
 `.setType(type)`           | Set the node type (used internally)
 `.getLabel()`              | Get the node label that is rendered as `AS "label"` in SQL
 `.setLabel(label)`         | Set the node label
 `.canExecute()`            | Can be used to check whether the node can be executed by SQL engine. Only `SELECT`, `INSERT`, `UPDATE`, and `DELETE` queries and `UNION`, `INTERSECT`, and `EXCEPT` operators can be executed.
 `.compileNode(ctx)`        | Compile the node into a string. The `ctx` argument is currently not used, but it's designed in a way to pass an additional information to the compiler so multiple dialects can be used in the future.
-`.compileQuery(ctx?)`      | Compile the query, it's basically a `compileNode()` call with semicolon `";"` at the end. This method should be used to return the query to be executed by your DB engine. It's provided by all query nodes.
+`.compileStatement(ctx?)`  | Compile the query, it's basically a `compileNode()` call with semicolon `";"` at the end. This method should be used to return the query to be executed by your DB engine. It's provided by all query nodes.
 `.AS(label)`               | Alias to `setLabel()`.
 `.EQ(b)`                   | Returns `this = b` expression.
 `.NE(b)`                   | Returns `this <> b` expression.
@@ -224,11 +225,11 @@ xql.node.Binary            | Description
 SELECT
 ------
 
-Select query is described by `xql.node.SelectQuery` node and wrapped by `xql.SELECT(...)`. It accepts arguments that are passed to the `FIELD()` method making the  `SELECT(...)`, `SELECT([...])` and `SELECT().FIELD(...)` constructs equivalent.
+Select query is described by `xql.node.SelectStatement` node and wrapped by `xql.SELECT(...)`. It accepts arguments that are passed to the `FIELD()` method making the  `SELECT(...)`, `SELECT([...])` and `SELECT().FIELD(...)` constructs equivalent.
 
-The `xql.node.SelectQuery` implements the following interface:
+The `xql.node.SelectStatement` implements the following interface:
 
-xql.node.SelectQuery       | Description
+xql.node.SelectStatement   | Description
 :------------------------- | :------------------------------------
 `.FIELD(...)`              |
 `.FIELD([...])`            | Add a field or expression to be selected. It accepts a `xql.node.Node`, column name, or a dictionary defining columns and their expressions. <br><br>The `FIELD()` calls are usually chained. For example `FIELD("a").FIELD("b")` calls are the same as `FIELD("a", "b")`, `FIELD(["a", "b"])`, and `FIELD({ a: true, b: true })`
@@ -317,11 +318,11 @@ FROM
 INSERT
 ------
 
-Insert query is described by `xql.node.InsertQuery` node and wrapped by `xql.INSERT(...)`. Note that `INSERT(...)` accepts parameters that can describe a target table and data to be inserted.
+Insert query is described by `xql.node.InsertStatement` node and wrapped by `xql.INSERT(...)`. Note that `INSERT(...)` accepts parameters that can describe a target table and data to be inserted.
 
-The `xql.node.InsertQuery` implements the following interface:
+The `xql.node.InsertStatement` implements the following interface:
 
-xql.node.InsertQuery       | Description
+xql.node.InsertStatement   | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            |
 `.INTO(table)`             | Specify a target `table`
@@ -355,11 +356,11 @@ RETURNING
 UPDATE
 ------
 
-Update query is described by `xql.node.UpdateQuery` node and wrapped by `xql.UPDATE(...)`. Please note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
+Update query is described by `xql.node.UpdateStatement` node and wrapped by `xql.UPDATE(...)`. Please note that `UPDATE(...)` accepts parameters that can describe a target table and data to be updated.
 
-The `xql.node.UpdateQuery` implements the following interface:
+The `xql.node.UpdateStatement` implements the following interface:
 
-xql.node.UpdateQuery       | Description
+xql.node.UpdateStatement   | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            | Specify a target `table`
 `.FROM(...)`               | Specify a `FROM` clause, uses the same syntax as `FROM()` defined by `SELECT` query
@@ -397,11 +398,11 @@ WHERE
 DELETE
 ------
 
-Delete query is described by `xql.node.DeleteQuery` node and wrapped by `xql.DELETE(...)`.
+Delete query is described by `xql.node.DeleteStatement` node and wrapped by `xql.DELETE(...)`.
 
-The `xql.node.DeleteQuery` implements the following interface:
+The `xql.node.DeleteStatement` implements the following interface:
 
-xql.node.DeleteQuery       | Description
+xql.node.DeleteStatement   | Description
 :------------------------- | :------------------------------------
 `.TABLE(table)`            |
 `.FROM(table)`             | Specify a target `table`

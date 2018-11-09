@@ -19,7 +19,7 @@ const xql = $export[$as] = {};
  *
  * @alias xql.misc.VERSION
  */
-const VERSION = "1.4.11";
+const VERSION = "1.4.12";
 
 /**
  * Identifier's quote style.
@@ -47,7 +47,7 @@ const NodeFlags = Object.freeze({
   NullsLast      : 0x00000080, // Sort nulls last (NULLS LAST).
   All            : 0x00000100, // ALL flag.
   Distinct       : 0x00000200, // DISTINCT flag.
-  Statement      : 0x10000000  // This node represents a query statement (like SELECT, UPDATE, etc).
+  Statement      : 0x10000000  // This node represents a statement (like SELECT, UPDATE, etc).
 });
 xql.NodeFlags = NodeFlags;
 
@@ -57,11 +57,11 @@ xql.NodeFlags = NodeFlags;
  * @alias xql.OpFlags
  */
 const OpFlags = Object.freeze({
-  Unary          : 0x00000001, // Operator is unary (has one child node - `value`).
-  Binary         : 0x00000002, // Operator is binary (has two child nodes - `left` and `right`).
-  Function       : 0x00000004, // Operator is a function.
-  Aggregate      : 0x00000008, // Operator is an aggregation function.
-  Void           : 0x00000010, // Operator has no return value.
+  Unary          : 0x00000001, // Unary operator (has one child node - `value`).
+  Binary         : 0x00000002, // Binary operator (has two child nodes - `left` and `right`).
+  Function       : 0x00000004, // Function (has arguments).
+  Aggregate      : 0x00000008, // Function is an aggregate.
+  Void           : 0x00000010, // Has no return value.
   LeftValues     : 0x00000100, // Operator expects left  values as (a, b[, ...]).
   RightValues    : 0x00000200, // Operator expects right values as (a, b[, ...]).
   SpaceSeparate  : 0x00000400  // Separate the function or operator by spaces before and after.
@@ -72,41 +72,13 @@ xql.OpFlags = OpFlags;
 // [Internal Constants]
 // ============================================================================
 
-// Always returns false, used internally for browser support.
-function returnFalse() { return false; }
-
-// Global shorthands.
-const hasOwn   = Object.prototype.hasOwnProperty;
-const slice    = Array.prototype.slice;
-
-const isArray  = Array.isArray;
-const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
-
 // Empty object/array used as an replacement for null/undefined in some cases.
 const NoObject = Object.freeze(Object.create(null));
 const NoArray = Object.freeze([]);
 
-// Aliases that we use in xql.js. It's much easier this way.
+// Aliases that we use in xql.js source code.
 const NF = NodeFlags;
 const OF = OpFlags;
-
-// Global regular expressions.
-const reNewLine      = /\n/g;                 // Check for new line characters.
-const reGraveQuotes  = /`/g;                  // Check for grave (`) quotes.
-const reDoubleQuotes = /\"/g;                 // Check for double (") quotes.
-const reBrackets     = /\[\]/g;               // Check for [] brackets.
-const reDotNull      = /[\.\x00]/g;           // Check for '.' or '\0' characters.
-const reInt          = /^-?\d+$/;             // Check for a well-formatted int with optional '-' sign.
-
-// Check for an UPPERCASE_ONLY string.
-const reUpperCased   = /^[A-Z_][A-Z_0-9]*$/;
-
-// Check for a function or operator name (UPPERCASED string with possible spaces between words).
-const reUpperCasedWithSpaces = /^[A-Z_][A-Z_0-9 ]*(?: [A-Z_][A-Z_0-9 ]*)*$/;
-
-// Checks if a string is a well formatted integer or floating point number, also
-// accepts scientific notation "E[+-]?xxx".
-const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
 
 // Map of identifiers that are not escaped.
 const IdentifierMap = { "*": true };
@@ -214,6 +186,75 @@ const SortNulls = Object.freeze({
 });
 
 // ============================================================================
+// [Regular Expressions]
+// ============================================================================
+
+// Check for new line characters.
+const reNewLine = /\n/g;
+
+// Check for grave (`) quotes.
+const reGraveQuotes = /`/g;
+
+// Check for double (") quotes.
+const reDoubleQuotes = /\"/g;
+
+// Check for [] brackets.
+const reBrackets = /\[\]/g;
+
+// Check for '.' or '\0' characters.
+const reDotOrNull = /[\.\x00]/g;
+
+// Check for a well-formatted int with optional '-' sign.
+const reInteger = /^-?\d+$/;
+
+// Checks if a string is a well formatted integer or floating point number, also
+// accepts scientific notation "E[+-]?xxx" and NaN/Infinity.
+const reNumber = /^(NaN|-?Infinity|^-?((\d+\.?|\d*\.\d+)([eE][-+]?\d+)?))$/;
+
+// Check for an UPPERCASE function name (no spaces).
+const reUpperFunctionName = /^[A-Z_][A-Z_0-9]*$/;
+
+// Check for an UPPERCASE operator name (can contain spaces between words).
+const reUpperOperatorName = /^[A-Z_][A-Z_0-9 ]*(?: [A-Z_][A-Z_0-9 ]*)*$/;
+
+// ============================================================================
+// [Internal Functions]
+// ============================================================================
+
+// Always returns false, used internally for browser support.
+function returnFalse() { return false; }
+
+// Global shorthands.
+const hasOwn   = Object.prototype.hasOwnProperty;
+const slice    = Array.prototype.slice;
+
+const isArray  = Array.isArray;
+const isBuffer = typeof Buffer === "function" ? Buffer.isBuffer : returnFalse;
+
+const deprecated = (function() {
+  const map = Object.create(null);;
+
+  return function(message) {
+    if (message in map)
+      return;
+
+    map[message] = true;
+    console.log(message);
+  }
+})();
+
+function blobToHex(blob) {
+  return blob.toString("hex");
+}
+
+function alias(classobj, spec) {
+  const p = classobj.prototype;
+  for (var member in spec)
+    p[member] = p[spec[member]];
+  return classobj;
+}
+
+// ============================================================================
 // [xql.OpInfo]
 // ============================================================================
 
@@ -225,7 +266,6 @@ const SortNulls = Object.freeze({
 const OpInfo = new class OpInfo {
   constructor() {
     this._map = Object.create(null);
-    this._dialects = {};
   }
 
   get(name) {
@@ -272,6 +312,7 @@ const OpInfo = new class OpInfo {
     const map = this._map;
     for (var k in map)
       cb.call(thisArg, k, map[k]);
+    return this;
   }
 };
 xql.OpInfo = OpInfo;
@@ -281,7 +322,7 @@ xql.OpInfo = OpInfo;
 // ============================================================================
 
 /**
- * Error classes.
+ * Namespace which provides classes that represent errors thrown as exceptions.
  *
  * @namespace
  * @alias xql.error
@@ -290,7 +331,8 @@ const xql$error = xql.error = {};
 
 /**
  * Error thrown if data is wrong.
- * @param message Error mesasge.
+ *
+ * @param message Error message.
  *
  * @alias xql.error.ValueError
  */
@@ -304,8 +346,9 @@ class ValueError extends Error {
 xql$error.ValueError = ValueError;
 
 /**
- * Error thrown if query is wrong.
- * @param message Error mesasge.
+ * Error thrown if SQL construct is wrong and cannot be compiled.
+ *
+ * @param message Error message.
  *
  * @alias xql.error.CompileError
  */
@@ -403,21 +446,10 @@ function parseVersion(s) {
   }
 }
 
-function blobToHex(blob) {
-  return blob.toString("hex");
-}
-
 function indent(s, indentation) {
   return (s && indentation) ? indentation + s.replace(reNewLine, "\n" + indentation) : s;
 }
 xql$misc.indent = indent;
-
-function alias(classobj, spec) {
-  const p = classobj.prototype;
-  for (var member in spec)
-    p[member] = p[spec[member]];
-  return classobj;
-}
 
 // ============================================================================
 // [xql.dialect]
@@ -569,7 +601,8 @@ class Context {
     this._DB_IDENT_OPEN  = "";   // Escape character inserted before SQL identifier.
     this._DB_IDENT_CLOSE = "";   // Escape character inserted after SQL identifier.
 
-    this._STR_BLANK      = "";   // Space or newline character, either " " or "\n" (pretty).
+    this._STR_OPT_NL     = "";   // Optional newline (will either be "\n" or "").
+    this._STR_BLANK      = "";   // Space or newline (will either be "\n" or " ").
     this._STR_COMMA      = "";   // Comma separator, either ", " or ",\n" (pretty).
     this._STR_INDENT     = "";   // Indentation string.
     this._STR_CONCAT     = "";   // Concatenation string, equals to `space + _STR_INDENT`.
@@ -600,27 +633,27 @@ class Context {
   setVersion(version) {
     this.version = parseVersion(version);
     this._updateInternalData();
-
     return this;
   }
 
   /**
-   * Compiles the given query `q`.
+   * Compiles the given expression or statement `q`.
    *
-   * @param {string|Node} q Query to compile, can be either string or `xql.Node`.
-   * @return {string} Compiled query string.
+   * @param {string|Node} q Expression or statement to compile, can be either
+   * string or `xql.Node`.
    *
-   * @throws {TypeError} If the query `q` is an object that is not compatible
-   *   with `xql.Node`.
+   * @return {string} Compiled SQL expression or statement as a string.
+   *
+   * @throws {TypeError} If `q` is an object that is not compatible with `xql.Node`.
    */
   compile(q) {
     if (typeof q === "string")
       return q;
 
-    if (typeof q.compileQuery === "function")
-      return q.compileQuery(this);
+    if (q && typeof q.compileStatement === "function")
+      return q.compileStatement(this);
 
-    throw new TypeError("xql.Context.compile() - Invalid argument");
+    throwTypeError("xql.Context.compile() - Invalid argument");
   }
 
   _compile(something, valueType) {
@@ -657,7 +690,8 @@ class Context {
       // Apply escaping to all parts of the identifier (if any).
       for (;;) {
         // Ignore undefined/null parts of the input.
-        if (input == null) break;
+        if (input == null)
+          break;
 
         var m = input.search(re);
         var p = input;
@@ -683,7 +717,7 @@ class Context {
             // the whole string to a function that will properly escape
             // it (as this function is very generic and can handle all
             // dialects easily).
-            m = input.search(reDotNull);
+            m = input.search(reDotOrNull);
             if (m !== -1) {
               c = input.charCodeAt(m);
               if (c === 46)
@@ -700,15 +734,17 @@ class Context {
         else
           output += this._DB_IDENT_OPEN + p + this._DB_IDENT_CLOSE;
 
-        if (m === -1) break;
+        if (m === -1)
+          break;
         input = input.substr(m + 1);
       }
 
-      if (++i >= len) break;
+      if (++i >= len)
+        break;
       input = ident[i];
     }
 
-    // Return an empty identifier (allowed) in case the output is an empty string.
+    // Return an empty identifier (allowed) in case the output is empty.
     return output ? output : this._DB_IDENT_OPEN + this._DB_IDENT_CLOSE;
   }
 
@@ -789,7 +825,7 @@ class Context {
           }
 
           if (typeof value === "string") {
-            if (!reInt.test(value))
+            if (!reInteger.test(value))
               throwValueError("Couldn't convert ill formatted 'string' to 'integer'");
             return value;
           }
@@ -1080,6 +1116,7 @@ class Context {
     }
 
     // Update members that are not DB dialect sensitive (pretty print).
+    this._STR_OPT_NL = !pretty ? ""   : "\n";
     this._STR_BLANK  = !pretty ? " "  : "\n";
     this._STR_COMMA  = !pretty ? ", " : ",\n";
     this._STR_INDENT = !pretty ? ""   : " ".repeat(this.indentation);
@@ -1305,25 +1342,30 @@ class Context {
   }
 
   /**
-   * Compiles SELECT.
+   * Compiles SELECT statement.
    *
-   * @param {xql.node.SelectQuery} node Select node.
+   * @param {xql.node.SelectStatement} node Select node.
    * @return {string} Compiled SELECT.
    *
    * @private
    */
   _compileSelect(node) {
-    var out = "SELECT";
-
     const BLANK = this._STR_BLANK;
 
+    const with_ = node._with;
     const flags = node._flags;
     const offset = node._offset;
     const limit = node._limit;
 
+    // Compile `WITH ...`
+    var out = "";
+    if (with_.length !== 0)
+      out = this._compileWithClause(with_) + BLANK;
+
     // Compile `SELECT [ALL|DISTINCT]`
     //
     // Use `*` if  fields are not used.
+    out += "SELECT";
     if (flags & NF.Distinct) {
       const distinct = node._distinct;
       if (isArray(distinct) && distinct.length)
@@ -1381,7 +1423,7 @@ class Context {
   }
 
   /**
-   * Compiles INSERT that can contain DEFAULT in VALUES().
+   * Compiles INSERT statement that can contain DEFAULT in VALUES().
    *
    * @private
    */
@@ -1389,6 +1431,7 @@ class Context {
     const BLANK = this._STR_BLANK;
     const features = this.features;
 
+    const with_ = node._with;
     const table = node._table;
     const objects = node._values;
     const columns = node._columns;
@@ -1397,7 +1440,7 @@ class Context {
 
     // Compile `INSERT INTO table (...)`.
     if (!table)
-      throwCompileError("InsertQuery.compileNode() - Table not defined");
+      throwCompileError("InsertStatement.compileNode() - Table not defined");
 
     const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
     const into = typeof table === "string" ? this.escapeIdentifier(table)
@@ -1412,8 +1455,13 @@ class Context {
       cols += this.escapeIdentifier(k);
     }
 
+    // Compile `WITH ...`
+    var out = "";
+    if (with_.length !== 0)
+      out = this._compileWithClause(with_) + BLANK;
+
     // Compile values.
-    var out = "INSERT INTO" + this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
+    out += "INSERT INTO" + this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
     for (var i = 0, len = objects.length; i < len; i++) {
       const object = objects[i];
 
@@ -1438,7 +1486,7 @@ class Context {
   }
 
   /**
-   * Compiles INSERT that cannot contain DEFAULT in VALUES().
+   * Compiles INSERT statement that cannot contain DEFAULT in VALUES().
    *
    * @private
    */
@@ -1446,6 +1494,7 @@ class Context {
     const BLANK = this._STR_BLANK;
     const features = this.features;
 
+    const with_ = node._with;
     const table = node._table;
     const objects = node._values;
     const returning = node._fieldsOrReturning || NoArray;
@@ -1453,7 +1502,7 @@ class Context {
 
     // Compile `INSERT INTO table (...)`.
     if (!table)
-      throwCompileError("InsertQuery.compileNode() - Table not defined");
+      throwCompileError("InsertStatement.compileNode() - Table not defined");
 
     const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
     const into = typeof table === "string" ? this.escapeIdentifier(table)
@@ -1486,6 +1535,10 @@ class Context {
       }
     }
 
+    // Compile `WITH ...`
+    if (with_.length !== 0)
+      out = this._compileWithClause(with_) + BLANK + out;
+
     // Compile `RETURNING ...` or `OUTPUT ...`.
     if (features.returning && returning.length !== 0)
       out += BLANK + this._compileReturning(returning, "INSERT");
@@ -1494,42 +1547,45 @@ class Context {
   }
 
   /**
-   * Compiles UPDATE.
+   * Compiles UPDATE statement.
    *
-   * @param {xql.node.UpdateQuery} node Update node.
+   * @param {xql.node.UpdateStatement} node Update node.
    * @return {string} Compiled UPDATE.
    *
    * @private
    */
   _compileUpdate(node) {
-    var out = "";
-    var t = "";
-
     const BLANK = this._STR_BLANK;
     const COMMA = this._STR_COMMA;
     const features = this.features;
 
+    const with_ = node._with;
     const table = node._table;
     const returning = node._fieldsOrReturning || NoArray;
 
     // Compile `UPDATE ...`
     if (!table)
-      throwCompileError("UpdateQuery.compileNode() - Table not defined");
+      throwCompileError("UpdateStatement.compileNode() - Table not defined");
 
+    var t = "";
     if (typeof table === "string")
       t = this.escapeIdentifier(table);
     else
       t = table.compileNode(this);
-    out = "UPDATE" + this.concat(t);
+    var out = "UPDATE" + this.concat(t);
+
+    // Compile `WITH ...`
+    if (with_.length !== 0)
+      out = this._compileWithClause(with_) + BLANK + out;
 
     // Compile `SET ...`
     const objects = node._values;
 
     if (!objects)
-      throwCompileError("UpdateQuery.compileNode() - No data to update provided");
+      throwCompileError("UpdateStatement.compileNode() - No data to update provided");
 
     if (objects.length !== 1)
-      throwCompileError("UpdateQuery.compileNode() - Can only update one record (" + objects.length + " provided)");
+      throwCompileError("UpdateStatement.compileNode() - Can only update one record (" + objects.length + " provided)");
 
     const values = objects[0];
     const typeMapping = node._typeMapping || NoObject;
@@ -1569,9 +1625,9 @@ class Context {
   }
 
   /**
-   * Compiles DELETE.
+   * Compiles DELETE statement.
    *
-   * @param {xql.node.DeleteQuery} node Delete node.
+   * @param {xql.node.DeleteStatement} node Delete node.
    * @return {string} Compiled DELETE.
    *
    * @private
@@ -1583,12 +1639,13 @@ class Context {
     const BLANK = this._STR_BLANK;
     const features = this.features;
 
+    const with_ = node._with;
     const table = node._table;
     const returning = node._fieldsOrReturning || NoArray;
 
     // Compile `DELETE FROM ...`
     if (!table)
-      throwCompileError("DeleteQuery.compileNode() - Table not defined");
+      throwCompileError("DeleteStatement.compileNode() - Table not defined");
 
     if (typeof table === "string")
       t = this.escapeIdentifier(table);
@@ -1596,6 +1653,10 @@ class Context {
       t = table.compileNode(this);
 
     out += "DELETE FROM" + this.concat(t);
+
+    // Compile `WITH ...`
+    if (with_.length !== 0)
+      out = this._compileWithClause(with_) + BLANK + out;
 
     // Compile `USING table[, table[, ...]]` or `USING table JOIN table [, JOIN ...]`.
     const using = node._fromOrUsing;
@@ -1622,23 +1683,24 @@ class Context {
   }
 
   /**
-   * Compiles compound query (UNION, INTERSECT, EXCEPT).
+   * Compiles compound statement (UNION, INTERSECT, EXCEPT).
    *
-   * @param {xql.node.CompoundQuery} node Compound node.
+   * @param {xql.node.CompoundStatement} node Compound node.
    * @return {string} Compiled compound query.
    *
    * @private
    */
   _compileCompound(node) {
-    var combineOp = node._type;
-    const flags = node._flags;
-
-    if (flags & NF.All)
-      combineOp += " ALL";
-
     const BLANK = this._STR_BLANK;
+
+    var combineOp = node._type;
+    const with_ = node._with;
     const queries = node._values;
     const separator = BLANK + combineOp + BLANK;
+
+    const flags = node._flags;
+    if (flags & NF.All)
+      combineOp += " ALL";
 
     var out = "";
     for (var i = 0, len = queries.length; i < len; i++) {
@@ -1654,6 +1716,10 @@ class Context {
       out += compiled;
     }
 
+    // Compile `WITH ...`.
+    if (with_.length !== 0)
+      out = this._compileWithClause(with_) + BLANK + out;
+
     // Compile `ORDER BY ...`.
     const orderBy = node._orderBy;
     if (orderBy && orderBy.length)
@@ -1667,6 +1733,15 @@ class Context {
       out += BLANK + this._compileOffsetLimit(offset, limit);
 
     return out;
+  }
+
+  _compileWithClause(nodeArray) {
+    const COMMA = this._STR_COMMA;
+
+    var out = "";
+    for (var i = 0; i < nodeArray.length; i++)
+      out = (out ? out + COMMA : "") + nodeArray[i].compileNode(this);
+    return "WITH" + this.concat(out);
   }
 
   _compileJoin(node) {
@@ -2531,17 +2606,6 @@ class Node {
   }
 
   /**
-   * Compiles the whole by using `compileNode()` and adds a semicolon ';' at the
-   * end.
-   *
-   * @param {Context} ctx Context.
-   * @return {string} SQL query.
-   */
-  compileQuery(ctx) {
-    return this.compileNode(ctx) + ";";
-  }
-
-  /**
    * Compiles the node into a valid SQL string.
    *
    * @note This function is reimplemented by each `Node` and provides a foundation
@@ -2554,6 +2618,21 @@ class Node {
    */
   compileNode(ctx) {
     throwTypeError("Abstract method called");
+  }
+
+  compileQuery(ctx) {
+    deprecated("xql.Node.compileQuery() is deprecated, use xql.Node.compileStatement() instead");
+    return this.compileStatement(ctx);
+  }
+
+  /**
+   * Compiles the node and adds a semicolon ';' at the end of the compiled string.
+   *
+   * @param {Context} ctx Context.
+   * @return {string} SQL query.
+   */
+  compileStatement(ctx) {
+    return this.compileNode(ctx) + ";";
   }
 
   /**
@@ -2729,11 +2808,6 @@ class Raw extends Node {
   /** @override */
   mustWrap(ctx, parent) {
     return false;
-  }
-
-  /** @override */
-  compileQuery(ctx) {
-    return this.compileNode(ctx) + ";";
   }
 
   /** @override */
@@ -3231,6 +3305,85 @@ xql.COL    = IDENT;
 xql.COLUMN = IDENT;
 
 // ============================================================================
+// [xql.Value]
+// ============================================================================
+
+/**
+ * SQL value.
+ *
+ * Used in cases where it's difficult to automatically determine how the value
+ * should be escaped (which can result in invalid query if determined wrong).
+ *
+ * `Value` node shouldn't be in general used for all types, only types where
+ * the mapping is ambiguous and can't be automatically deduced. For example
+ * PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `xql`
+ * has no knowledge which format to use and will choose ARRAY over JSON.
+ *
+ * Value is an alternative to schema. If schema is provided it's unnecessary
+ * to wrap values to `Value` nodes.
+ *
+ * @param {string}  type  Type of the value.
+ * @param {*}       value Data of the value.
+ * @param {string}  [as]  SQL's AS clause, if given.
+ *
+ * @alias xql.node.Value
+ */
+class Value extends Node {
+  constructor(value, type, alias) {
+    super(type, alias);
+    this._value = value;
+  }
+
+  /** @override */
+  mustWrap(ctx, parent) {
+    return false;
+  }
+
+  /** @override */
+  compileNode(ctx) {
+    var out = ctx.escapeValue(this._value, this._type);
+    var alias = this._alias;
+    if (alias)
+      out += " AS " + ctx.escapeIdentifier(alias);
+    return out;
+  }
+
+  /**
+   * Gets the associated value.
+   *
+   * @return {*}
+   */
+  getValue() {
+    return this._value;
+  }
+
+  /**
+   * Sets the associated value.
+   *
+   * @param {*} value A new value to associate with.
+   * @return {this}
+   */
+  setValue(value) {
+    this._value = value;
+    return this;
+  }
+
+  static makeWrap(fallbackType) {
+    return function(value, type) {
+      return {
+        __proto__: Value.prototype,
+        _type    : type || fallbackType,
+        _flags   : 0,
+        _alias   : "",
+        _value   : value
+      };
+    };
+  }
+
+}
+xql$node.Value = Value;
+
+// ============================================================================
 // [xql.Func]
 // ============================================================================
 
@@ -3405,85 +3558,6 @@ function CASE(input) {
 }
 
 xql.CASE = CASE;
-
-// ============================================================================
-// [xql.Value]
-// ============================================================================
-
-/**
- * SQL value.
- *
- * Used in cases where it's difficult to automatically determine how the value
- * should be escaped (which can result in invalid query if determined wrong).
- *
- * `Value` node shouldn't be in general used for all types, only types where
- * the mapping is ambiguous and can't be automatically deduced. For example
- * PostgreSQL uses different syntax for `JSON` and `ARRAY`. In such case `xql`
- * has no knowledge which format to use and will choose ARRAY over JSON.
- *
- * Value is an alternative to schema. If schema is provided it's unnecessary
- * to wrap values to `Value` nodes.
- *
- * @param {string}  type  Type of the value.
- * @param {*}       value Data of the value.
- * @param {string}  [as]  SQL's AS clause, if given.
- *
- * @alias xql.node.Value
- */
-class Value extends Node {
-  constructor(value, type, alias) {
-    super(type, alias);
-    this._value = value;
-  }
-
-  /** @override */
-  mustWrap(ctx, parent) {
-    return false;
-  }
-
-  /** @override */
-  compileNode(ctx) {
-    var out = ctx.escapeValue(this._value, this._type);
-    var alias = this._alias;
-    if (alias)
-      out += " AS " + ctx.escapeIdentifier(alias);
-    return out;
-  }
-
-  /**
-   * Gets the associated value.
-   *
-   * @return {*}
-   */
-  getValue() {
-    return this._value;
-  }
-
-  /**
-   * Sets the associated value.
-   *
-   * @param {*} value A new value to associate with.
-   * @return {this}
-   */
-  setValue(value) {
-    this._value = value;
-    return this;
-  }
-
-  static makeWrap(fallbackType) {
-    return function(value, type) {
-      return {
-        __proto__: Value.prototype,
-        _type    : type || fallbackType,
-        _flags   : 0,
-        _alias   : "",
-        _value   : value
-      };
-    };
-  }
-
-}
-xql$node.Value = Value;
 
 // ============================================================================
 // [xql.Sort]
@@ -3718,6 +3792,44 @@ class Join extends Binary {
 xql$node.Join = Join;
 
 // ============================================================================
+// [xql.With]
+// ============================================================================
+
+class With extends Node {
+  constructor(alias, statement) {
+    super("WITH", alias)
+    this._statement = statement;
+  }
+
+  /** @override */
+  mustWrap(ctx, parent) {
+    return false;
+  }
+
+  /** @override */
+  compileNode(ctx) {
+    const alias = this._alias;
+    const statement = this._statement;
+
+    const name = alias instanceof Node ? alias.compileNode(node)
+                                       : ctx.escapeIdentifier(alias);
+    if (!statement)
+      throwCompileError("WITH requires a statement");
+
+    return `${name} AS (` + ctx.concat(statement.compileNode(ctx)) + ctx._STR_OPT_NL + ")";
+  }
+
+  getStatement() {
+    return this._statement;
+  }
+
+  setStatement(statement) {
+    this._statement = statement;
+  }
+}
+xql$node.With = With;
+
+// ============================================================================
 // [xql.Statement]
 // ============================================================================
 
@@ -3732,29 +3844,29 @@ class Statement extends Node {
 xql$node.Statement = Statement;
 
 // ============================================================================
-// [xql.Query]
+// [xql.QueryStatement]
 // ============================================================================
 
 /**
- * SQL query.
+ * SQL query statement.
  *
  * Query is a base class that provides basic blocks for implementing:
- *   - `SELECT` - See `SelectQuery`.
- *   - `INSERT` - See `InsertQuery`.
- *   - `UPDATE` - See `UpdateQuery`.
- *   - `DELETE` - See `DeleteQuery`.
- *   - `EXCEPT`, `INTERSECT`, and `UNION` - See `CompoundQuery`.
+ *   - `SELECT` - See `SelectStatement`.
+ *   - `INSERT` - See `InsertStatement`.
+ *   - `UPDATE` - See `UpdateStatement`.
+ *   - `DELETE` - See `DeleteStatement`.
+ *   - `EXCEPT`, `INTERSECT`, and `UNION` - See `CompoundStatement`.
  *
- * The following features are implemented by the `Query`:
+ * The following features are implemented by the `QueryStatement`:
  *   - `TABLE`- Specifies a single database table.
  *   - `SELECT` or `RETURNING`- Specifies select or returning expression columns.
  *   - `WHERE` - Specifies `WHERE` clause.
  *
  * @param {string} type Type of the query.
  *
- * @alias xql.node.Query
+ * @alias xql.node.QueryStatement
  */
-class Query extends Statement {
+class QueryStatement extends Statement {
   constructor(type) {
     super(type, "");
 
@@ -3762,17 +3874,21 @@ class Query extends Statement {
     this._columns = null;
 
     // Used by:
-    //   - SELECT - SELECT ...
-    //   - INSERT - RETURNING ...
-    //   - UPDATE - RETURNING ...
-    //   - DELETE - RETURNING ...
-    this._fieldsOrReturning = null;
+    //   - SELECT - WITH ... AS (SELECT ...) SELECT
+    this._with = NoArray;
 
     // Used by:
     //   - INSERT - INSERT INTO ...
     //   - UPDATE - UPDATE ...
     //   - DELETE - DELETE FROM ...
     this._table = null;
+
+    // Used by:
+    //   - SELECT - SELECT ...
+    //   - INSERT - RETURNING ...
+    //   - UPDATE - RETURNING ...
+    //   - DELETE - RETURNING ...
+    this._fieldsOrReturning = null;
 
     // Used by:
     //   - SELECT - FROM ...
@@ -3793,7 +3909,7 @@ class Query extends Statement {
 
     // Used by:
     //   - SELECT
-    //   - EXCEPT, INTERSECT, UNION - See `CompoundQuery`.
+    //   - EXCEPT, INTERSECT, UNION - See `CompoundStatement`.
     this._orderBy = null;
 
     // Used by:
@@ -3803,7 +3919,8 @@ class Query extends Statement {
     //
     // Contains "OFFSET ..." and "LIMIT ..." parameters. There are some DB engines
     // (like SQLite), which allow to specify OFFSET / LIMIT in `UPDATE` and DELETE.
-    // This is the main reason that these members are part of Query and not SelectQuery.
+    // This is the main reason that these members are part of QueryStatement and
+    // not SelectStatement.
     this._offset = 0;
     this._limit = 0;
 
@@ -3820,11 +3937,6 @@ class Query extends Statement {
   /** @override */
   mustWrap(ctx, parent) {
     return parent != null;
-  }
-
-  /** @override */
-  compileQuery(ctx) {
-    return this.compileNode(ctx) + ";";
   }
 
   getTypeMapping() {
@@ -3939,13 +4051,13 @@ class Query extends Statement {
     return this;
   }
 
-  // \function Query._join(type, with_, condition)
+  // \function QueryStatement._join(type, with_, condition)
   _join(type, with_, condition) {
     var left = this._fromOrUsing;
 
     // Well this shouldn't be `null`.
     if (left === null)
-      throwCompileError("Query._join() - There is no table to join with");
+      throwCompileError("QueryStatement._join() - There is no table to join with");
 
     this._fromOrUsing = new Join(left, type, with_, condition);
     return this;
@@ -3992,13 +4104,13 @@ class Query extends Statement {
         c  = arguments[4];
 
         if (op != "BETWEEN" && op != "NOT BETWEEN")
-          throwTypeError(`Query.${type} doesn't support '${op}' operator, build the expression instead`);
+          throwTypeError(`QueryStatement.${type} doesn't support '${op}' operator, build the expression instead`);
 
         node = new Func(op, [a, b, c]);
         break;
 
       default:
-        throwTypeError(`Query.${type} doesn't accept ${arguments.length-1} arguments, only 1-4 accepted`);
+        throwTypeError(`QueryStatement.${type} doesn't accept ${arguments.length-1} arguments, only 1-4 accepted`);
     }
 
     if (where === null) {
@@ -4020,6 +4132,40 @@ class Query extends Statement {
       where.push(node);
 
     return this;
+  }
+
+  /**
+   * Add WITH clause (or multiple clauses) to the query.
+   */
+  WITH() {
+    if (arguments.length === 1) {
+      const arg = arguments[0];
+      if (!isArray(arg)) {
+        if (this._with === NoArray)
+          this._with = [arg];
+        else
+          this._with.push(arg);
+      }
+      else {
+        if (this._with === NoArray)
+          this._with = arg;
+        else
+          this._with.push(...arg);
+      }
+      return this;
+    }
+
+    if (arguments.length === 2) {
+      const node = new With(arguments[0], arguments[1]);
+
+      if (this._with === NoArray)
+        this._with = [node];
+      else
+        this._with.push(node);
+      return this;
+    }
+
+    throwTypeError("Invalid number of arguments passed to xql.QueryStatement.WITH()");
   }
 
   /**
@@ -4163,18 +4309,18 @@ class Query extends Statement {
     return this;
   }
 }
-xql$node.Query = Query;
+xql$node.QueryStatement = QueryStatement;
 
 // ============================================================================
-// [xql.SelectQuery]
+// [xql.SelectStatement]
 // ============================================================================
 
 /**
  * SQL select.
  *
- * @alias xql.node.SelectQuery
+ * @alias xql.node.SelectStatement
  */
-class SelectQuery extends Query {
+class SelectStatement extends QueryStatement {
   constructor() {
     super("SELECT");
 
@@ -4194,7 +4340,7 @@ class SelectQuery extends Query {
   mustWrap(ctx, parent) {
     // If this is a sub-select that will be compiled as `(SELECT ???) AS something` then we
     // will wrap it during compilation and return `false` here so it's not double-wrapped.
-    return parent != null && !(parent instanceof CompoundQuery);
+    return parent != null && !(parent instanceof CompoundStatement);
   }
 
   /** @override */
@@ -4435,7 +4581,7 @@ class SelectQuery extends Query {
     return this._join("FULL", with_, condition);
   }
 
-  // \function SelectQuery.GROUP_BY(...)
+  // \function SelectStatement.GROUP_BY(...)
   GROUP_BY(arg) {
     var groupBy = this._groupBy;
     var i, len;
@@ -4469,19 +4615,19 @@ class SelectQuery extends Query {
     return this;
   }
 
-  // \function SelectQuery.FIELD(...)
+  // \function SelectStatement.FIELD(...)
 
-  // \function SelectQuery.HAVING(...)
+  // \function SelectStatement.HAVING(...)
   HAVING(a, op, b) {
     return this._addHaving("AND", a, op, b, arguments.length);
   }
 
-  // \function SelectQuery.OR_HAVING(...)
+  // \function SelectStatement.OR_HAVING(...)
   OR_HAVING(a, op, b) {
     return this._addHaving("OR", a, op, b, arguments.length);
   }
 }
-xql$node.SelectQuery = alias(SelectQuery, {
+xql$node.SelectStatement = alias(SelectStatement, {
   FIELD: "_addFieldsOrReturning"
 });
 
@@ -4489,13 +4635,13 @@ xql$node.SelectQuery = alias(SelectQuery, {
  * Constructs a SELECT query.
  *
  * @param {...*} fields Fields can be specified in several ways. This parameter
- *   is passed as is into `SelectQuery.FIELDS()` function.
- * @return {SelectQuery}
+ *   is passed as is into `SelectStatement.FIELDS()` function.
+ * @return {SelectStatement}
  *
  * @alias xql.SELECT
  */
 function SELECT(...args) {
-  var q = new SelectQuery();
+  var q = new SelectStatement();
   if (args.length)
     q.FIELD(...args);
   return q;
@@ -4503,15 +4649,15 @@ function SELECT(...args) {
 xql.SELECT = SELECT;
 
 // ============================================================================
-// [xql.InsertQuery]
+// [xql.InsertStatement]
 // ============================================================================
 
 /**
  * SQL insert.
  *
- * @alias xql.node.InsertQuery
+ * @alias xql.node.InsertStatement
  */
-class InsertQuery extends Query {
+class InsertStatement extends QueryStatement {
   constructor() {
     super("INSERT");
   }
@@ -4521,21 +4667,21 @@ class InsertQuery extends Query {
     return ctx._compileInsert(this);
   }
 
-  // \function InsertQuery.TABLE(table)
+  // \function InsertStatement.TABLE(table)
   //
-  // Alias to `InsertQuery.INTO(table)`.
+  // Alias to `InsertStatement.INTO(table)`.
   TABLE(table) {
     return this._setFromOrIntoTable(table, "TABLE");
   }
 
-  // \function InsertQuery.INTO(table)
+  // \function InsertStatement.INTO(table)
   INTO(table) {
     return this._setFromOrIntoTable(table, "INTO");
   }
 
-  // \function InsertQuery.RETURNING(...)
+  // \function InsertStatement.RETURNING(...)
 }
-xql$node.InsertQuery = alias(InsertQuery, {
+xql$node.InsertStatement = alias(InsertStatement, {
   RETURNING: "_addFieldsOrReturning"
 });
 
@@ -4543,12 +4689,12 @@ xql$node.InsertQuery = alias(InsertQuery, {
  * Constructs an INSERT query.
  *
  * @param {...*} args
- * @return {InsertQuery}
+ * @return {InsertStatement}
  *
  * @alias xql.INSERT
  */
 function INSERT(/* ... */) {
-  var q = new InsertQuery();
+  var q = new InsertStatement();
 
   var i = 0, len = arguments.length;
   var arg;
@@ -4573,15 +4719,15 @@ function INSERT(/* ... */) {
 xql.INSERT = INSERT;
 
 // ============================================================================
-// [xql.UpdateQuery]
+// [xql.UpdateStatement]
 // ============================================================================
 
 /**
  * SQL update.
  *
- * @alias xql.node.UpdateQuery
+ * @alias xql.node.UpdateStatement
  */
-class UpdateQuery extends Query {
+class UpdateStatement extends QueryStatement {
   constructor() {
     super("UPDATE");
   }
@@ -4591,19 +4737,19 @@ class UpdateQuery extends Query {
     return ctx._compileUpdate(this);
   }
 
-  // \function UpdateQuery.TABLE(table)
+  // \function UpdateStatement.TABLE(table)
   TABLE(table) {
     return this._setFromOrIntoTable(table, "TABLE");
   }
 
-  // \function UpdateQuery.FROM(...)
+  // \function UpdateStatement.FROM(...)
   FROM(table) {
     return this._setFromOrIntoTable(table, "FROM");
   }
 
-  // \function UpdateQuery.RETURNING(...)
+  // \function UpdateStatement.RETURNING(...)
 }
-xql$node.UpdateQuery = alias(UpdateQuery, {
+xql$node.UpdateStatement = alias(UpdateStatement, {
   RETURNING: "_addFieldsOrReturning"
 });
 
@@ -4611,12 +4757,12 @@ xql$node.UpdateQuery = alias(UpdateQuery, {
  * Constructs an UPDATE query.
  *
  * @param {...*} args
- * @return {UpdateQuery}
+ * @return {UpdateStatement}
  *
  * @alias xql.UPDATE
  */
 function UPDATE(/* ... */) {
-  var q = new UpdateQuery();
+  var q = new UpdateStatement();
 
   var i = 0, len = arguments.length;
   var arg;
@@ -4643,15 +4789,15 @@ function UPDATE(/* ... */) {
 xql.UPDATE = UPDATE;
 
 // ============================================================================
-// [xql.DeleteQuery]
+// [xql.DeleteStatement]
 // ============================================================================
 
 /**
  * SQL delete.
  *
- * @alias xql.node.DeleteQuery
+ * @alias xql.node.DeleteStatement
  */
-class DeleteQuery extends Query {
+class DeleteStatement extends QueryStatement {
   constructor() {
     super("DELETE");
   }
@@ -4661,15 +4807,15 @@ class DeleteQuery extends Query {
     return ctx._compileDelete(this);
   }
 
-  // \function DeleteQuery.TABLE(table)
+  // \function DeleteStatement.TABLE(table)
   //
-  // Alias to `DeleteQuery.FROM(table)`.
+  // Alias to `DeleteStatement.FROM(table)`.
 
-  // \function DeleteQuery.FROM(table)
+  // \function DeleteStatement.FROM(table)
 
-  // \function DeleteQuery.RETURNING(...)
+  // \function DeleteStatement.RETURNING(...)
 
-  // \function DeleteQuery.USING(...)
+  // \function DeleteStatement.USING(...)
   USING() {
     var arg;
     if (arguments.length === 1 && isArray((arg = arguments[0])))
@@ -4678,7 +4824,7 @@ class DeleteQuery extends Query {
       return this._addFromOrUsing(slice.call(arguments, 0));
   }
 }
-xql$node.DeleteQuery = alias(DeleteQuery, {
+xql$node.DeleteStatement = alias(DeleteStatement, {
   FROM     : "_setFromOrIntoTable",
   TABLE    : "_setFromOrIntoTable",
   RETURNING: "_addFieldsOrReturning"
@@ -4688,12 +4834,12 @@ xql$node.DeleteQuery = alias(DeleteQuery, {
  * Constructs a DELETE query.
  *
  * @param {string} [from] SQL table where to delete records.
- * @return {DeleteQuery}
+ * @return {DeleteStatement}
  *
  * @alias xql.DELETE
  */
 function DELETE(from) {
-  var q = new DeleteQuery();
+  var q = new DeleteStatement();
   if (from)
     q._table = from;
   return q;
@@ -4701,15 +4847,15 @@ function DELETE(from) {
 xql.DELETE = DELETE;
 
 // ============================================================================
-// [xql.CompoundQuery]
+// [xql.CompoundStatement]
 // ============================================================================
 
 /**
  * SQL combining query/operator (UNION, INTERSECT, EXCEPT).
  *
- * @alias xql.node.CompoundQuery
+ * @alias xql.node.CompoundStatement
  */
-class CompoundQuery extends Query {
+class CompoundStatement extends QueryStatement {
   constructor(type, values) {
     super(type);
 
@@ -4758,19 +4904,19 @@ class CompoundQuery extends Query {
     return this;
   }
 }
-xql$node.CompoundQuery = CompoundQuery;
+xql$node.CompoundStatement = CompoundStatement;
 
 /**
  * Constructs an `EXCEPT` expression.
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
  *   Arguments must be SQL queries that form the EXCEPT expression.
- * @return {CompoundQuery}
+ * @return {CompoundStatement}
  *
  * @alias xql.EXCEPT
  */
 function EXCEPT(array) {
-  return new CompoundQuery("EXCEPT", isArray(array) ? array : slice.call(arguments, 0));
+  return new CompoundStatement("EXCEPT", isArray(array) ? array : slice.call(arguments, 0));
 }
 xql.EXCEPT = EXCEPT;
 
@@ -4778,15 +4924,15 @@ xql.EXCEPT = EXCEPT;
  * Shorthand for `EXCEPT(...args).ALL()`.
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
- * @return {CompoundQuery}
+ * @return {CompoundStatement}
  *
  * @see EXCEPT
- * @see CompoundQuery.prototype.ALL
+ * @see CompoundStatement.prototype.ALL
  *
  * @alias xql.EXCEPT_ALL
  */
 function EXCEPT_ALL(array) {
-  return new CompoundQuery("EXCEPT", isArray(array) ? array : slice.call(arguments, 0)).ALL();
+  return new CompoundStatement("EXCEPT", isArray(array) ? array : slice.call(arguments, 0)).ALL();
 }
 xql.EXCEPT_ALL = EXCEPT_ALL;
 
@@ -4795,12 +4941,12 @@ xql.EXCEPT_ALL = EXCEPT_ALL;
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
  *   Arguments must be SQL queries that form the INTERSECT expression.
- * @return {CompoundQuery}
+ * @return {CompoundStatement}
  *
  * @alias xql.INTERSECT
  */
 function INTERSECT(array) {
-  return new CompoundQuery("INTERSECT", isArray(array) ? array : slice.call(arguments, 0));
+  return new CompoundStatement("INTERSECT", isArray(array) ? array : slice.call(arguments, 0));
 }
 xql.INTERSECT = INTERSECT;
 
@@ -4808,15 +4954,15 @@ xql.INTERSECT = INTERSECT;
  * Shorthand for `INTERSECT(...args).ALL()`.
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
- * @return {CompoundQuery}
+ * @return {CompoundStatement}
  *
  * @see INTERSECT
- * @see CompoundQuery.prototype.ALL
+ * @see CompoundStatement.prototype.ALL
  *
  * @alias xql.INTERSECT_ALL
  */
 function INTERSECT_ALL(array) {
-  return new CompoundQuery("INTERSECT", isArray(array) ? array : slice.call(arguments, 0)).ALL();
+  return new CompoundStatement("INTERSECT", isArray(array) ? array : slice.call(arguments, 0)).ALL();
 }
 xql.INTERSECT_ALL = INTERSECT_ALL;
 
@@ -4825,12 +4971,12 @@ xql.INTERSECT_ALL = INTERSECT_ALL;
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
  *   Arguments must be SQL queries that form the UNION expression.
- * @return {CompoundQuery}
+ * @return {CompoundStatement}
  *
  * @alias xql.UNION
  */
 function UNION(array) {
-  return new CompoundQuery("UNION", isArray(array) ? array : slice.call(arguments, 0));
+  return new CompoundStatement("UNION", isArray(array) ? array : slice.call(arguments, 0));
 }
 xql.UNION = UNION;
 
@@ -4838,15 +4984,15 @@ xql.UNION = UNION;
  * Shorthand for `UNION(...args).ALL()`.
  *
  * @param {...*} args Arguments passed as an array or as `...args`.
- * @return {CompoundQuery}
+ * @return {CompoundStatement}
  *
  * @see UNION
- * @see CompoundQuery.prototype.ALL
+ * @see CompoundStatement.prototype.ALL
  *
  * @alias xql.UNION_ALL
  */
 function UNION_ALL(array) {
-  return new CompoundQuery("UNION", isArray(array) ? array : slice.call(arguments, 0)).ALL();
+  return new CompoundStatement("UNION", isArray(array) ? array : slice.call(arguments, 0)).ALL();
 }
 xql.UNION_ALL = UNION_ALL;
 
@@ -5504,7 +5650,7 @@ OpInfo.addNegation("~*", "!~*");
 
 // Add all known functions to `xql` namespace.
 OpInfo.forEach(function(alias, info) {
-  if (info.opFlags & (OF.Unary | OF.Binary | OF.Function) && reUpperCasedWithSpaces.test(info.name)) {
+  if (info.opFlags & (OF.Unary | OF.Binary | OF.Function) && reUpperOperatorName.test(info.name)) {
     const funcName = alias.replace(/ /g, "_");
     if (!xql[funcName]) {
       if (info.opFlags & OF.Unary)
