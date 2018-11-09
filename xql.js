@@ -1442,7 +1442,7 @@ class Context {
     if (!table)
       throwCompileError("InsertStatement.compileNode() - Table not defined");
 
-    const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
+    const prefix = (this.pretty ? this._STR_CONCAT : " ");
     const into = typeof table === "string" ? this.escapeIdentifier(table)
                                            : table.compileNode(this);
 
@@ -1461,21 +1461,33 @@ class Context {
       out = this._compileWithClause(with_) + BLANK;
 
     // Compile values.
-    out += "INSERT INTO" + this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
-    for (var i = 0, len = objects.length; i < len; i++) {
-      const object = objects[i];
+    out += "INSERT INTO";
+    if (cols) {
+      out += this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
 
-      var vals = "";
-      for (k in columns) {
-        if (vals) vals += ", ";
-        if (hasOwn.call(object, k))
-          vals += this._compile(object[k], typeMapping[k]);
-        else
-          vals += "DEFAULT";
+      for (var i = 0, len = objects.length; i < len; i++) {
+        const object = objects[i];
+
+        var vals = "";
+        for (k in columns) {
+          if (vals) vals += ", ";
+          if (hasOwn.call(object, k))
+            vals += this._compile(object[k], typeMapping[k]);
+          else
+            vals += "DEFAULT";
+        }
+
+        if (i !== 0) out += ",";
+        out += prefix + "(" + vals + ")";
       }
-
-      if (i !== 0) out += ",";
-      out += prefix + vals + ")";
+    }
+    else {
+      var str = "";
+      for (var i = 0, len = objects.length; i < len; i++) {
+        if (i !== 0) str += ",";
+        str += BLANK + "DEFAULT VALUES";
+      }
+      out += this.concat(into + str);
     }
 
     // Compile `RETURNING ...` or `OUTPUT ...`.
@@ -1504,12 +1516,12 @@ class Context {
     if (!table)
       throwCompileError("InsertStatement.compileNode() - Table not defined");
 
-    const prefix = (this.pretty ? this._STR_CONCAT : " ") + "(";
+    const prefix = (this.pretty ? this._STR_CONCAT : " ");
     const into = typeof table === "string" ? this.escapeIdentifier(table)
                                            : table.compileNode(this);
 
     var out = "";
-    var prevCols = "";
+    var prevCols = null;
 
     for (var i = 0, len = objects.length; i < len; i++) {
       const object = objects[i];
@@ -1524,15 +1536,23 @@ class Context {
         vals += this._compile(object[k], typeMapping[k]);
       }
 
-      if (cols === prevCols) {
-        out += "," + prefix + vals + ")";
-      }
-      else {
+      if (cols !== prevCols) {
         prevCols = cols;
         if (out) out += ";\n";
-        out += "INSERT INTO" + this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
-        out += prefix + vals + ")";
+
+        if (cols)
+          out += "INSERT INTO" + this.concat(into + " (" + cols + ")") + BLANK + "VALUES";
+        else
+          out += "INSERT INTO" + this.concat(into);
       }
+      else {
+        out += ",";
+      }
+
+      if (cols)
+        out += prefix + "(" + vals + ")";
+      else
+        out += prefix + "DEFAULT VALUES";
     }
 
     // Compile `WITH ...`
@@ -1694,13 +1714,13 @@ class Context {
     const BLANK = this._STR_BLANK;
 
     var combineOp = node._type;
-    const with_ = node._with;
-    const queries = node._values;
-    const separator = BLANK + combineOp + BLANK;
-
     const flags = node._flags;
     if (flags & NF.All)
       combineOp += " ALL";
+
+    const with_ = node._with;
+    const queries = node._values;
+    const separator = BLANK + combineOp + BLANK;
 
     var out = "";
     for (var i = 0, len = queries.length; i < len; i++) {

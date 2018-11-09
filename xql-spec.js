@@ -83,7 +83,10 @@ function shouldThrow(fn) {
 }
 
 describe("xql", function() {
-  // Escape.
+  // --------------------------------------------------------------------------
+  // [Escape]
+  // --------------------------------------------------------------------------
+
   it("should escape identifier.", function() {
     // Proper identifiers.
     shouldMatch(ctx.escapeIdentifier("")                , '""');
@@ -171,7 +174,10 @@ describe("xql", function() {
     shouldThrow(function() { ctx.escapeValue('\0'); });
   });
 
-  // Substitute.
+  // --------------------------------------------------------------------------
+  // [Substitute]
+  // --------------------------------------------------------------------------
+
   it("should substitute expression.", function() {
     shouldMatch(
       ctx.substitute("a = ?, b = '', c = ?", [1, 2]),
@@ -206,7 +212,10 @@ describe("xql", function() {
       "\"a$1\" = 1, b = E'$1\\'?', c = 2");
   });
 
-  // OPERATORS.
+  // --------------------------------------------------------------------------
+  // [Operators]
+  // --------------------------------------------------------------------------
+
   it("should test common operators", function() {
     shouldMatch(ADD(0, 1), '0 + 1');
     shouldMatch(SUB(0, 1), '0 - 1');
@@ -232,14 +241,20 @@ describe("xql", function() {
     shouldMatch(NOT_IN(COL("a"), [1, 2]), '"a" NOT IN (1, 2)');
   });
 
-  // DATETIME.
+  // --------------------------------------------------------------------------
+  // [DateTime]
+  // --------------------------------------------------------------------------
+
   it("should test common datetime functions", function() {
     shouldMatch(xql.NOW(), 'NOW()');
     shouldMatch(xql.CURRENT_DATE(), 'CURRENT_DATE');
     shouldMatch(xql.EXTRACT("MONTH", "2017-06-15"), 'EXTRACT(MONTH FROM \'2017-06-15\')');
   });
 
-  // SELECT.
+  // --------------------------------------------------------------------------
+  // [Select]
+  // --------------------------------------------------------------------------
+
   it("should test SELECT(*).", function() {
     shouldMatch(
       SELECT().FROM("x"),
@@ -438,7 +453,10 @@ describe("xql", function() {
       'SELECT "a", "b", "c" FROM "x" WHERE "c" = (SELECT MAX("c") FROM "x")');
   });
 
-  // INSERT.
+  // --------------------------------------------------------------------------
+  // [Insert]
+  // --------------------------------------------------------------------------
+
   it("should test INSERT INTO ... () VALUES (...)", function() {
     shouldMatch(
       INSERT("x").VALUES({ a: 0, b: false, c: "String" }),
@@ -455,7 +473,17 @@ describe("xql", function() {
       'INSERT INTO "x" ("a", "b", "c") VALUES (0, FALSE, \'String\') RETURNING "a", "b", "c"');
   });
 
-  // UPDATE.
+  // INSERT DEFAULT VALUES.
+  it("should test INSERT INTO ... () DEFAULT VALUES", function() {
+    shouldMatch(
+      INSERT("x").VALUES({}),
+      'INSERT INTO "x" DEFAULT VALUES');
+  });
+
+  // --------------------------------------------------------------------------
+  // [Update]
+  // --------------------------------------------------------------------------
+
   it("should test UPDATE ... SET ...", function() {
     shouldMatch(
       UPDATE("x").VALUES({ a: 1, b: "someString" }),
@@ -486,7 +514,10 @@ describe("xql", function() {
       'UPDATE "x" SET "a" = "a" / ("b" + 1)');
   });
 
-  // DELETE.
+  // --------------------------------------------------------------------------
+  // [Delete]
+  // --------------------------------------------------------------------------
+
   it("should test DELETE ... ", function() {
     shouldMatch(
       DELETE().FROM("x"),
@@ -499,7 +530,11 @@ describe("xql", function() {
       'DELETE FROM "x" WHERE "a" <= 42');
   });
 
-  // Combined query (UNION, INTERSECT, EXCEPT).
+  // --------------------------------------------------------------------------
+  // [Compound]
+  // --------------------------------------------------------------------------
+
+  // Compound (UNION, INTERSECT, EXCEPT).
   it("should test ... UNION ...", function() {
     shouldMatch(
       UNION(SELECT("a").FROM("x"), SELECT("a").FROM("y")),
@@ -536,14 +571,14 @@ describe("xql", function() {
       'SELECT "a" FROM "x" EXCEPT ALL SELECT "a" FROM "y"');
   });
 
-  // Combined query with ORDER BY and/or OFFSET/LIMIT.
+  // Compound with ORDER BY and/or OFFSET/LIMIT.
   it("should test ... UNION ... ORDER BY ... LIMIT ... OFFSET ...", function() {
     shouldMatch(
       UNION(SELECT("a").FROM("x"), SELECT("a").FROM("y")).ORDER_BY("a").OFFSET(10).LIMIT(20),
       'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" ORDER BY "a" LIMIT 20 OFFSET 10');
   });
 
-  // Multiple combined queries.
+  // Multiple compound queries.
   it("should test ... UNION ... UNION ...", function() {
     shouldMatch(
       UNION(
@@ -571,7 +606,7 @@ describe("xql", function() {
       'SELECT "a" FROM "x" UNION SELECT "a" FROM "y" UNION SELECT "a" FROM "z"');
   });
 
-  // Multiple combined queries of different kinds
+  // Multiple compound queries of different kinds
   it("should test ... UNION ... INTERSECT ...", function() {
     shouldMatch(
       UNION(
